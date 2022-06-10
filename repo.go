@@ -105,19 +105,16 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 	}
 
 	waitGroup := &sync.WaitGroup{}
-	type task struct {
-		typ string
-		obj Object
-	}
 	var errs []error
 	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
 		defer waitGroup.Done()
-		t := arg.(*task)
-		err = repo.store.Put(t.obj)
+		err = repo.store.Put(arg.(Object))
 		if nil != err {
 			errs = append(errs, err)
 		}
 	})
+
+	var files []*File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -126,9 +123,18 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			return nil
 		}
 
-		data, err := os.ReadFile(path)
+		files = append(files, &File{Path: path})
+		return nil
+	})
+	if nil != err {
+		return
+	}
+
+	for _, file := range files {
+		var data []byte
+		data, err = os.ReadFile(file.Path)
 		if nil != err {
-			return err
+			return
 		}
 
 		chnkr := chunker.NewWithBoundaries(bytes.NewReader(data), repo.ChunkPol, repo.ChunkMinSize, repo.ChunkMaxSize)
@@ -140,9 +146,9 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			if io.EOF == chnkErr {
 				break
 			}
-
 			if nil != chnkErr {
-				return chnkErr
+				err = chnkErr
+				return
 			}
 
 			chnkHash := Hash(chnk.Data)
@@ -152,26 +158,22 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 
 		for _, chunk := range chunks {
 			waitGroup.Add(1)
-			err = p.Invoke(&task{typ: "c", obj: chunk})
+			err = p.Invoke(chunk)
 			if nil != err {
-				return err
+				return
 			}
 		}
 
-		relPath := "/" + filepath.ToSlash(strings.TrimPrefix(path, repo.DataPath))
-		file := &File{Path: relPath, Size: info.Size(), Updated: info.ModTime().UnixMilli(), Chunks: chunkHashes}
+		file.Path = "/" + filepath.ToSlash(strings.TrimPrefix(file.Path, repo.DataPath))
+		file.Chunks = chunkHashes
 
 		waitGroup.Add(1)
-		err = p.Invoke(&task{typ: "f", obj: file})
+		err = p.Invoke(file)
 		if nil != err {
-			return err
+			return
 		}
 
 		ret.Files = append(ret.Files, file.ID())
-		return nil
-	})
-	if nil != err {
-		return
 	}
 
 	waitGroup.Wait()
