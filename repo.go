@@ -44,8 +44,8 @@ type Repo struct {
 
 func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	ret = &Repo{
-		DataPath:     dataPath,
-		Path:         repoPath,
+		DataPath:     filepath.Clean(dataPath),
+		Path:         filepath.Clean(repoPath),
 		ChunkPol:     chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
 		ChunkMinSize: 512 * 1024,                    // 分块最小 512KB
 		ChunkMaxSize: 8 * 1024 * 1024,               // 分块最大 8MB
@@ -55,14 +55,50 @@ func NewRepo(dataPath, repoPath string) (ret *Repo) {
 }
 
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
-func (repo *Repo) Checkout(hash string) (err error) {
-	index, err := repo.store.GetIndex(hash)
+func (repo *Repo) Checkout(id string) (err error) {
+	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		return
 	}
+
+	var files []*File
+	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
+		if nil != err {
+			return io.EOF
+		}
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+
+		files = append(files, &File{
+			Path:    repo.RelPath(path),
+			Size:    info.Size(),
+			Updated: info.ModTime().UnixMilli(),
+		})
+		return nil
+	})
+	if nil != err {
+		return
+	}
+
+	var upserts, latestFiles []*File
 	for _, f := range index.Files {
 		var file *File
 		file, err = repo.store.GetFile(f)
+		if nil != err {
+			return
+		}
+		latestFiles = append(latestFiles, file)
+	}
+	upserts = repo.Upsert(latestFiles, files)
+
+	if 1 > len(upserts) {
+		return
+	}
+
+	for _, f := range upserts {
+		var file *File
+		file, err = repo.store.GetFile(f.Hash)
 		if nil != err {
 			return err
 		}
@@ -227,6 +263,7 @@ func (repo *Repo) AbsPath(relPath string) string {
 }
 
 func (repo *Repo) RelPath(absPath string) string {
+	absPath = filepath.Clean(absPath)
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
