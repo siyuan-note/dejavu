@@ -1,0 +1,4 @@
+github.com/88250/gulu v1.2.1 h1:omRzVo2IToCL1sclmAy3Xq81vAW7nY/vZN1FopAvJtg=
+github.com/88250/gulu v1.2.1/go.mod h1:I1qBzsksFL2ciGSuqDE7R3XW4BUMrfDgOvSXEk7FsAI=
+golang.org/x/text v0.3.7 h1:olpwvP2KacW1ZWvsR7uQhoyTYvKAupfQrRGBFM352Gk=
+golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
