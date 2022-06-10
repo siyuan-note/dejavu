@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 
@@ -35,7 +34,7 @@ func NewStore(path string) *Store {
 
 func (store *Store) Put(chunk *Chunk) (err error) {
 	if "" == chunk.Hash {
-		return errors.New("invalid hash")
+		chunk.Hash = Hash(chunk.Data)
 	}
 	dir, file := store.AbsPath(chunk.Hash)
 	if err = os.MkdirAll(dir, 0755); nil != err {

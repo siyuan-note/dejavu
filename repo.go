@@ -29,22 +29,24 @@ import (
 
 // Repo 描述了逮虾户仓库。
 type Repo struct {
-	DataPath  string // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
-	StorePath string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\
+	DataPath string // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
+	Path     string // 仓库的绝对路径，如：F:\\SiYuan\\history\\
+	store    *Store // 仓库的存储
 
 	ChunkPol     chunker.Pol // 文件分块多项式值
 	ChunkMinSize uint        // 文件分块最小大小，单位：字节
 	ChunkMaxSize uint        // 文件分块最大大小，单位：字节
 }
 
-func NewRepo(dataPath, storePath string) *Repo {
-	return &Repo{
+func NewRepo(dataPath, repoPath string) (ret *Repo) {
+	ret = &Repo{
 		DataPath:     dataPath,
-		StorePath:    storePath,
 		ChunkPol:     chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
 		ChunkMinSize: 16 * 1024,                     // 分块最小 16KB
-		ChunkMaxSize: 8 * 1024 * 1024,               // 分块最大 8MB
+		ChunkMaxSize: 4 * 1024 * 1024,               // 分块最大 4MB
 	}
+	ret.store = NewStore(filepath.Join(repoPath, "objects"))
+	return
 }
 
 func (repo *Repo) Commit() (err error) {
@@ -94,5 +96,13 @@ func (repo *Repo) Commit() (err error) {
 		return
 	}
 
+	for _, file := range files {
+		for _, chunk := range file.Chunks {
+			err = repo.store.Put(chunk)
+			if nil != err {
+				return
+			}
+		}
+	}
 	return
 }

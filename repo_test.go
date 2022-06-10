@@ -17,11 +17,14 @@
 package dejavu
 
 import (
+	"os"
 	"testing"
 )
 
 func TestCommit(t *testing.T) {
-	repo := NewRepo("F:\\SiYuan\\data\\", "testdata")
+	testRepoPath := "./testdata/repo"
+	os.RemoveAll(testRepoPath)
+	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
 	err := repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
