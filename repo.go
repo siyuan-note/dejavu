@@ -164,7 +164,7 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			return
 		}
 
-		chnkr := chunker.NewWithBoundaries(bytes.NewReader(data), repo.ChunkPol, repo.ChunkMinSize, repo.ChunkMaxSize)
+		chnkr := repo.NewChunker(data)
 		buf := make([]byte, 8*1024*1024)
 		var chunks []*Chunk
 		var chunkHashes []string
@@ -227,4 +227,8 @@ func (repo *Repo) AbsPath(relPath string) string {
 
 func (repo *Repo) RelPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
+}
+
+func (repo *Repo) NewChunker(data []byte) *chunker.Chunker {
+	return chunker.NewWithBoundaries(bytes.NewReader(data), repo.ChunkPol, repo.ChunkMinSize, repo.ChunkMaxSize)
 }

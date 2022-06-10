@@ -26,7 +26,7 @@ type Commit struct {
 	Parent  string   `json:"parent"`
 	Message string   `json:"message"`
 	Created int64    `json:"created"`
-	Files   []string `json:"body"` // File IDs
+	Files   []string `json:"files"`
 }
 
 func (c *Commit) ID() string {
