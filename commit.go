@@ -26,7 +26,7 @@ type Commit struct {
 	Parent  string   `json:"parent"`
 	Message string   `json:"message"`
 	Created int64    `json:"created"`
-	Body    []string `json:"body"` // File IDs
+	Files   []string `json:"body"` // File IDs
 }
 
 func (c *Commit) ID() string {
@@ -38,7 +38,7 @@ func (c *Commit) ID() string {
 	buf.WriteString(c.Parent)
 	buf.WriteString(c.Message)
 	buf.WriteString(strconv.FormatInt(c.Created, 10))
-	for _, f := range c.Body {
+	for _, f := range c.Files {
 		buf.WriteString(f)
 	}
 	c.Hash = Hash(buf.Bytes())

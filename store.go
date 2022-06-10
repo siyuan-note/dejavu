@@ -65,6 +65,28 @@ func (store *Store) Put(obj Object) (err error) {
 	return
 }
 
+func (store *Store) GetCommit(id string) (ret *Commit, err error) {
+	_, file := store.AbsPath(id)
+	data, err := os.ReadFile(file)
+	if nil != err {
+		return
+	}
+	ret = &Commit{}
+	err = gulu.JSON.UnmarshalJSON(data, ret)
+	return
+}
+
+func (store *Store) GetFile(id string) (ret *File, err error) {
+	_, file := store.AbsPath(id)
+	data, err := os.ReadFile(file)
+	if nil != err {
+		return
+	}
+	ret = &File{}
+	err = gulu.JSON.UnmarshalJSON(data, ret)
+	return
+}
+
 func (store *Store) GetChunk(id string) (ret *Chunk, err error) {
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)

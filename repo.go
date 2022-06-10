@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/88250/gulu"
 	"github.com/restic/chunker"
 )
 
@@ -49,13 +50,52 @@ func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	return
 }
 
-func (repo *Repo) Checkout() (err error) {
+// Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
+func (repo *Repo) Checkout(hash string) (err error) {
+	commit, err := repo.store.GetCommit(hash)
+	if nil != err {
+		return
+	}
+	for _, f := range commit.Files {
+		var file *File
+		file, err = repo.store.GetFile(f)
+		if nil != err {
+			return err
+		}
 
+		var data []byte
+		for _, c := range file.Chunks {
+			var chunk *Chunk
+			chunk, err = repo.store.GetChunk(c)
+			if nil != err {
+				return err
+			}
+			data = append(data, chunk.Data...)
+		}
+
+		p := filepath.Join(repo.DataPath, file.Path)
+		dir := filepath.Dir(p)
+		err = os.MkdirAll(dir, 0755)
+		if nil != err {
+			return
+		}
+		err = gulu.File.WriteFileSafer(p, data, 0644)
+		if nil != err {
+			return
+		}
+
+		updated := time.UnixMilli(file.Updated)
+		err = os.Chtimes(p, updated, updated)
+		if nil != err {
+			return
+		}
+	}
 	return
 }
 
-func (repo *Repo) Commit() (err error) {
-	commit := &Commit{
+// Commit 将 repo 数据文件夹中的文件提交到仓库中。
+func (repo *Repo) Commit() (ret *Commit, err error) {
+	ret = &Commit{
 		Parent:  "",
 		Message: "",
 		Created: time.Now().UnixMilli(),
@@ -89,7 +129,7 @@ func (repo *Repo) Commit() (err error) {
 			}
 
 			chnkHash := Hash(chnk.Data)
-			chunks = append(chunks, &Chunk{Hash: chnkHash, Body: chnk.Data})
+			chunks = append(chunks, &Chunk{Hash: chnkHash, Data: chnk.Data})
 			chunkHashes = append(chunkHashes, chnkHash)
 		}
 
@@ -102,23 +142,22 @@ func (repo *Repo) Commit() (err error) {
 
 		relPath := strings.TrimPrefix(path, repo.DataPath)
 		relPath = "/" + filepath.ToSlash(relPath)
-		file := &File{Path: relPath, Size: size, Updated: info.ModTime().UnixMilli(), Body: chunkHashes}
+		file := &File{Path: relPath, Size: size, Updated: info.ModTime().UnixMilli(), Chunks: chunkHashes}
 		err = repo.store.Put(file)
 		if nil != err {
 			return err
 		}
 
-		commit.Body = append(commit.Body, file.ID())
+		ret.Files = append(ret.Files, file.ID())
 		return nil
 	})
 	if nil != err {
 		return
 	}
 
-	err = repo.store.Put(commit)
+	err = repo.store.Put(ret)
 	if nil != err {
 		return
 	}
-
 	return
 }

@@ -31,7 +31,7 @@ func TestPut(t *testing.T) {
 	store := NewStore(testRepoPath + "/objects/")
 
 	data := []byte("Hello!")
-	chunk := &Chunk{Hash: Hash(data), Body: data}
+	chunk := &Chunk{Hash: Hash(data), Data: data}
 	err = store.Put(chunk)
 	if nil != err {
 		t.Fatalf("put failed: %s", err)
@@ -43,7 +43,7 @@ func TestPut(t *testing.T) {
 		t.Fatalf("get failed: %s", err)
 		return
 	}
-	if 0 != bytes.Compare(chunk.Body, data) {
+	if 0 != bytes.Compare(chunk.Data, data) {
 		t.Fatalf("data not match")
 		return
 	}

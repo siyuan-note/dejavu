@@ -18,7 +18,7 @@ package dejavu
 
 type Chunk struct {
 	Hash string `json:"hash"`
-	Body []byte `json:"body"`
+	Data []byte `json:"data"`
 }
 
 func (c *Chunk) ID() string {

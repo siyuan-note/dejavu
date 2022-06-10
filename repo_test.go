@@ -22,6 +22,7 @@ import (
 )
 
 const testRepoPath = "./testdata/repo"
+const testDataPath = "./testdata/data"
 
 func TestCommit(t *testing.T) {
 	err := os.RemoveAll(testRepoPath)
@@ -30,16 +31,16 @@ func TestCommit(t *testing.T) {
 		return
 	}
 	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
-	err = repo.Commit()
+	commit, err := repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
-}
 
-func TestCheckout(t *testing.T) {
-	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
-	err := repo.Checkout()
+	repo = NewRepo(testDataPath, testRepoPath)
+	err = repo.Checkout(commit.Hash)
 	if nil != err {
+		t.Fatalf("checkout failed: %s", err)
+		return
 	}
 }

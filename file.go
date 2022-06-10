@@ -26,7 +26,7 @@ type File struct {
 	Path    string   `json:"path"`
 	Size    int64    `json:"size"`
 	Updated int64    `json:"updated"`
-	Body    []string `json:"body"` // Chunk IDs
+	Chunks  []string `json:"chunks"`
 }
 
 func (f *File) ID() string {
@@ -38,7 +38,7 @@ func (f *File) ID() string {
 	buf.WriteString(f.Path)
 	buf.WriteString(strconv.FormatInt(f.Size, 10))
 	buf.WriteString(strconv.FormatInt(f.Updated, 10))
-	for _, c := range f.Body {
+	for _, c := range f.Chunks {
 		buf.WriteString(c)
 	}
 	f.Hash = Hash(buf.Bytes())
