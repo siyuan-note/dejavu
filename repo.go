@@ -42,8 +42,8 @@ func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	ret = &Repo{
 		DataPath:     dataPath,
 		ChunkPol:     chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
-		ChunkMinSize: 16 * 1024,                     // 分块最小 16KB
-		ChunkMaxSize: 4 * 1024 * 1024,               // 分块最大 4MB
+		ChunkMinSize: 512 * 1024,                    // 分块最小 512KB
+		ChunkMaxSize: 8 * 1024 * 1024,               // 分块最大 8MB
 	}
 	ret.store = NewStore(filepath.Join(repoPath, "objects"))
 	return
