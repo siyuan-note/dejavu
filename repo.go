@@ -44,11 +44,18 @@ type Repo struct {
 
 func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	ret = &Repo{
-		DataPath:     filepath.Clean(dataPath),
-		Path:         filepath.Clean(repoPath),
+		DataPath:     dataPath,
+		Path:         repoPath,
 		ChunkPol:     chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
 		ChunkMinSize: 512 * 1024,                    // 分块最小 512KB
 		ChunkMaxSize: 8 * 1024 * 1024,               // 分块最大 8MB
+	}
+	ret.DataPath = filepath.Clean(ret.DataPath)
+	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {
+		ret.DataPath += string(os.PathSeparator)
+	}
+	if !strings.HasSuffix(ret.Path, string(os.PathSeparator)) {
+		ret.Path += string(os.PathSeparator)
 	}
 	ret.store = NewStore(filepath.Join(repoPath, "objects"))
 	return
