@@ -21,10 +21,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
 )
 
@@ -100,6 +103,21 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		Message: "",
 		Created: time.Now().UnixMilli(),
 	}
+
+	waitGroup := &sync.WaitGroup{}
+	type task struct {
+		typ string
+		obj Object
+	}
+	var errs []error
+	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
+		defer waitGroup.Done()
+		t := arg.(*task)
+		err = repo.store.Put(t.obj)
+		if nil != err {
+			errs = append(errs, err)
+		}
+	})
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -134,7 +152,8 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		}
 
 		for _, chunk := range chunks {
-			err = repo.store.Put(chunk)
+			waitGroup.Add(1)
+			err = p.Invoke(&task{typ: "c", obj: chunk})
 			if nil != err {
 				return err
 			}
@@ -143,7 +162,9 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		relPath := strings.TrimPrefix(path, repo.DataPath)
 		relPath = "/" + filepath.ToSlash(relPath)
 		file := &File{Path: relPath, Size: size, Updated: info.ModTime().UnixMilli(), Chunks: chunkHashes}
-		err = repo.store.Put(file)
+
+		waitGroup.Add(1)
+		err = p.Invoke(&task{typ: "f", obj: file})
 		if nil != err {
 			return err
 		}
@@ -155,9 +176,15 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		return
 	}
 
+	waitGroup.Wait()
+	p.Release()
+
 	err = repo.store.Put(ret)
 	if nil != err {
 		return
+	}
+	if 0 < len(errs) {
+		return nil, errs[0]
 	}
 	return
 }

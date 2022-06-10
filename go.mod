@@ -7,4 +7,7 @@ require (
 	github.com/restic/chunker v0.4.0
 )
 
-require golang.org/x/text v0.3.7 // indirect
+require (
+	github.com/panjf2000/ants/v2 v2.5.0 // indirect
+	golang.org/x/text v0.3.7 // indirect
+)
