@@ -45,6 +45,7 @@ type Repo struct {
 func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	ret = &Repo{
 		DataPath:     dataPath,
+		Path:         repoPath,
 		ChunkPol:     chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
 		ChunkMinSize: 512 * 1024,                    // 分块最小 512KB
 		ChunkMaxSize: 8 * 1024 * 1024,               // 分块最大 8MB
@@ -98,10 +99,46 @@ func (repo *Repo) Checkout(hash string) (err error) {
 
 // Commit 将 repo 数据文件夹中的文件提交到仓库中。
 func (repo *Repo) Commit() (ret *Commit, err error) {
-	ret = &Commit{
-		Parent:  "",
-		Message: "",
-		Created: time.Now().UnixMilli(),
+	var upserts []*File
+	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
+		if nil != err {
+			return io.EOF
+		}
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+
+		upserts = append(upserts, &File{
+			Path:    repo.RelPath(path),
+			Size:    info.Size(),
+			Updated: info.ModTime().UnixMilli(),
+		})
+		return nil
+	})
+	if nil != err {
+		return
+	}
+
+	latest, err := repo.Latest()
+	if nil != err {
+		return
+	}
+	if "" != latest.Parent {
+		var latestFiles []*File
+		for _, f := range latest.Files {
+			var file *File
+			file, err = repo.store.GetFile(f)
+			if nil != err {
+				return
+			}
+			latestFiles = append(latestFiles, file)
+		}
+		upserts = repo.Upsert(upserts, latestFiles)
+	}
+
+	if 1 > len(upserts) {
+		ret = latest
+		return
 	}
 
 	waitGroup := &sync.WaitGroup{}
@@ -114,25 +151,15 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		}
 	})
 
-	var files []*File
-	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
-		if nil != err {
-			return io.EOF
-		}
-		if info.IsDir() || !info.Mode().IsRegular() {
-			return nil
-		}
-
-		files = append(files, &File{Path: path})
-		return nil
-	})
-	if nil != err {
-		return
+	ret = &Commit{
+		Parent:  latest.Hash,
+		Message: "",
+		Created: time.Now().UnixMilli(),
 	}
-
-	for _, file := range files {
+	for _, file := range upserts {
 		var data []byte
-		data, err = os.ReadFile(file.Path)
+		absPath := repo.AbsPath(file.Path)
+		data, err = os.ReadFile(absPath)
 		if nil != err {
 			return
 		}
@@ -155,6 +182,7 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			chunks = append(chunks, &Chunk{Hash: chnkHash, Data: chnk.Data})
 			chunkHashes = append(chunkHashes, chnkHash)
 		}
+		file.Chunks = chunkHashes
 
 		for _, chunk := range chunks {
 			waitGroup.Add(1)
@@ -163,9 +191,6 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 				return
 			}
 		}
-
-		file.Path = "/" + filepath.ToSlash(strings.TrimPrefix(file.Path, repo.DataPath))
-		file.Chunks = chunkHashes
 
 		waitGroup.Add(1)
 		err = p.Invoke(file)
@@ -186,5 +211,20 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 	if 0 < len(errs) {
 		return nil, errs[0]
 	}
+
+	refs := filepath.Join(repo.Path, "refs")
+	err = os.MkdirAll(refs, 0755)
+	if nil != err {
+		return
+	}
+	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest"), []byte(ret.ID()), 0644)
 	return
+}
+
+func (repo *Repo) AbsPath(relPath string) string {
+	return filepath.Join(repo.DataPath, relPath)
+}
+
+func (repo *Repo) RelPath(absPath string) string {
+	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }

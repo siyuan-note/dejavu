@@ -16,27 +16,26 @@
 
 package dejavu
 
-// Upsert 比较 left 多于/变动 right 的文件。
-func (repo *Repo) Upsert(left, right []*File) (ret []*File) {
-	l := map[string]*File{}
-	r := map[string]*File{}
-	for _, f := range left {
-		l[f.Path] = f
-	}
-	for _, f := range right {
-		r[f.Path] = f
+import (
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/88250/gulu"
+)
+
+func (repo *Repo) Latest() (ret *Commit, err error) {
+	latest := filepath.Join(repo.Path, "refs", "latest")
+	if !gulu.File.IsExist(latest) {
+		ret = &Commit{Hash: RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
+		return
 	}
 
-	for lPath, lFile := range l {
-		rFile := r[lPath]
-		if nil == rFile {
-			ret = append(ret, l[lPath])
-			continue
-		}
-		if lFile.Updated != rFile.Updated || lFile.Size != rFile.Size {
-			ret = append(ret, l[lPath])
-			continue
-		}
+	data, err := os.ReadFile(latest)
+	if nil != err {
+		return
 	}
+	hash := string(data)
+	ret, err = repo.store.GetCommit(hash)
 	return
 }

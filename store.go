@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -41,6 +42,15 @@ type Object interface {
 
 func Hash(data []byte) string {
 	return fmt.Sprintf("%x", sha1.Sum(data))
+}
+
+func RandHash() string {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if nil != err {
+		return Hash([]byte(gulu.Rand.String(32)))
+	}
+	return Hash(b)
 }
 
 func (store *Store) Put(obj Object) (err error) {

@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"os"
 	"testing"
 )
 
@@ -25,17 +24,25 @@ const testRepoPath = "./testdata/repo"
 const testDataPath = "./testdata/data"
 
 func TestCommit(t *testing.T) {
-	err := os.RemoveAll(testRepoPath)
-	if nil != err {
-		t.Fatalf("remove failed: %s", err)
-		return
-	}
+	//err := os.RemoveAll(testRepoPath)
+	//if nil != err {
+	//	t.Fatalf("remove failed: %s", err)
+	//	return
+	//}
 	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
 	commit, err := repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
+	t.Logf("commit: %s", commit.Hash)
+
+	commit, err = repo.Commit()
+	if nil != err {
+		t.Fatalf("commit failed: %s", err)
+		return
+	}
+	t.Logf("commit: %s", commit.Hash)
 
 	repo = NewRepo(testDataPath, testRepoPath)
 	err = repo.Checkout(commit.Hash)
