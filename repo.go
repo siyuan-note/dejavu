@@ -123,9 +123,8 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 	if nil != err {
 		return
 	}
-	var upserts []*File
+	var upserts, latestFiles []*File
 	if "" != latest.Parent {
-		var latestFiles []*File
 		for _, f := range latest.Files {
 			var file *File
 			file, err = repo.store.GetFile(f)
@@ -134,8 +133,8 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 			}
 			latestFiles = append(latestFiles, file)
 		}
-		upserts = repo.Upsert(files, latestFiles)
 	}
+	upserts = repo.Upsert(files, latestFiles)
 
 	if 1 > len(upserts) {
 		ret = latest
