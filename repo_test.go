@@ -21,13 +21,25 @@ import (
 	"testing"
 )
 
+const testRepoPath = "./testdata/repo"
+
 func TestCommit(t *testing.T) {
-	testRepoPath := "./testdata/repo"
-	os.RemoveAll(testRepoPath)
+	err := os.RemoveAll(testRepoPath)
+	if nil != err {
+		t.Fatalf("remove failed: %s", err)
+		return
+	}
 	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
-	err := repo.Commit()
+	err = repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
+	}
+}
+
+func TestCheckout(t *testing.T) {
+	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
+	err := repo.Checkout()
+	if nil != err {
 	}
 }

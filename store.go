@@ -17,6 +17,9 @@
 package dejavu
 
 import (
+	"crypto/sha1"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -32,26 +35,44 @@ func NewStore(path string) *Store {
 	return &Store{Path: path}
 }
 
-func (store *Store) Put(chunk *Chunk) (err error) {
-	if "" == chunk.Hash {
-		chunk.Hash = Hash(chunk.Data)
+type Object interface {
+	ID() string
+}
+
+func Hash(data []byte) string {
+	return fmt.Sprintf("%x", sha1.Sum(data))
+}
+
+func (store *Store) Put(obj Object) (err error) {
+	id := obj.ID()
+	if "" == id {
+		return errors.New("invalid id")
 	}
-	dir, file := store.AbsPath(chunk.Hash)
+	dir, file := store.AbsPath(id)
 	if err = os.MkdirAll(dir, 0755); nil != err {
-		return
+		return errors.New("put failed: " + err.Error())
 	}
 
-	err = gulu.File.WriteFileSafer(file, chunk.Data, 0644)
+	data, err := gulu.JSON.MarshalJSON(obj)
+	if nil != err {
+		return errors.New("put failed: " + err.Error())
+	}
+	// TODO: 加密
+	err = gulu.File.WriteFileSafer(file, data, 0644)
+	if nil != err {
+		return errors.New("put failed: " + err.Error())
+	}
 	return
 }
 
-func (store *Store) Get(hash string) (chunk *Chunk, err error) {
-	_, file := store.AbsPath(hash)
+func (store *Store) GetChunk(id string) (ret *Chunk, err error) {
+	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
 	if nil != err {
 		return
 	}
-	chunk = &Chunk{Hash: hash, Data: data}
+	ret = &Chunk{}
+	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
 }
 
@@ -67,9 +88,9 @@ func (store *Store) Stat(hash string) (stat os.FileInfo, err error) {
 	return
 }
 
-func (store *Store) AbsPath(hash string) (dir, file string) {
-	dir = hash[0:2]
-	file = hash[2:]
+func (store *Store) AbsPath(id string) (dir, file string) {
+	dir = id[0:2]
+	file = id[2:]
 	dir = filepath.Join(store.Path, dir)
 	file = filepath.Join(dir, file)
 	return

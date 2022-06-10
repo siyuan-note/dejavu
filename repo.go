@@ -21,8 +21,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/restic/chunker"
 )
@@ -49,8 +49,17 @@ func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	return
 }
 
+func (repo *Repo) Checkout() (err error) {
+
+	return
+}
+
 func (repo *Repo) Commit() (err error) {
-	var files []*File
+	commit := &Commit{
+		Parent:  "",
+		Message: "",
+		Created: time.Now().UnixMilli(),
+	}
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -68,7 +77,7 @@ func (repo *Repo) Commit() (err error) {
 		chnkr := chunker.NewWithBoundaries(bytes.NewReader(data), repo.ChunkPol, repo.ChunkMinSize, repo.ChunkMaxSize)
 		buf := make([]byte, 8*1024*1024)
 		var chunks []*Chunk
-		fileHashBuilder := bytes.Buffer{}
+		var chunkHashes []string
 		for {
 			chnk, chnkErr := chnkr.Next(buf)
 			if io.EOF == chnkErr {
@@ -79,30 +88,37 @@ func (repo *Repo) Commit() (err error) {
 				return chnkErr
 			}
 
-			hash := Hash(chnk.Data)
-			fileHashBuilder.WriteString(hash)
-			chunks = append(chunks, &Chunk{Hash: hash, Data: chnk.Data})
+			chnkHash := Hash(chnk.Data)
+			chunks = append(chunks, &Chunk{Hash: chnkHash, Body: chnk.Data})
+			chunkHashes = append(chunkHashes, chnkHash)
+		}
+
+		for _, chunk := range chunks {
+			err = repo.store.Put(chunk)
+			if nil != err {
+				return err
+			}
 		}
 
 		relPath := strings.TrimPrefix(path, repo.DataPath)
 		relPath = "/" + filepath.ToSlash(relPath)
-		fileHashBuilder.WriteString(relPath)
-		fileHashBuilder.WriteString(strconv.FormatInt(info.ModTime().UnixMilli(), 10))
-		file := &File{Hash: Hash(fileHashBuilder.Bytes()), Path: relPath, Size: size, Chunks: chunks}
-		files = append(files, file)
+		file := &File{Path: relPath, Size: size, Updated: info.ModTime().UnixMilli(), Body: chunkHashes}
+		err = repo.store.Put(file)
+		if nil != err {
+			return err
+		}
+
+		commit.Body = append(commit.Body, file.ID())
 		return nil
 	})
 	if nil != err {
 		return
 	}
 
-	for _, file := range files {
-		for _, chunk := range file.Chunks {
-			err = repo.store.Put(chunk)
-			if nil != err {
-				return
-			}
-		}
+	err = repo.store.Put(commit)
+	if nil != err {
+		return
 	}
+
 	return
 }

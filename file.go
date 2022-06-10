@@ -16,9 +16,31 @@
 
 package dejavu
 
+import (
+	"bytes"
+	"strconv"
+)
+
 type File struct {
-	Hash   string   `json:"hash"`
-	Path   string   `json:"path"`
-	Size   int64    `json:"size"`
-	Chunks []*Chunk `json:"chunks"`
+	Hash    string   `json:"hash"`
+	Path    string   `json:"path"`
+	Size    int64    `json:"size"`
+	Updated int64    `json:"updated"`
+	Body    []string `json:"body"` // Chunk IDs
+}
+
+func (f *File) ID() string {
+	if "" != f.Hash {
+		return f.Hash
+	}
+
+	buf := bytes.Buffer{}
+	buf.WriteString(f.Path)
+	buf.WriteString(strconv.FormatInt(f.Size, 10))
+	buf.WriteString(strconv.FormatInt(f.Updated, 10))
+	for _, c := range f.Body {
+		buf.WriteString(c)
+	}
+	f.Hash = Hash(buf.Bytes())
+	return f.Hash
 }

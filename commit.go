@@ -16,11 +16,31 @@
 
 package dejavu
 
-const RefLatest = "latest"
+import (
+	"bytes"
+	"strconv"
+)
 
 type Commit struct {
-	Created int64   `json:"created"`
-	Parent  string  `json:"parent"`
-	Message string  `json:"message"`
-	Files   []*File `json:"files"`
+	Hash    string   `json:"hash"`
+	Parent  string   `json:"parent"`
+	Message string   `json:"message"`
+	Created int64    `json:"created"`
+	Body    []string `json:"body"` // File IDs
+}
+
+func (c *Commit) ID() string {
+	if "" != c.Hash {
+		return c.Hash
+	}
+
+	buf := bytes.Buffer{}
+	buf.WriteString(c.Parent)
+	buf.WriteString(c.Message)
+	buf.WriteString(strconv.FormatInt(c.Created, 10))
+	for _, f := range c.Body {
+		buf.WriteString(f)
+	}
+	c.Hash = Hash(buf.Bytes())
+	return c.Hash
 }
