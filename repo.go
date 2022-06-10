@@ -131,7 +131,6 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			return err
 		}
 
-		size := info.Size()
 		chnkr := chunker.NewWithBoundaries(bytes.NewReader(data), repo.ChunkPol, repo.ChunkMinSize, repo.ChunkMaxSize)
 		buf := make([]byte, 8*1024*1024)
 		var chunks []*Chunk
@@ -159,9 +158,8 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			}
 		}
 
-		relPath := strings.TrimPrefix(path, repo.DataPath)
-		relPath = "/" + filepath.ToSlash(relPath)
-		file := &File{Path: relPath, Size: size, Updated: info.ModTime().UnixMilli(), Chunks: chunkHashes}
+		relPath := "/" + filepath.ToSlash(strings.TrimPrefix(path, repo.DataPath))
+		file := &File{Path: relPath, Size: info.Size(), Updated: info.ModTime().UnixMilli(), Chunks: chunkHashes}
 
 		waitGroup.Add(1)
 		err = p.Invoke(&task{typ: "f", obj: file})
