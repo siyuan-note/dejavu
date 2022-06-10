@@ -17,16 +17,16 @@
 package dejavu
 
 import (
-	"crypto/sha1"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 
 	"github.com/88250/gulu"
 )
 
+// Store 描述了存储库。
 type Store struct {
-	Path string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history
+	Path string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\objects\\
 }
 
 func NewStore(path string) *Store {
@@ -34,7 +34,9 @@ func NewStore(path string) *Store {
 }
 
 func (store *Store) Put(chunk *Chunk) (err error) {
-	chunk.Hash = fmt.Sprintf("%x", sha1.Sum(chunk.Data))
+	if "" == chunk.Hash {
+		return errors.New("invalid hash")
+	}
 	dir, file := store.AbsPath(chunk.Hash)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return

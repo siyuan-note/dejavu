@@ -17,35 +17,14 @@
 package dejavu
 
 import (
-	"bytes"
 	"testing"
 )
 
-func TestPut(t *testing.T) {
-	store := NewStore("testdata")
-
-	data := []byte("Hello!")
-	chunk := &Chunk{Data: data, Hash: Hash(data)}
-	err := store.Put(chunk)
+func TestCommit(t *testing.T) {
+	repo := NewRepo("F:\\SiYuan\\data\\", "testdata")
+	err := repo.Commit()
 	if nil != err {
-		t.Fatalf("put failed: %s", err)
+		t.Fatalf("commit failed: %s", err)
 		return
 	}
-
-	chunk, err = store.Get(chunk.Hash)
-	if nil != err {
-		t.Fatalf("get failed: %s", err)
-		return
-	}
-	if 0 != bytes.Compare(chunk.Data, data) {
-		t.Fatalf("data not match")
-		return
-	}
-
-	err = store.Remove(chunk.Hash)
-	if nil != err {
-		t.Fatalf("remove failed: %s", err)
-		return
-	}
-
 }

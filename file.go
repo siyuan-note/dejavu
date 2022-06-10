@@ -17,8 +17,8 @@
 package dejavu
 
 type File struct {
-	Path   string   `json:"path"`
 	Hash   string   `json:"hash"`
+	Path   string   `json:"path"`
 	Size   int64    `json:"size"`
 	Chunks []*Chunk `json:"chunks"`
 }
