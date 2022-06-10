@@ -30,22 +30,22 @@ func TestCommit(t *testing.T) {
 	//	return
 	//}
 	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
-	commit, err := repo.Commit()
+	index, err := repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
-	t.Logf("commit: %s", commit.Hash)
+	t.Logf("commit: %s", index.Hash)
 
-	commit, err = repo.Commit()
+	index, err = repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
-	t.Logf("commit: %s", commit.Hash)
+	t.Logf("commit: %s", index.Hash)
 
 	repo = NewRepo(testDataPath, testRepoPath)
-	err = repo.Checkout(commit.Hash)
+	err = repo.Checkout(index.Hash)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return

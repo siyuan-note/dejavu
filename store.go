@@ -75,13 +75,13 @@ func (store *Store) Put(obj Object) (err error) {
 	return
 }
 
-func (store *Store) GetCommit(id string) (ret *Commit, err error) {
+func (store *Store) GetIndex(id string) (ret *Index, err error) {
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
 	if nil != err {
 		return
 	}
-	ret = &Commit{}
+	ret = &Index{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
 }

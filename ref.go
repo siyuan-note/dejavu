@@ -24,10 +24,10 @@ import (
 	"github.com/88250/gulu"
 )
 
-func (repo *Repo) Latest() (ret *Commit, err error) {
+func (repo *Repo) Latest() (ret *Index, err error) {
 	latest := filepath.Join(repo.Path, "refs", "latest")
 	if !gulu.File.IsExist(latest) {
-		ret = &Commit{Hash: RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
+		ret = &Index{Hash: RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
 		return
 	}
 
@@ -36,6 +36,6 @@ func (repo *Repo) Latest() (ret *Commit, err error) {
 		return
 	}
 	hash := string(data)
-	ret, err = repo.store.GetCommit(hash)
+	ret, err = repo.store.GetIndex(hash)
 	return
 }

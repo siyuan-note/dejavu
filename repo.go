@@ -56,11 +56,11 @@ func NewRepo(dataPath, repoPath string) (ret *Repo) {
 
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
 func (repo *Repo) Checkout(hash string) (err error) {
-	commit, err := repo.store.GetCommit(hash)
+	index, err := repo.store.GetIndex(hash)
 	if nil != err {
 		return
 	}
-	for _, f := range commit.Files {
+	for _, f := range index.Files {
 		var file *File
 		file, err = repo.store.GetFile(f)
 		if nil != err {
@@ -98,8 +98,8 @@ func (repo *Repo) Checkout(hash string) (err error) {
 }
 
 // Commit 将 repo 数据文件夹中的文件提交到仓库中。
-func (repo *Repo) Commit() (ret *Commit, err error) {
-	var upserts []*File
+func (repo *Repo) Commit() (ret *Index, err error) {
+	var files []*File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -108,7 +108,7 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			return nil
 		}
 
-		upserts = append(upserts, &File{
+		files = append(files, &File{
 			Path:    repo.RelPath(path),
 			Size:    info.Size(),
 			Updated: info.ModTime().UnixMilli(),
@@ -123,6 +123,7 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 	if nil != err {
 		return
 	}
+	var upserts []*File
 	if "" != latest.Parent {
 		var latestFiles []*File
 		for _, f := range latest.Files {
@@ -133,7 +134,7 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 			}
 			latestFiles = append(latestFiles, file)
 		}
-		upserts = repo.Upsert(upserts, latestFiles)
+		upserts = repo.Upsert(files, latestFiles)
 	}
 
 	if 1 > len(upserts) {
@@ -151,7 +152,7 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		}
 	})
 
-	ret = &Commit{
+	ret = &Index{
 		Parent:  latest.Hash,
 		Message: "",
 		Created: time.Now().UnixMilli(),
@@ -197,10 +198,11 @@ func (repo *Repo) Commit() (ret *Commit, err error) {
 		if nil != err {
 			return
 		}
-
-		ret.Files = append(ret.Files, file.ID())
 	}
 
+	for _, file := range files {
+		ret.Files = append(ret.Files, file.ID())
+	}
 	waitGroup.Wait()
 	p.Release()
 

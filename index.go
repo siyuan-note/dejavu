@@ -16,12 +16,7 @@
 
 package dejavu
 
-import (
-	"bytes"
-	"strconv"
-)
-
-type Commit struct {
+type Index struct {
 	Hash    string   `json:"hash"`
 	Parent  string   `json:"parent"`
 	Message string   `json:"message"`
@@ -29,18 +24,10 @@ type Commit struct {
 	Files   []string `json:"files"`
 }
 
-func (c *Commit) ID() string {
+func (c *Index) ID() string {
 	if "" != c.Hash {
 		return c.Hash
 	}
-
-	buf := bytes.Buffer{}
-	buf.WriteString(c.Parent)
-	buf.WriteString(c.Message)
-	buf.WriteString(strconv.FormatInt(c.Created, 10))
-	for _, f := range c.Files {
-		buf.WriteString(f)
-	}
-	c.Hash = Hash(buf.Bytes())
+	c.Hash = RandHash()
 	return c.Hash
 }
