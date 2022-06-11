@@ -255,12 +255,7 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 		return nil, errs[0]
 	}
 
-	refs := filepath.Join(repo.Path, "refs")
-	err = os.MkdirAll(refs, 0755)
-	if nil != err {
-		return
-	}
-	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest"), []byte(ret.ID()), 0644)
+	err = repo.UpdateLatest(ret.ID())
 	return
 }
 

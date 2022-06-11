@@ -28,6 +28,11 @@ func (repo *Repo) Latest() (ret *Index, err error) {
 	latest := filepath.Join(repo.Path, "refs", "latest")
 	if !gulu.File.IsExist(latest) {
 		ret = &Index{Hash: RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
+		err = repo.store.PutIndex(ret)
+		if nil != err {
+			return
+		}
+		err = repo.UpdateLatest(ret.ID())
 		return
 	}
 
@@ -37,5 +42,15 @@ func (repo *Repo) Latest() (ret *Index, err error) {
 	}
 	hash := string(data)
 	ret, err = repo.store.GetIndex(hash)
+	return
+}
+
+func (repo *Repo) UpdateLatest(id string) (err error) {
+	refs := filepath.Join(repo.Path, "refs")
+	err = os.MkdirAll(refs, 0755)
+	if nil != err {
+		return
+	}
+	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest"), []byte(id), 0644)
 	return
 }
