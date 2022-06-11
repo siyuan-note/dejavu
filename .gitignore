@@ -17,3 +17,5 @@
 # Test
 testdata/repo*
 testdata/data*
+!testdata/data/foo
+covprofile
