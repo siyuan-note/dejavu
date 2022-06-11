@@ -37,10 +37,6 @@ func NewStore(path string, aesKey []byte) *Store {
 	return &Store{Path: path, AesKey: aesKey}
 }
 
-type Object interface {
-	ID() string
-}
-
 func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 	id := chunk.ID()
 	if "" == id {
