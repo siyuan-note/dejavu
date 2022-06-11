@@ -18,21 +18,17 @@ package dejavu
 
 import (
 	"bytes"
-	"os"
 	"testing"
 )
 
 func TestPutGet(t *testing.T) {
-	err := os.RemoveAll(testRepoPath)
-	if nil != err {
-		t.Fatalf("remove failed: %s", err)
-		return
-	}
+	clearTestdata(t)
+
 	store := NewStore(testRepoPath + "/objects/")
 
 	data := []byte("Hello!")
 	chunk := &Chunk{Hash: Hash(data), Data: data}
-	err = store.PutChunk(chunk)
+	err := store.PutChunk(chunk)
 	if nil != err {
 		t.Fatalf("put failed: %s", err)
 		return

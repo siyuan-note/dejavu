@@ -27,11 +27,8 @@ const (
 )
 
 func TestCommitCheckout(t *testing.T) {
-	err := os.RemoveAll(testRepoPath)
-	if nil != err {
-		t.Fatalf("remove failed: %s", err)
-		return
-	}
+	clearTestdata(t)
+
 	repo := NewRepo("F:\\SiYuan\\data\\", testRepoPath)
 	index, err := repo.Commit()
 	if nil != err {
@@ -51,6 +48,19 @@ func TestCommitCheckout(t *testing.T) {
 	err = repo.Checkout(index.Hash)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
+		return
+	}
+}
+
+func clearTestdata(t *testing.T) {
+	err := os.RemoveAll(testRepoPath)
+	if nil != err {
+		t.Fatalf("remove failed: %s", err)
+		return
+	}
+	err = os.RemoveAll(testDataPath)
+	if nil != err {
+		t.Fatalf("remove failed: %s", err)
 		return
 	}
 }
