@@ -1,10 +1,10 @@
 # DejaVu
 
-## 💡 Introduction
+## 💡 简介
 
-Data snapshot and sync.
+数据快照和同步。
 
-## 🙏 Acknowledgement
+## 🙏 鸣谢
 
 * [ArtiVC](https://github.com/InfuseAI/ArtiVC)
 * [restic](https://github.com/restic/restic)
