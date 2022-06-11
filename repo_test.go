@@ -19,9 +19,12 @@ package dejavu
 import (
 	"os"
 	"testing"
+
+	"github.com/siyuan-note/encryption"
 )
 
 const (
+	testRepoPassword     = "pass"
 	testRepoPath         = "testdata/repo"
 	testDataPath         = "testdata/data"
 	testDataCheckoutPath = "testdata/data-checkout"
@@ -30,7 +33,16 @@ const (
 func TestCommitCheckout(t *testing.T) {
 	clearTestdata(t)
 
-	repo := NewRepo(testDataPath, testRepoPath)
+	aesKey, err := encryption.KDF(testRepoPassword)
+	if nil != err {
+		return
+	}
+
+	repo, err := NewRepo(testDataPath, testRepoPath, aesKey)
+	if nil != err {
+		t.Fatalf("new repo failed: %s", err)
+		return
+	}
 	index, err := repo.Commit()
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
@@ -45,7 +57,22 @@ func TestCommitCheckout(t *testing.T) {
 	}
 	t.Logf("commit: %s", index.Hash)
 
-	repo = NewRepo(testDataCheckoutPath, testRepoPath)
+	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, aesKey)
+	if nil != err {
+		t.Fatalf("new repo failed: %s", err)
+		return
+	}
+	err = repo.Checkout(index.Hash)
+	if nil != err {
+		t.Fatalf("checkout failed: %s", err)
+		return
+	}
+
+	err = os.RemoveAll(testDataCheckoutPath)
+	if nil != err {
+		t.Fatalf("remove failed: %s", err)
+		return
+	}
 	err = repo.Checkout(index.Hash)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)

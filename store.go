@@ -25,15 +25,17 @@ import (
 	"path/filepath"
 
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/encryption"
 )
 
 // Store 描述了存储库。
 type Store struct {
-	Path string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\objects\\
+	Path   string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\objects\\
+	AesKey []byte
 }
 
-func NewStore(path string) *Store {
-	return &Store{Path: path}
+func NewStore(path string, aesKey []byte) *Store {
+	return &Store{Path: path, AesKey: aesKey}
 }
 
 type Object interface {
@@ -64,7 +66,10 @@ func (store *Store) PutChunk(chunk *Chunk) (err error) {
 	}
 
 	data := chunk.Data
-	// TODO: 加密
+	data, err = store.encryptData(data)
+	if nil != err {
+		return
+	}
 
 	err = gulu.File.WriteFileSafer(file, data, 0644)
 	if nil != err {
@@ -87,7 +92,10 @@ func (store *Store) PutFile(file *File) (err error) {
 	if nil != err {
 		return errors.New("put file failed: " + err.Error())
 	}
-	// TODO: 加密
+	data, err = store.encryptData(data)
+	if nil != err {
+		return
+	}
 
 	err = gulu.File.WriteFileSafer(f, data, 0644)
 	if nil != err {
@@ -110,7 +118,10 @@ func (store *Store) PutIndex(obj Object) (err error) {
 	if nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}
-	// TODO: 加密
+	data, err = store.encryptData(data)
+	if nil != err {
+		return
+	}
 
 	err = gulu.File.WriteFileSafer(file, data, 0644)
 	if nil != err {
@@ -125,6 +136,10 @@ func (store *Store) GetIndex(id string) (ret *Index, err error) {
 	if nil != err {
 		return
 	}
+	data, err = store.decryptData(data)
+	if nil != err {
+		return
+	}
 	ret = &Index{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
@@ -133,6 +148,10 @@ func (store *Store) GetIndex(id string) (ret *Index, err error) {
 func (store *Store) GetFile(id string) (ret *File, err error) {
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
+	if nil != err {
+		return
+	}
+	data, err = store.decryptData(data)
 	if nil != err {
 		return
 	}
@@ -147,18 +166,22 @@ func (store *Store) GetChunk(id string) (ret *Chunk, err error) {
 	if nil != err {
 		return
 	}
+	data, err = store.decryptData(data)
+	if nil != err {
+		return
+	}
 	ret = &Chunk{Hash: id, Data: data}
 	return
 }
 
-func (store *Store) Remove(hash string) (err error) {
-	_, file := store.AbsPath(hash)
+func (store *Store) Remove(id string) (err error) {
+	_, file := store.AbsPath(id)
 	err = os.Remove(file)
 	return
 }
 
-func (store *Store) Stat(hash string) (stat os.FileInfo, err error) {
-	_, file := store.AbsPath(hash)
+func (store *Store) Stat(id string) (stat os.FileInfo, err error) {
+	_, file := store.AbsPath(id)
 	stat, err = os.Stat(file)
 	return
 }
@@ -169,4 +192,12 @@ func (store *Store) AbsPath(id string) (dir, file string) {
 	dir = filepath.Join(store.Path, dir)
 	file = filepath.Join(dir, file)
 	return
+}
+
+func (store *Store) encryptData(data []byte) ([]byte, error) {
+	return encryption.AesEncrypt(data, store.AesKey)
+}
+
+func (store *Store) decryptData(data []byte) ([]byte, error) {
+	return encryption.AesDecrypt(data, store.AesKey)
 }

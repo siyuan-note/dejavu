@@ -19,16 +19,23 @@ package dejavu
 import (
 	"bytes"
 	"testing"
+
+	"github.com/siyuan-note/encryption"
 )
 
 func TestPutGet(t *testing.T) {
 	clearTestdata(t)
 
-	store := NewStore(testRepoPath + "/objects/")
+	aesKey, err := encryption.KDF(testRepoPassword)
+	if nil != err {
+		return
+	}
+
+	store := NewStore(testRepoPath+"/objects/", aesKey)
 
 	data := []byte("Hello!")
 	chunk := &Chunk{Hash: Hash(data), Data: data}
-	err := store.PutChunk(chunk)
+	err = store.PutChunk(chunk)
 	if nil != err {
 		t.Fatalf("put failed: %s", err)
 		return

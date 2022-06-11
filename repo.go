@@ -41,7 +41,7 @@ type Repo struct {
 	ChunkMaxSize int64       // 文件分块最大大小，单位：字节
 }
 
-func NewRepo(dataPath, repoPath string) (ret *Repo) {
+func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	ret = &Repo{
 		DataPath:     dataPath,
 		Path:         repoPath,
@@ -56,7 +56,8 @@ func NewRepo(dataPath, repoPath string) (ret *Repo) {
 	if !strings.HasSuffix(ret.Path, string(os.PathSeparator)) {
 		ret.Path += string(os.PathSeparator)
 	}
-	ret.store = NewStore(filepath.Join(repoPath, "objects"))
+	storePath := filepath.Join(repoPath, "objects") + string(os.PathSeparator)
+	ret.store = NewStore(storePath, aesKey)
 	return
 }
 
