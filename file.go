@@ -38,9 +38,6 @@ func (f *File) ID() string {
 	buf.WriteString(f.Path)
 	buf.WriteString(strconv.FormatInt(f.Size, 10))
 	buf.WriteString(strconv.FormatInt(f.Updated, 10))
-	for _, c := range f.Chunks {
-		buf.WriteString(c)
-	}
 	f.Hash = Hash(buf.Bytes())
 	return f.Hash
 }

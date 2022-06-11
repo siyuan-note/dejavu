@@ -68,6 +68,9 @@ func (repo *Repo) Checkout(id string) (err error) {
 		return
 	}
 
+	if err = os.MkdirAll(repo.DataPath, 0755); nil != err {
+		return
+	}
 	var files []*File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
@@ -88,7 +91,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 		return
 	}
 
-	var upserts, latestFiles []*File
+	var upserts, removes, latestFiles []*File
 	for _, f := range index.Files {
 		var file *File
 		file, err = repo.store.GetFile(f)
@@ -97,9 +100,8 @@ func (repo *Repo) Checkout(id string) (err error) {
 		}
 		latestFiles = append(latestFiles, file)
 	}
-	upserts = repo.Upsert(latestFiles, files)
-
-	if 1 > len(upserts) {
+	upserts, removes = repo.DiffUpsertRemove(latestFiles, files)
+	if 1 > len(upserts) && 1 > len(removes) {
 		return
 	}
 
@@ -137,6 +139,13 @@ func (repo *Repo) Checkout(id string) (err error) {
 			return
 		}
 	}
+
+	for _, f := range removes {
+		p := repo.AbsPath(f.Path)
+		if err = os.Remove(p); nil != err {
+			return
+		}
+	}
 	return
 }
 
@@ -166,7 +175,7 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 	if nil != err {
 		return
 	}
-	var upserts, latestFiles []*File
+	var upserts, removes, latestFiles []*File
 	if "" != latest.Parent {
 		for _, f := range latest.Files {
 			var file *File
@@ -177,9 +186,8 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 			latestFiles = append(latestFiles, file)
 		}
 	}
-	upserts = repo.Upsert(files, latestFiles)
-
-	if 1 > len(upserts) {
+	upserts, removes = repo.DiffUpsertRemove(files, latestFiles)
+	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
 		return
 	}

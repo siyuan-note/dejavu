@@ -16,8 +16,8 @@
 
 package dejavu
 
-// Upsert 比较 left 多于/变动 right 的文件。
-func (repo *Repo) Upsert(left, right []*File) (ret []*File) {
+// DiffUpsert 比较 left 多于/变动 right 的文件。
+func (repo *Repo) DiffUpsert(left, right []*File) (ret []*File) {
 	l := map[string]*File{}
 	r := map[string]*File{}
 	for _, f := range left {
@@ -35,6 +35,39 @@ func (repo *Repo) Upsert(left, right []*File) (ret []*File) {
 		}
 		if lFile.Updated != rFile.Updated || lFile.Size != rFile.Size {
 			ret = append(ret, l[lPath])
+			continue
+		}
+	}
+	return
+}
+
+// DiffUpsertRemove 比较 left 多于/变动 right 的文件以及 left 少于 right 的文件。
+func (repo *Repo) DiffUpsertRemove(left, right []*File) (upserts, removes []*File) {
+	l := map[string]*File{}
+	r := map[string]*File{}
+	for _, f := range left {
+		l[f.Path] = f
+	}
+	for _, f := range right {
+		r[f.Path] = f
+	}
+
+	for lPath, lFile := range l {
+		rFile := r[lPath]
+		if nil == rFile {
+			upserts = append(upserts, l[lPath])
+			continue
+		}
+		if lFile.Updated != rFile.Updated || lFile.Size != rFile.Size {
+			upserts = append(upserts, l[lPath])
+			continue
+		}
+	}
+
+	for rPath := range r {
+		lFile := l[rPath]
+		if nil == lFile {
+			removes = append(removes, r[rPath])
 			continue
 		}
 	}
