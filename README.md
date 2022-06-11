@@ -1,5 +1,7 @@
 # DejaVu
 
+[English](README.md)
+
 ## 💡 Introduction
 
 Data snapshot and sync.
