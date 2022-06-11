@@ -196,9 +196,19 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 	var errs []error
 	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
 		defer waitGroup.Done()
-		err = repo.store.Put(arg.(Object))
-		if nil != err {
-			errs = append(errs, err)
+		obj := arg.(Object)
+		var putErr error
+		switch obj.(type) {
+		case *Chunk:
+			putErr = repo.store.PutChunk(obj.(*Chunk))
+		case *File:
+			putErr = repo.store.PutFile(obj.(*File))
+		case *Index:
+			putErr = repo.store.PutIndex(obj.(*Index))
+		}
+
+		if nil != putErr {
+			errs = append(errs, putErr)
 		}
 	})
 
@@ -256,7 +266,7 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 	waitGroup.Wait()
 	p.Release()
 
-	err = repo.store.Put(ret)
+	err = repo.store.PutIndex(ret)
 	if nil != err {
 		return
 	}

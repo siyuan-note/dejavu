@@ -53,24 +53,68 @@ func RandHash() string {
 	return Hash(b)
 }
 
-func (store *Store) Put(obj Object) (err error) {
+func (store *Store) PutChunk(chunk *Chunk) (err error) {
+	id := chunk.ID()
+	if "" == id {
+		return errors.New("invalid id")
+	}
+	dir, file := store.AbsPath(id)
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return errors.New("put chunk failed: " + err.Error())
+	}
+
+	data := chunk.Data
+	// TODO: 加密
+
+	err = gulu.File.WriteFileSafer(file, data, 0644)
+	if nil != err {
+		return errors.New("put chunk failed: " + err.Error())
+	}
+	return
+}
+
+func (store *Store) PutFile(file *File) (err error) {
+	id := file.ID()
+	if "" == id {
+		return errors.New("invalid id")
+	}
+	dir, f := store.AbsPath(id)
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return errors.New("put failed: " + err.Error())
+	}
+
+	data, err := gulu.JSON.MarshalJSON(file)
+	if nil != err {
+		return errors.New("put file failed: " + err.Error())
+	}
+	// TODO: 加密
+
+	err = gulu.File.WriteFileSafer(f, data, 0644)
+	if nil != err {
+		return errors.New("put file failed: " + err.Error())
+	}
+	return
+}
+
+func (store *Store) PutIndex(obj Object) (err error) {
 	id := obj.ID()
 	if "" == id {
 		return errors.New("invalid id")
 	}
 	dir, file := store.AbsPath(id)
 	if err = os.MkdirAll(dir, 0755); nil != err {
-		return errors.New("put failed: " + err.Error())
+		return errors.New("put index failed: " + err.Error())
 	}
 
 	data, err := gulu.JSON.MarshalJSON(obj)
 	if nil != err {
-		return errors.New("put failed: " + err.Error())
+		return errors.New("put index failed: " + err.Error())
 	}
 	// TODO: 加密
+
 	err = gulu.File.WriteFileSafer(file, data, 0644)
 	if nil != err {
-		return errors.New("put failed: " + err.Error())
+		return errors.New("put index failed: " + err.Error())
 	}
 	return
 }
@@ -103,8 +147,7 @@ func (store *Store) GetChunk(id string) (ret *Chunk, err error) {
 	if nil != err {
 		return
 	}
-	ret = &Chunk{}
-	err = gulu.JSON.UnmarshalJSON(data, ret)
+	ret = &Chunk{Hash: id, Data: data}
 	return
 }
 

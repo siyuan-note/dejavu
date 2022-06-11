@@ -22,7 +22,7 @@ import (
 	"testing"
 )
 
-func TestPut(t *testing.T) {
+func TestPutGet(t *testing.T) {
 	err := os.RemoveAll(testRepoPath)
 	if nil != err {
 		t.Fatalf("remove failed: %s", err)
@@ -32,7 +32,7 @@ func TestPut(t *testing.T) {
 
 	data := []byte("Hello!")
 	chunk := &Chunk{Hash: Hash(data), Data: data}
-	err = store.Put(chunk)
+	err = store.PutChunk(chunk)
 	if nil != err {
 		t.Fatalf("put failed: %s", err)
 		return
@@ -54,4 +54,9 @@ func TestPut(t *testing.T) {
 		return
 	}
 
+	chunk, err = store.GetChunk(chunk.Hash)
+	if nil != chunk {
+		t.Fatalf("get should be failed")
+		return
+	}
 }
