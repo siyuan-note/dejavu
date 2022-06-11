@@ -16,7 +16,6 @@
 
 # Test
 !testdata/data/foo
-testdata/data/
 testdata/data-checkout/
 testdata/repo/
 covprofile
