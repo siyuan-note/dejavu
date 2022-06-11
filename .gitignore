@@ -15,7 +15,8 @@
 .idea/
 
 # Test
-testdata/repo*
-testdata/data*
 !testdata/data/foo
+testdata/data/
+testdata/data-checkout/
+testdata/repo/
 covprofile
