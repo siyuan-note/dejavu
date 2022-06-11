@@ -15,5 +15,5 @@
 .idea/
 
 # Test
-testdata/repo
-testdata/data
+testdata/repo*
+testdata/data*
