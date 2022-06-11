@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -38,8 +37,8 @@ type Repo struct {
 	store    *Store // 仓库的存储
 
 	ChunkPol     chunker.Pol // 文件分块多项式值
-	ChunkMinSize uint        // 文件分块最小大小，单位：字节
-	ChunkMaxSize uint        // 文件分块最大大小，单位：字节
+	ChunkMinSize int64       // 文件分块最小大小，单位：字节
+	ChunkMaxSize int64       // 文件分块最大大小，单位：字节
 }
 
 func NewRepo(dataPath, repoPath string) (ret *Repo) {
@@ -218,32 +217,13 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 		Created: time.Now().UnixMilli(),
 	}
 	for _, file := range upserts {
-		var data []byte
 		absPath := repo.AbsPath(file.Path)
-		data, err = os.ReadFile(absPath)
-		if nil != err {
+		chunks, hashes, chunkErr := repo.fileChunks(absPath)
+		if nil != chunkErr {
+			err = chunkErr
 			return
 		}
-
-		chnkr := repo.NewChunker(data)
-		buf := make([]byte, 8*1024*1024)
-		var chunks []*Chunk
-		var chunkHashes []string
-		for {
-			chnk, chnkErr := chnkr.Next(buf)
-			if io.EOF == chnkErr {
-				break
-			}
-			if nil != chnkErr {
-				err = chnkErr
-				return
-			}
-
-			chnkHash := Hash(chnk.Data)
-			chunks = append(chunks, &Chunk{Hash: chnkHash, Data: chnk.Data})
-			chunkHashes = append(chunkHashes, chnkHash)
-		}
-		file.Chunks = chunkHashes
+		file.Chunks = hashes
 
 		for _, chunk := range chunks {
 			waitGroup.Add(1)
@@ -292,6 +272,44 @@ func (repo *Repo) RelPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
-func (repo *Repo) NewChunker(data []byte) *chunker.Chunker {
-	return chunker.NewWithBoundaries(bytes.NewReader(data), repo.ChunkPol, repo.ChunkMinSize, repo.ChunkMaxSize)
+func (repo *Repo) fileChunks(absPath string) (chunks []*Chunk, chunkHashes []string, err error) {
+	info, statErr := os.Stat(absPath)
+	if nil != statErr {
+		err = statErr
+		return
+	}
+
+	if repo.ChunkMinSize > info.Size() {
+		data, readErr := os.ReadFile(absPath)
+		if nil != readErr {
+			err = readErr
+			return
+		}
+		chnkHash := Hash(data)
+		chunks = append(chunks, &Chunk{Hash: chnkHash, Data: data})
+		chunkHashes = append(chunkHashes, chnkHash)
+		return
+	}
+
+	reader, err := os.OpenFile(absPath, os.O_RDONLY, 0644)
+	if nil != err {
+		return
+	}
+	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, uint(repo.ChunkMinSize), uint(repo.ChunkMaxSize))
+	buf := make([]byte, 8*1024*1024)
+	for {
+		chnk, chnkErr := chnkr.Next(buf)
+		if io.EOF == chnkErr {
+			break
+		}
+		if nil != chnkErr {
+			err = chnkErr
+			return
+		}
+
+		chnkHash := Hash(chnk.Data)
+		chunks = append(chunks, &Chunk{Hash: chnkHash, Data: chnk.Data})
+		chunkHashes = append(chunkHashes, chnkHash)
+	}
+	return
 }
