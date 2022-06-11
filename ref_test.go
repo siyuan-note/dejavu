@@ -42,14 +42,26 @@ func TestTag(t *testing.T) {
 	}
 	t.Logf("commit: %s", index.Hash)
 
-	err = repo.AddTag(index.Hash, "tag1")
+	err = repo.AddTag(index.Hash, "v1.0.0")
 	if nil != err {
 		t.Fatalf("add tag failed: %s", err)
 		return
 	}
 
-	id, err := repo.GetTag("tag1")
-	if id != index.Hash {
+	v100, err := repo.GetTag("v1.0.0")
+	if v100 != index.Hash {
+		t.Fatalf("get tag failed: %s", err)
+		return
+	}
+
+	err = repo.AddTag(index.Hash, "v1.0.1")
+	if nil != err {
+		t.Fatalf("add tag failed: %s", err)
+		return
+	}
+
+	v101, err := repo.GetTag("v1.0.1")
+	if v101 != v100 {
 		t.Fatalf("get tag failed: %s", err)
 		return
 	}

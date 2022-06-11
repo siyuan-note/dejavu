@@ -18,10 +18,10 @@ package dejavu
 
 type Index struct {
 	Hash    string   `json:"hash"`
-	Parent  string   `json:"parent"`
-	Message string   `json:"message"`
-	Created int64    `json:"created"`
-	Files   []string `json:"files"`
+	Parent  string   `json:"parent"`  // 指向上一次提交
+	Message string   `json:"message"` // 提交备注
+	Created int64    `json:"created"` // 提交时间
+	Files   []string `json:"files"`   // 文件列表
 }
 
 func (c *Index) ID() string {

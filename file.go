@@ -23,10 +23,10 @@ import (
 
 type File struct {
 	Hash    string   `json:"hash"`
-	Path    string   `json:"path"`
-	Size    int64    `json:"size"`
-	Updated int64    `json:"updated"`
-	Chunks  []string `json:"chunks"`
+	Path    string   `json:"path"`    // 文件路径
+	Size    int64    `json:"size"`    // 文件大小
+	Updated int64    `json:"updated"` // 最后更新时间
+	Chunks  []string `json:"chunks"`  // 文件分块列表
 }
 
 func (f *File) ID() string {
