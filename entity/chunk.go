@@ -12,4 +12,13 @@
 //
 // See the Mulan PSL v2 for more details.
 
-package dejavu
+package entity
+
+type Chunk struct {
+	Hash string `json:"hash"`
+	Data []byte `json:"data"` // 实际的数据
+}
+
+func (c *Chunk) ID() string {
+	return c.Hash
+}

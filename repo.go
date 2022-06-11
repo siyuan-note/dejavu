@@ -26,6 +26,8 @@ import (
 	"github.com/88250/gulu"
 	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
+	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 )
 
 // Repo 描述了逮虾户仓库。
@@ -69,7 +71,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 	if err = os.MkdirAll(repo.DataPath, 0755); nil != err {
 		return
 	}
-	var files []*File
+	var files []*entity.File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -78,7 +80,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 			return nil
 		}
 
-		files = append(files, &File{
+		files = append(files, &entity.File{
 			Path:    repo.RelPath(path),
 			Size:    info.Size(),
 			Updated: info.ModTime().UnixMilli(),
@@ -89,9 +91,9 @@ func (repo *Repo) Checkout(id string) (err error) {
 		return
 	}
 
-	var upserts, removes, latestFiles []*File
+	var upserts, removes, latestFiles []*entity.File
 	for _, f := range index.Files {
-		var file *File
+		var file *entity.File
 		file, err = repo.store.GetFile(f)
 		if nil != err {
 			return
@@ -104,7 +106,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 	}
 
 	for _, f := range upserts {
-		var file *File
+		var file *entity.File
 		file, err = repo.store.GetFile(f.Hash)
 		if nil != err {
 			return err
@@ -112,7 +114,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 
 		var data []byte
 		for _, c := range file.Chunks {
-			var chunk *Chunk
+			var chunk *entity.Chunk
 			chunk, err = repo.store.GetChunk(c)
 			if nil != err {
 				return err
@@ -148,8 +150,8 @@ func (repo *Repo) Checkout(id string) (err error) {
 }
 
 // Commit 将 repo 数据文件夹中的文件提交到仓库中。
-func (repo *Repo) Commit() (ret *Index, err error) {
-	var files []*File
+func (repo *Repo) Commit() (ret *entity.Index, err error) {
+	var files []*entity.File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -158,7 +160,7 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 			return nil
 		}
 
-		files = append(files, &File{
+		files = append(files, &entity.File{
 			Path:    repo.RelPath(path),
 			Size:    info.Size(),
 			Updated: info.ModTime().UnixMilli(),
@@ -173,10 +175,10 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 	if nil != err {
 		return
 	}
-	var upserts, removes, latestFiles []*File
+	var upserts, removes, latestFiles []*entity.File
 	if "" != latest.Parent {
 		for _, f := range latest.Files {
-			var file *File
+			var file *entity.File
 			file, err = repo.store.GetFile(f)
 			if nil != err {
 				return
@@ -194,15 +196,14 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 	var errs []error
 	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
 		defer waitGroup.Done()
-		obj := arg.(Object)
 		var putErr error
-		switch obj.(type) {
-		case *Chunk:
-			putErr = repo.store.PutChunk(obj.(*Chunk))
-		case *File:
-			putErr = repo.store.PutFile(obj.(*File))
-		case *Index:
-			putErr = repo.store.PutIndex(obj.(*Index))
+		switch obj := arg.(type) {
+		case *entity.Chunk:
+			putErr = repo.store.PutChunk(obj)
+		case *entity.File:
+			putErr = repo.store.PutFile(obj)
+		case *entity.Index:
+			putErr = repo.store.PutIndex(obj)
 		}
 
 		if nil != putErr {
@@ -210,7 +211,7 @@ func (repo *Repo) Commit() (ret *Index, err error) {
 		}
 	})
 
-	ret = &Index{
+	ret = &entity.Index{
 		Parent:  latest.Hash,
 		Message: "",
 		Created: time.Now().UnixMilli(),
@@ -266,7 +267,7 @@ func (repo *Repo) RelPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
-func (repo *Repo) fileChunks(absPath string) (chunks []*Chunk, chunkHashes []string, err error) {
+func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashes []string, err error) {
 	info, statErr := os.Stat(absPath)
 	if nil != statErr {
 		err = statErr
@@ -279,8 +280,8 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*Chunk, chunkHashes []str
 			err = readErr
 			return
 		}
-		chnkHash := Hash(data)
-		chunks = append(chunks, &Chunk{Hash: chnkHash, Data: data})
+		chnkHash := util.Hash(data)
+		chunks = append(chunks, &entity.Chunk{Hash: chnkHash, Data: data})
 		chunkHashes = append(chunkHashes, chnkHash)
 		return
 	}
@@ -301,8 +302,8 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*Chunk, chunkHashes []str
 			return
 		}
 
-		chnkHash := Hash(chnk.Data)
-		chunks = append(chunks, &Chunk{Hash: chnkHash, Data: chnk.Data})
+		chnkHash := util.Hash(chnk.Data)
+		chunks = append(chunks, &entity.Chunk{Hash: chnkHash, Data: chnk.Data})
 		chunkHashes = append(chunkHashes, chnkHash)
 	}
 	return

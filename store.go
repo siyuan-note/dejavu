@@ -17,15 +17,13 @@ package dejavu
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/rand"
-	"crypto/sha1"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 )
 
@@ -43,20 +41,7 @@ type Object interface {
 	ID() string
 }
 
-func Hash(data []byte) string {
-	return fmt.Sprintf("%x", sha1.Sum(data))
-}
-
-func RandHash() string {
-	b := make([]byte, 32)
-	_, err := rand.Read(b)
-	if nil != err {
-		return Hash([]byte(gulu.Rand.String(32)))
-	}
-	return Hash(b)
-}
-
-func (store *Store) PutChunk(chunk *Chunk) (err error) {
+func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 	id := chunk.ID()
 	if "" == id {
 		return errors.New("invalid id")
@@ -79,7 +64,7 @@ func (store *Store) PutChunk(chunk *Chunk) (err error) {
 	return
 }
 
-func (store *Store) PutFile(file *File) (err error) {
+func (store *Store) PutFile(file *entity.File) (err error) {
 	id := file.ID()
 	if "" == id {
 		return errors.New("invalid id")
@@ -105,8 +90,8 @@ func (store *Store) PutFile(file *File) (err error) {
 	return
 }
 
-func (store *Store) PutIndex(obj Object) (err error) {
-	id := obj.ID()
+func (store *Store) PutIndex(index *entity.Index) (err error) {
+	id := index.ID()
 	if "" == id {
 		return errors.New("invalid id")
 	}
@@ -115,7 +100,7 @@ func (store *Store) PutIndex(obj Object) (err error) {
 		return errors.New("put index failed: " + err.Error())
 	}
 
-	data, err := gulu.JSON.MarshalJSON(obj)
+	data, err := gulu.JSON.MarshalJSON(index)
 	if nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}
@@ -141,7 +126,7 @@ func (store *Store) PutIndex(obj Object) (err error) {
 	return
 }
 
-func (store *Store) GetIndex(id string) (ret *Index, err error) {
+func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
 	if nil != err {
@@ -162,12 +147,12 @@ func (store *Store) GetIndex(id string) (ret *Index, err error) {
 		return
 	}
 
-	ret = &Index{}
+	ret = &entity.Index{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
 }
 
-func (store *Store) GetFile(id string) (ret *File, err error) {
+func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
 	if nil != err {
@@ -177,12 +162,12 @@ func (store *Store) GetFile(id string) (ret *File, err error) {
 	if nil != err {
 		return
 	}
-	ret = &File{}
+	ret = &entity.File{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
 }
 
-func (store *Store) GetChunk(id string) (ret *Chunk, err error) {
+func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
 	if nil != err {
@@ -192,7 +177,7 @@ func (store *Store) GetChunk(id string) (ret *Chunk, err error) {
 	if nil != err {
 		return
 	}
-	ret = &Chunk{Hash: id, Data: data}
+	ret = &entity.Chunk{Hash: id, Data: data}
 	return
 }
 

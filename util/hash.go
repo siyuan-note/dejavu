@@ -12,20 +12,25 @@
 //
 // See the Mulan PSL v2 for more details.
 
-package dejavu
+package util
 
-type Index struct {
-	Hash    string   `json:"hash"`
-	Parent  string   `json:"parent"`  // 指向上一个索引
-	Message string   `json:"message"` // 索引备注
-	Created int64    `json:"created"` // 索引时间
-	Files   []string `json:"files"`   // 文件列表
+import (
+	"crypto/rand"
+	"crypto/sha1"
+	"fmt"
+
+	"github.com/88250/gulu"
+)
+
+func Hash(data []byte) string {
+	return fmt.Sprintf("%x", sha1.Sum(data))
 }
 
-func (c *Index) ID() string {
-	if "" != c.Hash {
-		return c.Hash
+func RandHash() string {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if nil != err {
+		return Hash([]byte(gulu.Rand.String(32)))
 	}
-	c.Hash = RandHash()
-	return c.Hash
+	return Hash(b)
 }

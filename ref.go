@@ -21,12 +21,14 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 )
 
-func (repo *Repo) Latest() (ret *Index, err error) {
+func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	latest := filepath.Join(repo.Path, "refs", "latest")
 	if !gulu.File.IsExist(latest) {
-		ret = &Index{Hash: RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
+		ret = &entity.Index{Hash: util.RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
 		err = repo.store.PutIndex(ret)
 		if nil != err {
 			return

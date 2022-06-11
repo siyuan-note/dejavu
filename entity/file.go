@@ -12,11 +12,13 @@
 //
 // See the Mulan PSL v2 for more details.
 
-package dejavu
+package entity
 
 import (
 	"bytes"
 	"strconv"
+
+	"github.com/siyuan-note/dejavu/util"
 )
 
 type File struct {
@@ -36,6 +38,6 @@ func (f *File) ID() string {
 	buf.WriteString(f.Path)
 	buf.WriteString(strconv.FormatInt(f.Size, 10))
 	buf.WriteString(strconv.FormatInt(f.Updated, 10))
-	f.Hash = Hash(buf.Bytes())
+	f.Hash = util.Hash(buf.Bytes())
 	return f.Hash
 }

@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/encryption"
 )
 
@@ -28,7 +30,7 @@ func TestPutGet(t *testing.T) {
 	store := NewStore(testRepoPath+"/objects/", aesKey)
 
 	data := []byte("Hello!")
-	chunk := &Chunk{Hash: Hash(data), Data: data}
+	chunk := &entity.Chunk{Hash: util.Hash(data), Data: data}
 	err = store.PutChunk(chunk)
 	if nil != err {
 		t.Fatalf("put failed: %s", err)

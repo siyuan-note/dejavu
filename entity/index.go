@@ -12,13 +12,22 @@
 //
 // See the Mulan PSL v2 for more details.
 
-package dejavu
+package entity
 
-type Chunk struct {
-	Hash string `json:"hash"`
-	Data []byte `json:"data"` // 实际的数据
+import "github.com/siyuan-note/dejavu/util"
+
+type Index struct {
+	Hash    string   `json:"hash"`
+	Parent  string   `json:"parent"`  // 指向上一个索引
+	Message string   `json:"message"` // 索引备注
+	Created int64    `json:"created"` // 索引时间
+	Files   []string `json:"files"`   // 文件列表
 }
 
-func (c *Chunk) ID() string {
+func (c *Index) ID() string {
+	if "" != c.Hash {
+		return c.Hash
+	}
+	c.Hash = util.RandHash()
 	return c.Hash
 }
