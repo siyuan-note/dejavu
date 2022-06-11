@@ -91,6 +91,10 @@
 
 TBD
 
+## 📄 授权
+
+DejaVu 使用 [木兰宽松许可证, 第2版](http://license.coscl.org.cn/MulanPSL2) 开源协议。
+
 ## 🙏 鸣谢
 
 * [ArtiVC](https://github.com/InfuseAI/ArtiVC)
