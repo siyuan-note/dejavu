@@ -22,6 +22,7 @@ type Index struct {
 	Message string   `json:"message"` // 索引备注
 	Created int64    `json:"created"` // 索引时间
 	Files   []string `json:"files"`   // 文件列表
+	Size    int64    `json:"size"`    // 文件总大小
 }
 
 func (c *Index) ID() string {

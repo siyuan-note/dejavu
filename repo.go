@@ -242,6 +242,7 @@ func (repo *Repo) Commit() (ret *entity.Index, err error) {
 
 	for _, file := range files {
 		ret.Files = append(ret.Files, file.ID())
+		ret.Size += file.Size
 	}
 	waitGroup.Wait()
 	p.Release()
