@@ -17,10 +17,13 @@
 package dejavu
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -118,8 +121,18 @@ func (store *Store) PutIndex(obj Object) (err error) {
 	if nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}
-	data, err = store.encryptData(data)
-	if nil != err {
+
+	buf := &bytes.Buffer{}
+	gz := gzip.NewWriter(buf)
+	if _, err = gz.Write(data); nil != err {
+		return errors.New("put index failed: " + err.Error())
+	}
+	if err = gz.Close(); nil != err {
+		return errors.New("put index failed: " + err.Error())
+	}
+	data = buf.Bytes()
+
+	if data, err = store.encryptData(data); nil != err {
 		return
 	}
 
@@ -140,6 +153,17 @@ func (store *Store) GetIndex(id string) (ret *Index, err error) {
 	if nil != err {
 		return
 	}
+
+	buf := bytes.NewReader(data)
+	reader, err := gzip.NewReader(buf)
+	if nil != err {
+		return
+	}
+	data, err = io.ReadAll(reader)
+	if nil != err {
+		return
+	}
+
 	ret = &Index{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
