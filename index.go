@@ -18,9 +18,9 @@ package dejavu
 
 type Index struct {
 	Hash    string   `json:"hash"`
-	Parent  string   `json:"parent"`  // 指向上一次提交
-	Message string   `json:"message"` // 提交备注
-	Created int64    `json:"created"` // 提交时间
+	Parent  string   `json:"parent"`  // 指向上一个索引
+	Message string   `json:"message"` // 索引备注
+	Created int64    `json:"created"` // 索引时间
 	Files   []string `json:"files"`   // 文件列表
 }
 
