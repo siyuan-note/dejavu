@@ -41,19 +41,22 @@ func TestCommitCheckout(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err := repo.Commit()
+	index, err := repo.Commit("Commit 1")
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
 	t.Logf("commit: %s", index.Hash)
 
-	index, err = repo.Commit()
+	index2, err := repo.Commit("Commit 2")
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
-	t.Logf("commit: %s", index.Hash)
+	if index.ID() != index2.ID() {
+		t.Fatalf("commit failed: %s", err)
+		return
+	}
 
 	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, aesKey)
 	if nil != err {

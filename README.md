@@ -33,6 +33,7 @@ Design reference from [ArtiVC](https://github.com/InfuseAI/ArtiVC).
     * `message` index memo
     * `created` index time
     * `files` file list
+    * `size` size of total files
 * `File` file, a new file is generated when the actual data file path or content changes
     * `path` file path
     * `size` file size

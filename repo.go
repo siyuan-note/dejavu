@@ -150,7 +150,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 }
 
 // Commit 将 repo 数据文件夹中的文件提交到仓库中。
-func (repo *Repo) Commit() (ret *entity.Index, err error) {
+func (repo *Repo) Commit(message string) (ret *entity.Index, err error) {
 	var files []*entity.File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
@@ -212,8 +212,9 @@ func (repo *Repo) Commit() (ret *entity.Index, err error) {
 	})
 
 	ret = &entity.Index{
+		Hash:    util.RandHash(),
 		Parent:  latest.Hash,
-		Message: "",
+		Message: message,
 		Created: time.Now().UnixMilli(),
 	}
 	for _, file := range upserts {

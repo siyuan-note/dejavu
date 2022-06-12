@@ -33,7 +33,7 @@ func TestTag(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err := repo.Commit()
+	index, err := repo.Commit("Commit 1")
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
