@@ -57,7 +57,7 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 		ret.Path += string(os.PathSeparator)
 	}
 	storePath := filepath.Join(repoPath, "objects") + string(os.PathSeparator)
-	ret.store = NewStore(storePath, aesKey)
+	ret.store, err = NewStore(storePath, aesKey)
 	return
 }
 

@@ -15,14 +15,12 @@
 package dejavu
 
 import (
-	"bytes"
-	"compress/gzip"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/88250/gulu"
+	"github.com/klauspost/compress/zstd"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 )
@@ -31,56 +29,23 @@ import (
 type Store struct {
 	Path   string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\objects\\
 	AesKey []byte
+
+	compressEncoder *zstd.Encoder
+	compressDecoder *zstd.Decoder
 }
 
-func NewStore(path string, aesKey []byte) *Store {
-	return &Store{Path: path, AesKey: aesKey}
-}
+func NewStore(path string, aesKey []byte) (ret *Store, err error) {
+	ret = &Store{Path: path, AesKey: aesKey}
 
-func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
-	if "" == chunk.ID {
-		return errors.New("invalid id")
-	}
-	dir, file := store.AbsPath(chunk.ID)
-	if err = os.MkdirAll(dir, 0755); nil != err {
-		return errors.New("put chunk failed: " + err.Error())
-	}
-
-	data := chunk.Data
-	data, err = store.encryptData(data)
+	ret.compressEncoder, err = zstd.NewWriter(nil,
+		zstd.WithEncoderLevel(zstd.SpeedDefault),
+		zstd.WithEncoderCRC(false),
+		zstd.WithWindowSize(512*1024))
 	if nil != err {
 		return
 	}
-
-	err = gulu.File.WriteFileSafer(file, data, 0644)
-	if nil != err {
-		return errors.New("put chunk failed: " + err.Error())
-	}
-	return
-}
-
-func (store *Store) PutFile(file *entity.File) (err error) {
-	if "" == file.ID {
-		return errors.New("invalid id")
-	}
-	dir, f := store.AbsPath(file.ID)
-	if err = os.MkdirAll(dir, 0755); nil != err {
-		return errors.New("put failed: " + err.Error())
-	}
-
-	data, err := gulu.JSON.MarshalJSON(file)
-	if nil != err {
-		return errors.New("put file failed: " + err.Error())
-	}
-	data, err = store.encryptData(data)
-	if nil != err {
-		return
-	}
-
-	err = gulu.File.WriteFileSafer(f, data, 0644)
-	if nil != err {
-		return errors.New("put file failed: " + err.Error())
-	}
+	ret.compressDecoder, err = zstd.NewReader(nil,
+		zstd.WithDecoderMaxMemory(16*1024*1024*1024))
 	return
 }
 
@@ -98,17 +63,7 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 		return errors.New("put index failed: " + err.Error())
 	}
 
-	buf := &bytes.Buffer{}
-	gz := gzip.NewWriter(buf)
-	if _, err = gz.Write(data); nil != err {
-		return errors.New("put index failed: " + err.Error())
-	}
-	if err = gz.Close(); nil != err {
-		return errors.New("put index failed: " + err.Error())
-	}
-	data = buf.Bytes()
-
-	if data, err = store.encryptData(data); nil != err {
+	if data, err = store.encodeData(data); nil != err {
 		return
 	}
 
@@ -125,23 +80,37 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 	if nil != err {
 		return
 	}
-	data, err = store.decryptData(data)
-	if nil != err {
-		return
-	}
 
-	buf := bytes.NewReader(data)
-	reader, err := gzip.NewReader(buf)
-	if nil != err {
-		return
-	}
-	data, err = io.ReadAll(reader)
-	if nil != err {
+	if data, err = store.decodeData(data); nil != err {
 		return
 	}
 
 	ret = &entity.Index{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
+	return
+}
+
+func (store *Store) PutFile(file *entity.File) (err error) {
+	if "" == file.ID {
+		return errors.New("invalid id")
+	}
+	dir, f := store.AbsPath(file.ID)
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return errors.New("put failed: " + err.Error())
+	}
+
+	data, err := gulu.JSON.MarshalJSON(file)
+	if nil != err {
+		return errors.New("put file failed: " + err.Error())
+	}
+	if data, err = store.encodeData(data); nil != err {
+		return
+	}
+
+	err = gulu.File.WriteFileSafer(f, data, 0644)
+	if nil != err {
+		return errors.New("put file failed: " + err.Error())
+	}
 	return
 }
 
@@ -151,12 +120,32 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 	if nil != err {
 		return
 	}
-	data, err = store.decryptData(data)
-	if nil != err {
+	if data, err = store.decodeData(data); nil != err {
 		return
 	}
 	ret = &entity.File{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
+	return
+}
+
+func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
+	if "" == chunk.ID {
+		return errors.New("invalid id")
+	}
+	dir, file := store.AbsPath(chunk.ID)
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return errors.New("put chunk failed: " + err.Error())
+	}
+
+	data := chunk.Data
+	if data, err = store.encodeData(data); nil != err {
+		return
+	}
+
+	err = gulu.File.WriteFileSafer(file, data, 0644)
+	if nil != err {
+		return errors.New("put chunk failed: " + err.Error())
+	}
 	return
 }
 
@@ -166,8 +155,7 @@ func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 	if nil != err {
 		return
 	}
-	data, err = store.decryptData(data)
-	if nil != err {
+	if data, err = store.decodeData(data); nil != err {
 		return
 	}
 	ret = &entity.Chunk{ID: id, Data: data}
@@ -192,6 +180,29 @@ func (store *Store) AbsPath(id string) (dir, file string) {
 	dir = filepath.Join(store.Path, dir)
 	file = filepath.Join(dir, file)
 	return
+}
+
+func (store *Store) encodeData(data []byte) ([]byte, error) {
+	data = store.compressData(data)
+	return store.encryptData(data)
+	return data, nil
+}
+
+func (store *Store) decodeData(data []byte) (ret []byte, err error) {
+	ret, err = store.decryptData(data)
+	if nil != err {
+		return
+	}
+	ret, err = store.decompressData(ret)
+	return
+}
+
+func (store *Store) compressData(data []byte) []byte {
+	return store.compressEncoder.EncodeAll(data, nil)
+}
+
+func (store *Store) decompressData(data []byte) ([]byte, error) {
+	return store.compressDecoder.DecodeAll(data, nil)
 }
 
 func (store *Store) encryptData(data []byte) ([]byte, error) {

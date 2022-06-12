@@ -24,10 +24,15 @@ func TestPutGet(t *testing.T) {
 
 	aesKey, err := encryption.KDF(testRepoPassword, testRepoPasswordSalt)
 	if nil != err {
+		t.Fatalf("kdf failed: %s", err)
 		return
 	}
 
-	store := NewStore(testRepoPath+"/objects/", aesKey)
+	store, err := NewStore(testRepoPath+"/objects/", aesKey)
+	if nil != err {
+		t.Fatalf("new store failed: %s", err)
+		return
+	}
 
 	data := []byte("Hello!")
 	chunk := &entity.Chunk{ID: util.Hash(data), Data: data}
