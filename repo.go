@@ -284,6 +284,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	if nil != err {
 		return
 	}
+	defer reader.Close()
 	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, uint(repo.ChunkMinSize), uint(repo.ChunkMaxSize))
 	buf := make([]byte, 8*1024*1024)
 	for {

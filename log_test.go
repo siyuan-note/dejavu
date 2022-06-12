@@ -33,6 +33,10 @@ func TestGetLogs(t *testing.T) {
 		t.Fatalf("get logs failed: %s", err)
 		return
 	}
+	if 2 != len(logs) {
+		t.Fatalf("logs length not match: %d", len(logs))
+		return
+	}
 
 	for _, log := range logs {
 		t.Logf("%+v", log)
