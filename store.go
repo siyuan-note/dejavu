@@ -183,32 +183,15 @@ func (store *Store) AbsPath(id string) (dir, file string) {
 }
 
 func (store *Store) encodeData(data []byte) ([]byte, error) {
-	data = store.compressData(data)
-	return store.encryptData(data)
-	return data, nil
-}
-
-func (store *Store) decodeData(data []byte) (ret []byte, err error) {
-	ret, err = store.decryptData(data)
-	if nil != err {
-		return
-	}
-	ret, err = store.decompressData(ret)
-	return
-}
-
-func (store *Store) compressData(data []byte) []byte {
-	return store.compressEncoder.EncodeAll(data, nil)
-}
-
-func (store *Store) decompressData(data []byte) ([]byte, error) {
-	return store.compressDecoder.DecodeAll(data, nil)
-}
-
-func (store *Store) encryptData(data []byte) ([]byte, error) {
+	data = store.compressEncoder.EncodeAll(data, nil)
 	return encryption.AesEncrypt(data, store.AesKey)
 }
 
-func (store *Store) decryptData(data []byte) ([]byte, error) {
-	return encryption.AesDecrypt(data, store.AesKey)
+func (store *Store) decodeData(data []byte) (ret []byte, err error) {
+	ret, err = encryption.AesDecrypt(data, store.AesKey)
+	if nil != err {
+		return
+	}
+	ret, err = store.compressDecoder.DecodeAll(ret, nil)
+	return
 }
