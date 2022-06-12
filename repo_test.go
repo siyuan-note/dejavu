@@ -30,17 +30,17 @@ const (
 	testDataCheckoutPath = "testdata/data-checkout"
 )
 
-func TestCommitCheckout(t *testing.T) {
+func TestIndexCheckout(t *testing.T) {
 	clearTestdata(t)
 
-	repo, index := initCommit(t)
-	index2, err := repo.Commit("Commit 2")
+	repo, index := initIndex(t)
+	index2, err := repo.Index("Index 2")
 	if nil != err {
-		t.Fatalf("commit failed: %s", err)
+		t.Fatalf("index failed: %s", err)
 		return
 	}
 	if index.ID != index2.ID {
-		t.Fatalf("commit failed: %s", err)
+		t.Fatalf("index failed: %s", err)
 		return
 	}
 
@@ -76,7 +76,7 @@ func clearTestdata(t *testing.T) {
 	}
 }
 
-func initCommit(t *testing.T) (repo *Repo, index *entity.Index) {
+func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 	aesKey, err := encryption.KDF(testRepoPassword, testRepoPasswordSalt)
 	if nil != err {
 		return
@@ -87,9 +87,9 @@ func initCommit(t *testing.T) (repo *Repo, index *entity.Index) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err = repo.Commit("Commit 1")
+	index, err = repo.Index("Index 1")
 	if nil != err {
-		t.Fatalf("commit failed: %s", err)
+		t.Fatalf("index failed: %s", err)
 		return
 	}
 	return

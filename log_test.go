@@ -21,7 +21,7 @@ import (
 func TestGetIndexLogs(t *testing.T) {
 	clearTestdata(t)
 
-	repo, index := initCommit(t)
+	repo, index := initIndex(t)
 	err := repo.AddTag(index.ID, "v1.0.0")
 	if nil != err {
 		t.Fatalf("add tag failed: %s", err)
@@ -46,7 +46,7 @@ func TestGetIndexLogs(t *testing.T) {
 func TestGetTagLogs(t *testing.T) {
 	clearTestdata(t)
 
-	repo, index := initCommit(t)
+	repo, index := initIndex(t)
 	err := repo.AddTag(index.ID, "v1.0.0")
 	if nil != err {
 		t.Fatalf("add tag failed: %s", err)

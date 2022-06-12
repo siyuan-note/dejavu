@@ -28,7 +28,7 @@ Design reference from [ArtiVC](https://github.com/InfuseAI/ArtiVC).
 ### Entity
 
 * `ID` Each entity is identified by SHA-1
-* `Index` file list, each commit generates a new index
+* `Index` file list, each index operation generates a new index
     * `parent` points to the previous index
     * `message` index memo
     * `created` index time

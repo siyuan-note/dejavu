@@ -21,7 +21,7 @@ import (
 func TestTag(t *testing.T) {
 	clearTestdata(t)
 
-	repo, index := initCommit(t)
+	repo, index := initIndex(t)
 	err := repo.AddTag(index.ID, "v1.0.0")
 	if nil != err {
 		t.Fatalf("add tag failed: %s", err)

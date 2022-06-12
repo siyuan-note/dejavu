@@ -145,8 +145,8 @@ func (repo *Repo) Checkout(id string) (err error) {
 	return
 }
 
-// Commit 将 repo 数据文件夹中的文件提交到仓库中。
-func (repo *Repo) Commit(message string) (ret *entity.Index, err error) {
+// Index 将 repo 数据文件夹中的文件索引到仓库中。
+func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
 	var files []*entity.File
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
