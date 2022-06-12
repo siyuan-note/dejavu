@@ -15,6 +15,9 @@
 package dejavu
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 )
@@ -36,29 +39,62 @@ func (log *Log) String() string {
 	return string(data)
 }
 
-func (repo *Repo) GetLogs() (ret []*Log, err error) {
+func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
+	tags := filepath.Join(repo.Path, "refs", "tags")
+	if !gulu.File.IsExist(tags) {
+		return
+	}
+
+	entries, err := os.ReadDir(tags)
+	if nil != err {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		var data []byte
+		data, err = os.ReadFile(filepath.Join(tags, entry.Name()))
+		if nil != err {
+			return
+		}
+		id := string(data)
+		if 40 != len(id) {
+			continue
+		}
+		var index *entity.Index
+		index, err = repo.store.GetIndex(id)
+		if nil != err {
+			return
+		}
+
+		var log *Log
+		log, err = repo.getLog(index)
+		if nil != err {
+			return
+		}
+
+		ret = append(ret, log)
+	}
+	return
+}
+
+func (repo *Repo) GetIndexLogs() (ret []*Log, err error) {
 	latest, err := repo.Latest()
 	if nil != err {
 		return
 	}
 
-	index := latest
-	for i := 0; i < 64; i++ {
-		log := &Log{
-			ID:      index.ID,
-			Parent:  index.Parent,
-			Message: index.Message,
-			Created: index.Created,
-			Size:    index.Size,
-		}
+	ret, err = repo.getLogsByParent(latest)
+	return
+}
 
-		for _, f := range index.Files {
-			var file *entity.File
-			file, err = repo.store.GetFile(f)
-			if nil != err {
-				return
-			}
-			log.Files = append(log.Files, file)
+func (repo *Repo) getLogsByParent(index *entity.Index) (ret []*Log, err error) {
+	for i := 0; i < 64; i++ {
+		var log *Log
+		log, err = repo.getLog(index)
+		if nil != err {
+			return
 		}
 
 		ret = append(ret, log)
@@ -70,6 +106,26 @@ func (repo *Repo) GetLogs() (ret []*Log, err error) {
 		if nil != err {
 			return
 		}
+	}
+	return
+}
+
+func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
+	ret = &Log{
+		ID:      index.ID,
+		Parent:  index.Parent,
+		Message: index.Message,
+		Created: index.Created,
+		Size:    index.Size,
+	}
+
+	for _, f := range index.Files {
+		var file *entity.File
+		file, err = repo.store.GetFile(f)
+		if nil != err {
+			return
+		}
+		ret.Files = append(ret.Files, file)
 	}
 	return
 }

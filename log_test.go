@@ -18,7 +18,7 @@ import (
 	"testing"
 )
 
-func TestGetLogs(t *testing.T) {
+func TestGetIndexLogs(t *testing.T) {
 	clearTestdata(t)
 
 	repo, index := initCommit(t)
@@ -28,9 +28,40 @@ func TestGetLogs(t *testing.T) {
 		return
 	}
 
-	logs, err := repo.GetLogs()
+	logs, err := repo.GetIndexLogs()
 	if nil != err {
-		t.Fatalf("get logs failed: %s", err)
+		t.Fatalf("get index logs failed: %s", err)
+		return
+	}
+	if 2 != len(logs) {
+		t.Fatalf("logs length not match: %d", len(logs))
+		return
+	}
+
+	for _, log := range logs {
+		t.Logf("%+v", log)
+	}
+}
+
+func TestGetTagLogs(t *testing.T) {
+	clearTestdata(t)
+
+	repo, index := initCommit(t)
+	err := repo.AddTag(index.ID, "v1.0.0")
+	if nil != err {
+		t.Fatalf("add tag failed: %s", err)
+		return
+	}
+
+	err = repo.AddTag(index.ID, "v1.0.1")
+	if nil != err {
+		t.Fatalf("add tag failed: %s", err)
+		return
+	}
+
+	logs, err := repo.GetTagLogs()
+	if nil != err {
+		t.Fatalf("get tag logs failed: %s", err)
 		return
 	}
 	if 2 != len(logs) {
