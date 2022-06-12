@@ -12,13 +12,29 @@
 //
 // See the Mulan PSL v2 for more details.
 
-package entity
+package dejavu
 
-type Index struct {
-	ID      string   `json:"id"`      // Hash
-	Parent  string   `json:"parent"`  // 指向上一个索引
-	Message string   `json:"message"` // 索引备注
-	Created int64    `json:"created"` // 索引时间
-	Files   []string `json:"files"`   // 文件列表
-	Size    int64    `json:"size"`    // 文件总大小
+import (
+	"testing"
+)
+
+func TestGetLogs(t *testing.T) {
+	clearTestdata(t)
+
+	repo, index := initCommit(t)
+	err := repo.AddTag(index.ID, "v1.0.0")
+	if nil != err {
+		t.Fatalf("add tag failed: %s", err)
+		return
+	}
+
+	logs, err := repo.GetLogs()
+	if nil != err {
+		t.Fatalf("get logs failed: %s", err)
+		return
+	}
+
+	for _, log := range logs {
+		t.Logf("%+v", log)
+	}
 }

@@ -18,11 +18,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 )
 
 const (
 	testRepoPassword     = "pass"
+	testRepoPasswordSalt = "salt"
 	testRepoPath         = "testdata/repo"
 	testDataPath         = "testdata/data"
 	testDataCheckoutPath = "testdata/data-checkout"
@@ -31,39 +33,24 @@ const (
 func TestCommitCheckout(t *testing.T) {
 	clearTestdata(t)
 
-	aesKey, err := encryption.KDF(testRepoPassword)
-	if nil != err {
-		return
-	}
-
-	repo, err := NewRepo(testDataPath, testRepoPath, aesKey)
-	if nil != err {
-		t.Fatalf("new repo failed: %s", err)
-		return
-	}
-	index, err := repo.Commit("Commit 1")
-	if nil != err {
-		t.Fatalf("commit failed: %s", err)
-		return
-	}
-	t.Logf("commit: %s", index.Hash)
-
+	repo, index := initCommit(t)
 	index2, err := repo.Commit("Commit 2")
 	if nil != err {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
-	if index.ID() != index2.ID() {
+	if index.ID != index2.ID {
 		t.Fatalf("commit failed: %s", err)
 		return
 	}
 
+	aesKey := repo.store.AesKey
 	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, aesKey)
 	if nil != err {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	err = repo.Checkout(index.Hash)
+	err = repo.Checkout(index.ID)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return
@@ -74,7 +61,7 @@ func TestCommitCheckout(t *testing.T) {
 		t.Fatalf("remove failed: %s", err)
 		return
 	}
-	err = repo.Checkout(index.Hash)
+	err = repo.Checkout(index.ID)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return
@@ -87,4 +74,23 @@ func clearTestdata(t *testing.T) {
 		t.Fatalf("remove failed: %s", err)
 		return
 	}
+}
+
+func initCommit(t *testing.T) (repo *Repo, index *entity.Index) {
+	aesKey, err := encryption.KDF(testRepoPassword, testRepoPasswordSalt)
+	if nil != err {
+		return
+	}
+
+	repo, err = NewRepo(testDataPath, testRepoPath, aesKey)
+	if nil != err {
+		t.Fatalf("new repo failed: %s", err)
+		return
+	}
+	index, err = repo.Commit("Commit 1")
+	if nil != err {
+		t.Fatalf("commit failed: %s", err)
+		return
+	}
+	return
 }

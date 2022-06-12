@@ -16,43 +16,25 @@ package dejavu
 
 import (
 	"testing"
-
-	"github.com/siyuan-note/encryption"
 )
 
 func TestTag(t *testing.T) {
 	clearTestdata(t)
 
-	aesKey, err := encryption.KDF(testRepoPassword)
-	if nil != err {
-		return
-	}
-
-	repo, err := NewRepo(testDataPath, testRepoPath, aesKey)
-	if nil != err {
-		t.Fatalf("new repo failed: %s", err)
-		return
-	}
-	index, err := repo.Commit("Commit 1")
-	if nil != err {
-		t.Fatalf("commit failed: %s", err)
-		return
-	}
-	t.Logf("commit: %s", index.Hash)
-
-	err = repo.AddTag(index.Hash, "v1.0.0")
+	repo, index := initCommit(t)
+	err := repo.AddTag(index.ID, "v1.0.0")
 	if nil != err {
 		t.Fatalf("add tag failed: %s", err)
 		return
 	}
 
 	v100, err := repo.GetTag("v1.0.0")
-	if v100 != index.Hash {
+	if v100 != index.ID {
 		t.Fatalf("get tag failed: %s", err)
 		return
 	}
 
-	err = repo.AddTag(index.Hash, "v1.0.1")
+	err = repo.AddTag(index.ID, "v1.0.1")
 	if nil != err {
 		t.Fatalf("add tag failed: %s", err)
 		return

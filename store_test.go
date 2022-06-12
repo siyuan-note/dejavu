@@ -22,7 +22,7 @@ import (
 func TestPutGet(t *testing.T) {
 	clearTestdata(t)
 
-	aesKey, err := encryption.KDF(testRepoPassword)
+	aesKey, err := encryption.KDF(testRepoPassword, testRepoPasswordSalt)
 	if nil != err {
 		return
 	}
@@ -30,14 +30,14 @@ func TestPutGet(t *testing.T) {
 	store := NewStore(testRepoPath+"/objects/", aesKey)
 
 	data := []byte("Hello!")
-	chunk := &entity.Chunk{Hash: util.Hash(data), Data: data}
+	chunk := &entity.Chunk{ID: util.Hash(data), Data: data}
 	err = store.PutChunk(chunk)
 	if nil != err {
 		t.Fatalf("put failed: %s", err)
 		return
 	}
 
-	chunk, err = store.GetChunk(chunk.Hash)
+	chunk, err = store.GetChunk(chunk.ID)
 	if nil != err {
 		t.Fatalf("get failed: %s", err)
 		return
@@ -47,13 +47,13 @@ func TestPutGet(t *testing.T) {
 		return
 	}
 
-	err = store.Remove(chunk.Hash)
+	err = store.Remove(chunk.ID)
 	if nil != err {
 		t.Fatalf("remove failed: %s", err)
 		return
 	}
 
-	chunk, err = store.GetChunk(chunk.Hash)
+	chunk, err = store.GetChunk(chunk.ID)
 	if nil != chunk {
 		t.Fatalf("get should be failed")
 		return

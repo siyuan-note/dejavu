@@ -15,10 +15,6 @@
 package entity
 
 type Chunk struct {
-	Hash string `json:"hash"`
+	ID   string `json:"id"`
 	Data []byte `json:"data"` // 实际的数据
-}
-
-func (c *Chunk) ID() string {
-	return c.Hash
 }

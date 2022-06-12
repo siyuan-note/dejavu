@@ -13,3 +13,26 @@
 // See the Mulan PSL v2 for more details.
 
 package dejavu
+
+import "github.com/siyuan-note/dejavu/entity"
+
+func (repo *Repo) GetLogs() (ret []*entity.Index, err error) {
+	latest, err := repo.Latest()
+	if nil != err {
+		return
+	}
+
+	index := latest
+	for i := 0; i < 64; i++ {
+		ret = append(ret, index)
+		hash := index.Parent
+		if "" == hash {
+			break
+		}
+		index, err = repo.store.GetIndex(hash)
+		if nil != err {
+			return
+		}
+	}
+	return
+}

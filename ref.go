@@ -28,12 +28,12 @@ import (
 func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	latest := filepath.Join(repo.Path, "refs", "latest")
 	if !gulu.File.IsExist(latest) {
-		ret = &entity.Index{Hash: util.RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
+		ret = &entity.Index{ID: util.RandHash(), Message: "Init commit", Created: time.Now().UnixMilli()}
 		err = repo.store.PutIndex(ret)
 		if nil != err {
 			return
 		}
-		err = repo.UpdateLatest(ret.ID())
+		err = repo.UpdateLatest(ret.ID)
 		return
 	}
 

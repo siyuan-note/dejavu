@@ -22,22 +22,23 @@ import (
 )
 
 type File struct {
-	Hash    string   `json:"hash"`
+	ID      string   `json:"id"`      // Hash
 	Path    string   `json:"path"`    // 文件路径
 	Size    int64    `json:"size"`    // 文件大小
 	Updated int64    `json:"updated"` // 最后更新时间
 	Chunks  []string `json:"chunks"`  // 文件分块列表
 }
 
-func (f *File) ID() string {
-	if "" != f.Hash {
-		return f.Hash
+func NewFile(path string, size int64, updated int64) (ret *File) {
+	ret = &File{
+		Path:    path,
+		Size:    size,
+		Updated: updated,
 	}
-
 	buf := bytes.Buffer{}
-	buf.WriteString(f.Path)
-	buf.WriteString(strconv.FormatInt(f.Size, 10))
-	buf.WriteString(strconv.FormatInt(f.Updated, 10))
-	f.Hash = util.Hash(buf.Bytes())
-	return f.Hash
+	buf.WriteString(ret.Path)
+	buf.WriteString(strconv.FormatInt(ret.Size, 10))
+	buf.WriteString(strconv.FormatInt(ret.Updated, 10))
+	ret.ID = util.Hash(buf.Bytes())
+	return
 }

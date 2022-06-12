@@ -80,11 +80,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 			return nil
 		}
 
-		files = append(files, &entity.File{
-			Path:    repo.RelPath(path),
-			Size:    info.Size(),
-			Updated: info.ModTime().UnixMilli(),
-		})
+		files = append(files, entity.NewFile(repo.RelPath(path), info.Size(), info.ModTime().UnixMilli()))
 		return nil
 	})
 	if nil != err {
@@ -107,7 +103,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 
 	for _, f := range upserts {
 		var file *entity.File
-		file, err = repo.store.GetFile(f.Hash)
+		file, err = repo.store.GetFile(f.ID)
 		if nil != err {
 			return err
 		}
@@ -160,11 +156,7 @@ func (repo *Repo) Commit(message string) (ret *entity.Index, err error) {
 			return nil
 		}
 
-		files = append(files, &entity.File{
-			Path:    repo.RelPath(path),
-			Size:    info.Size(),
-			Updated: info.ModTime().UnixMilli(),
-		})
+		files = append(files, entity.NewFile(repo.RelPath(path), info.Size(), info.ModTime().UnixMilli()))
 		return nil
 	})
 	if nil != err {
@@ -212,8 +204,8 @@ func (repo *Repo) Commit(message string) (ret *entity.Index, err error) {
 	})
 
 	ret = &entity.Index{
-		Hash:    util.RandHash(),
-		Parent:  latest.Hash,
+		ID:      util.RandHash(),
+		Parent:  latest.ID,
 		Message: message,
 		Created: time.Now().UnixMilli(),
 	}
@@ -242,7 +234,7 @@ func (repo *Repo) Commit(message string) (ret *entity.Index, err error) {
 	}
 
 	for _, file := range files {
-		ret.Files = append(ret.Files, file.ID())
+		ret.Files = append(ret.Files, file.ID)
 		ret.Size += file.Size
 	}
 	waitGroup.Wait()
@@ -256,7 +248,7 @@ func (repo *Repo) Commit(message string) (ret *entity.Index, err error) {
 		return nil, errs[0]
 	}
 
-	err = repo.UpdateLatest(ret.ID())
+	err = repo.UpdateLatest(ret.ID)
 	return
 }
 
@@ -283,7 +275,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 			return
 		}
 		chnkHash := util.Hash(data)
-		chunks = append(chunks, &entity.Chunk{Hash: chnkHash, Data: data})
+		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: data})
 		chunkHashes = append(chunkHashes, chnkHash)
 		return
 	}
@@ -305,7 +297,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		}
 
 		chnkHash := util.Hash(chnk.Data)
-		chunks = append(chunks, &entity.Chunk{Hash: chnkHash, Data: chnk.Data})
+		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: chnk.Data})
 		chunkHashes = append(chunkHashes, chnkHash)
 	}
 	return

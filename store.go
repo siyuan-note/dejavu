@@ -38,11 +38,10 @@ func NewStore(path string, aesKey []byte) *Store {
 }
 
 func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
-	id := chunk.ID()
-	if "" == id {
+	if "" == chunk.ID {
 		return errors.New("invalid id")
 	}
-	dir, file := store.AbsPath(id)
+	dir, file := store.AbsPath(chunk.ID)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return errors.New("put chunk failed: " + err.Error())
 	}
@@ -61,11 +60,10 @@ func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 }
 
 func (store *Store) PutFile(file *entity.File) (err error) {
-	id := file.ID()
-	if "" == id {
+	if "" == file.ID {
 		return errors.New("invalid id")
 	}
-	dir, f := store.AbsPath(id)
+	dir, f := store.AbsPath(file.ID)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return errors.New("put failed: " + err.Error())
 	}
@@ -87,11 +85,10 @@ func (store *Store) PutFile(file *entity.File) (err error) {
 }
 
 func (store *Store) PutIndex(index *entity.Index) (err error) {
-	id := index.ID()
-	if "" == id {
+	if "" == index.ID {
 		return errors.New("invalid id")
 	}
-	dir, file := store.AbsPath(id)
+	dir, file := store.AbsPath(index.ID)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}
@@ -173,7 +170,7 @@ func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 	if nil != err {
 		return
 	}
-	ret = &entity.Chunk{Hash: id, Data: data}
+	ret = &entity.Chunk{ID: id, Data: data}
 	return
 }
 
