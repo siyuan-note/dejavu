@@ -62,12 +62,13 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 }
 
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
-func (repo *Repo) Checkout(id string) (err error) {
+func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map[string]Callback) (err error) {
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		return
 	}
 
+	walkDataCallback := callbacks["walkData"]
 	if err = os.MkdirAll(repo.DataPath, 0755); nil != err {
 		return
 	}
@@ -81,6 +82,9 @@ func (repo *Repo) Checkout(id string) (err error) {
 		}
 
 		files = append(files, entity.NewFile(repo.RelPath(path), info.Size(), info.ModTime().UnixMilli()))
+		if nil != walkDataCallback {
+			walkDataCallback(callbackContext, path, err)
+		}
 		return nil
 	})
 	if nil != err {
@@ -101,6 +105,7 @@ func (repo *Repo) Checkout(id string) (err error) {
 		return
 	}
 
+	upsertFileCallback := callbacks["upsertFile"]
 	for _, f := range upserts {
 		var file *entity.File
 		file, err = repo.store.GetFile(f.ID)
@@ -134,13 +139,16 @@ func (repo *Repo) Checkout(id string) (err error) {
 		if nil != err {
 			return
 		}
+		upsertFileCallback(callbackContext, file, nil)
 	}
 
+	removeFileCallback := callbacks["removeFile"]
 	for _, f := range removes {
 		p := repo.AbsPath(f.Path)
 		if err = os.Remove(p); nil != err {
 			return
 		}
+		removeFileCallback(callbackContext, p, nil)
 	}
 	return
 }
@@ -154,7 +162,7 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 		callbacks = make(map[string]Callback)
 	}
 
-	var walkDataCallback = callbacks["walkData"]
+	walkDataCallback := callbacks["walkData"]
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -178,7 +186,7 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 		return
 	}
 	var upserts, removes, latestFiles []*entity.File
-	var getLatestFileCallback = callbacks["getLatestFile"]
+	getLatestFileCallback := callbacks["getLatestFile"]
 	if "" != latest.Parent {
 		for _, f := range latest.Files {
 			var file *entity.File
@@ -198,7 +206,7 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 		return
 	}
 
-	var upsertFileCallback = callbacks["upsertFile"]
+	upsertFileCallback := callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
 	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {

@@ -16,8 +16,10 @@ package dejavu
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 )
@@ -50,19 +52,13 @@ func TestIndexCheckout(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	err = repo.Checkout(index.ID)
+	err = repo.Checkout(index.ID, t, checkoutCallbacks)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return
 	}
 
-	err = os.RemoveAll(testDataCheckoutPath)
-	if nil != err {
-		t.Fatalf("remove failed: %s", err)
-		return
-	}
-	err = repo.Checkout(index.ID)
-	if nil != err {
+	if !gulu.File.IsExist(filepath.Join(testDataCheckoutPath, "foo")) {
 		t.Fatalf("checkout failed: %s", err)
 		return
 	}
@@ -76,18 +72,33 @@ func clearTestdata(t *testing.T) {
 	}
 }
 
-var indexCallbacks = map[string]Callback{
+var checkoutCallbacks = map[string]Callback{
 	"walkData": func(context, arg interface{}, err error) {
 		t := context.(*testing.T)
-		t.Logf("walkData: %+v", arg)
-	},
-	"getLatestFile": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("getLatestFile: %+v", arg)
+		t.Logf("checkout walkData: %+v", arg)
 	},
 	"upsertFile": func(context, arg interface{}, err error) {
 		t := context.(*testing.T)
-		t.Logf("upsertFile: %+v", arg)
+		t.Logf("checkout upsertFile: %+v", arg)
+	},
+	"removeFile": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("checkout removeFile: %+v", arg)
+	},
+}
+
+var indexCallbacks = map[string]Callback{
+	"walkData": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("index walkData: %+v", arg)
+	},
+	"getLatestFile": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("index getLatestFile: %+v", arg)
+	},
+	"upsertFile": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("index upsertFile: %+v", arg)
 	},
 }
 
