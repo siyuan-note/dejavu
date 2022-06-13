@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.2
+	github.com/dustin/go-humanize v1.0.0
 	github.com/klauspost/compress v1.15.6
 	github.com/panjf2000/ants/v2 v2.5.0
 	github.com/restic/chunker v0.4.0

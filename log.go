@@ -20,17 +20,19 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/dustin/go-humanize"
 	"github.com/siyuan-note/dejavu/entity"
 )
 
 type Log struct {
-	ID      string         `json:"id"`      // Hash
-	Parent  string         `json:"parent"`  // 指向上一个索引
-	Message string         `json:"message"` // 索引备注
-	Created int64          `json:"created"` // 索引时间
-	Time    string         `json:"time"`    // 格式化好的索引时间 "2006-01-02 15:04:05"
-	Files   []*entity.File `json:"files"`   // 文件列表
-	Size    int64          `json:"size"`    // 文件总大小
+	ID       string         `json:"id"`       // Hash
+	Parent   string         `json:"parent"`   // 指向上一个索引
+	Message  string         `json:"message"`  // 索引备注
+	Created  int64          `json:"created"`  // 索引时间
+	HCreated string         `json:"hCreated"` // 格式化好的索引时间 "2006-01-02 15:04:05"
+	Files    []*entity.File `json:"files"`    // 文件列表
+	Size     int64          `json:"size"`     // 文件总大小
+	HSize    string         `json:"hSize"`    // 格式化好的文件总大小 "10.00 MB"
 }
 
 func (log *Log) String() string {
@@ -127,12 +129,13 @@ func (repo *Repo) getLogsByParent(index *entity.Index, page, pageSize int) (ret 
 
 func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
 	ret = &Log{
-		ID:      index.ID,
-		Parent:  index.Parent,
-		Message: index.Message,
-		Created: index.Created,
-		Time:    time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
-		Size:    index.Size,
+		ID:       index.ID,
+		Parent:   index.Parent,
+		Message:  index.Message,
+		Created:  index.Created,
+		HCreated: time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
+		Size:     index.Size,
+		HSize:    humanize.Bytes(uint64(index.Size)),
 	}
 
 	for _, f := range index.Files {
