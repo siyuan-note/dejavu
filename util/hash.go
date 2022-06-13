@@ -30,7 +30,7 @@ func RandHash() string {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
 	if nil != err {
-		return Hash([]byte(gulu.Rand.String(32)))
+		return Hash([]byte(gulu.Rand.String(512)))
 	}
 	return Hash(b)
 }

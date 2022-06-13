@@ -41,6 +41,7 @@ type Repo struct {
 	ChunkMaxSize int64       // 文件分块最大大小，单位：字节
 }
 
+// NewRepo 创建一个新的仓库。
 func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	ret = &Repo{
 		DataPath:     filepath.Clean(dataPath),
@@ -81,7 +82,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 			return nil
 		}
 
-		files = append(files, entity.NewFile(repo.RelPath(path), info.Size(), info.ModTime().UnixMilli()))
+		files = append(files, entity.NewFile(repo.relPath(path), info.Size(), info.ModTime().UnixMilli()))
 		if nil != walkDataCallback {
 			walkDataCallback(callbackContext, path, err)
 		}
@@ -162,7 +163,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 
 	removeFileCallback := callbacks["removeFile"]
 	for _, f := range removes {
-		absPath := repo.AbsPath(f.Path)
+		absPath := repo.absPath(f.Path)
 		if err = os.Remove(absPath); nil != err {
 			return
 		}
@@ -171,6 +172,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 	return
 }
 
+// Callback 描述了 Index/Checkout 回调函数签名。
 type Callback func(context, arg interface{}, err error)
 
 // Index 将 repo 数据文件夹中的文件索引到仓库中。
@@ -189,7 +191,7 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 			return nil
 		}
 
-		files = append(files, entity.NewFile(repo.RelPath(path), info.Size(), info.ModTime().UnixMilli()))
+		files = append(files, entity.NewFile(repo.relPath(path), info.Size(), info.ModTime().UnixMilli()))
 		if nil != walkDataCallback {
 			walkDataCallback(callbackContext, path, err)
 		}
@@ -252,7 +254,7 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 		Created: time.Now().UnixMilli(),
 	}
 	for _, file := range upserts {
-		absPath := repo.AbsPath(file.Path)
+		absPath := repo.absPath(file.Path)
 		chunks, hashes, chunkErr := repo.fileChunks(absPath)
 		if nil != chunkErr {
 			err = chunkErr
@@ -295,11 +297,11 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 	return
 }
 
-func (repo *Repo) AbsPath(relPath string) string {
+func (repo *Repo) absPath(relPath string) string {
 	return filepath.Join(repo.DataPath, relPath)
 }
 
-func (repo *Repo) RelPath(absPath string) string {
+func (repo *Repo) relPath(absPath string) string {
 	absPath = filepath.Clean(absPath)
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }

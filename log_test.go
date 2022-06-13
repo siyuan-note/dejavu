@@ -21,19 +21,14 @@ import (
 func TestGetIndexLogs(t *testing.T) {
 	clearTestdata(t)
 
-	repo, index := initIndex(t)
-	err := repo.AddTag(index.ID, "v1.0.0")
-	if nil != err {
-		t.Fatalf("add tag failed: %s", err)
-		return
-	}
+	repo, _ := initIndex(t)
 
-	logs, err := repo.GetIndexLogs()
+	logs, err := repo.GetIndexLogs(0, 10)
 	if nil != err {
 		t.Fatalf("get index logs failed: %s", err)
 		return
 	}
-	if 2 != len(logs) {
+	if 1 != len(logs) {
 		t.Fatalf("logs length not match: %d", len(logs))
 		return
 	}

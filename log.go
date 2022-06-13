@@ -79,18 +79,19 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 	return
 }
 
-func (repo *Repo) GetIndexLogs() (ret []*Log, err error) {
+func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, err error) {
 	latest, err := repo.Latest()
 	if nil != err {
 		return
 	}
 
-	ret, err = repo.getLogsByParent(latest)
+	ret, err = repo.getLogsByParent(latest, page, pageSize)
 	return
 }
 
-func (repo *Repo) getLogsByParent(index *entity.Index) (ret []*Log, err error) {
-	for i := 0; i < 64; i++ {
+func (repo *Repo) getLogsByParent(index *entity.Index, page, pageSize int) (ret []*Log, err error) {
+	count := 0
+	for {
 		var log *Log
 		log, err = repo.getLog(index)
 		if nil != err {
@@ -105,6 +106,10 @@ func (repo *Repo) getLogsByParent(index *entity.Index) (ret []*Log, err error) {
 		index, err = repo.store.GetIndex(hash)
 		if nil != err {
 			return
+		}
+		count++
+		if page <= count/pageSize {
+			break
 		}
 	}
 	return
