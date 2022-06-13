@@ -91,26 +91,34 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, err error) {
 
 func (repo *Repo) getLogsByParent(index *entity.Index, page, pageSize int) (ret []*Log, err error) {
 	count := 0
-	for {
+	var indices []*entity.Index
+
+	indices = append(indices, index)
+	for i := 1; ; i++ {
+		parent := index.Parent
+		if "" == parent {
+			break
+		}
+		index, err = repo.store.GetIndex(parent)
+		if nil != err {
+			return
+		}
+		count++
+		if page == count/pageSize {
+			indices = append(indices, index)
+		} else if page < count/pageSize {
+			break
+		}
+	}
+
+	for _, idx := range indices {
 		var log *Log
-		log, err = repo.getLog(index)
+		log, err = repo.getLog(idx)
 		if nil != err {
 			return
 		}
 
 		ret = append(ret, log)
-		hash := index.Parent
-		if "" == hash {
-			break
-		}
-		index, err = repo.store.GetIndex(hash)
-		if nil != err {
-			return
-		}
-		count++
-		if page <= count/pageSize {
-			break
-		}
 	}
 	return
 }
