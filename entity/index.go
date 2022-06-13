@@ -17,7 +17,7 @@ package entity
 type Index struct {
 	ID      string   `json:"id"`      // Hash
 	Parent  string   `json:"parent"`  // 指向上一个索引
-	Message string   `json:"message"` // 索引备注
+	Memo    string   `json:"memo"`    // 索引备注
 	Created int64    `json:"created"` // 索引时间
 	Files   []string `json:"files"`   // 文件列表
 	Size    int64    `json:"size"`    // 文件总大小

@@ -30,7 +30,7 @@ Design reference from [ArtiVC](https://github.com/InfuseAI/ArtiVC).
 * `ID` Each entity is identified by SHA-1
 * `Index` file list, each index operation generates a new index
     * `parent` points to the previous index
-    * `message` index memo
+    * `memo` index memo
     * `created` index time
     * `files` file list
     * `size` size of total files
@@ -96,7 +96,8 @@ TBD
 
 ## 📄 License
 
-DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source license.
+DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source
+license.
 
 ## 🙏 Acknowledgement
 

@@ -176,7 +176,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 type Callback func(context, arg interface{}, err error)
 
 // Index 将 repo 数据文件夹中的文件索引到仓库中。
-func (repo *Repo) Index(message string, callbackContext interface{}, callbacks map[string]Callback) (ret *entity.Index, err error) {
+func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[string]Callback) (ret *entity.Index, err error) {
 	var files []*entity.File
 	if nil == callbacks {
 		callbacks = make(map[string]Callback)
@@ -250,7 +250,7 @@ func (repo *Repo) Index(message string, callbackContext interface{}, callbacks m
 	ret = &entity.Index{
 		ID:      util.RandHash(),
 		Parent:  latest.ID,
-		Message: message,
+		Memo:    memo,
 		Created: time.Now().UnixMilli(),
 	}
 	for _, file := range upserts {

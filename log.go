@@ -27,7 +27,7 @@ import (
 type Log struct {
 	ID       string         `json:"id"`       // Hash
 	Parent   string         `json:"parent"`   // 指向上一个索引
-	Message  string         `json:"message"`  // 索引备注
+	Memo     string         `json:"memo"`     // 索引备注
 	Created  int64          `json:"created"`  // 索引时间
 	HCreated string         `json:"hCreated"` // 格式化好的索引时间 "2006-01-02 15:04:05"
 	Files    []*entity.File `json:"files"`    // 文件列表
@@ -131,7 +131,7 @@ func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
 	ret = &Log{
 		ID:       index.ID,
 		Parent:   index.Parent,
-		Message:  index.Message,
+		Memo:     index.Memo,
 		Created:  index.Created,
 		HCreated: time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
 		Size:     index.Size,
