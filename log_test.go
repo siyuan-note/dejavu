@@ -28,7 +28,7 @@ func TestGetIndexLogs(t *testing.T) {
 		t.Fatalf("get index logs failed: %s", err)
 		return
 	}
-	if 1 != len(logs) {
+	if 1 > len(logs) {
 		t.Fatalf("logs length not match: %d", len(logs))
 		return
 	}
