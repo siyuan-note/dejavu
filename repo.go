@@ -106,49 +106,67 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 	}
 
 	upsertFileCallback := callbacks["upsertFile"]
-	for _, f := range upserts {
-		var file *entity.File
-		file, err = repo.store.GetFile(f.ID)
-		if nil != err {
-			return err
+	waitGroup := &sync.WaitGroup{}
+	var errs []error
+	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
+		defer waitGroup.Done()
+		file := arg.(*entity.File)
+		file, getErr := repo.store.GetFile(file.ID)
+		if nil != getErr {
+			errs = append(errs, getErr)
+			return
 		}
 
 		var data []byte
 		for _, c := range file.Chunks {
 			var chunk *entity.Chunk
-			chunk, err = repo.store.GetChunk(c)
-			if nil != err {
-				return err
+			chunk, getErr = repo.store.GetChunk(c)
+			if nil != getErr {
+				errs = append(errs, getErr)
+				return
 			}
 			data = append(data, chunk.Data...)
 		}
 
-		p := filepath.Join(repo.DataPath, file.Path)
-		dir := filepath.Dir(p)
-		err = os.MkdirAll(dir, 0755)
-		if nil != err {
+		absPath := filepath.Join(repo.DataPath, file.Path)
+		dir := filepath.Dir(absPath)
+
+		if mkErr := os.MkdirAll(dir, 0755); nil != mkErr {
+			errs = append(errs, mkErr)
 			return
 		}
-		err = gulu.File.WriteFileSafer(p, data, 0644)
-		if nil != err {
+
+		if writeErr := gulu.File.WriteFileSafer(absPath, data, 0644); nil != writeErr {
+			errs = append(errs, writeErr)
 			return
 		}
 
 		updated := time.UnixMilli(file.Updated)
-		err = os.Chtimes(p, updated, updated)
-		if nil != err {
+		if chtErr := os.Chtimes(absPath, updated, updated); nil != chtErr {
+			errs = append(errs, chtErr)
 			return
 		}
 		upsertFileCallback(callbackContext, file, nil)
+	})
+
+	for _, f := range upserts {
+		waitGroup.Add(1)
+		err = p.Invoke(f)
+		if nil != err {
+			return
+		}
 	}
+
+	waitGroup.Wait()
+	p.Release()
 
 	removeFileCallback := callbacks["removeFile"]
 	for _, f := range removes {
-		p := repo.AbsPath(f.Path)
-		if err = os.Remove(p); nil != err {
+		absPath := repo.AbsPath(f.Path)
+		if err = os.Remove(absPath); nil != err {
 			return
 		}
-		removeFileCallback(callbackContext, p, nil)
+		removeFileCallback(callbackContext, absPath, nil)
 	}
 	return
 }
