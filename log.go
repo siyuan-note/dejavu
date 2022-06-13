@@ -17,6 +17,7 @@ package dejavu
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
@@ -27,6 +28,7 @@ type Log struct {
 	Parent  string         `json:"parent"`  // 指向上一个索引
 	Message string         `json:"message"` // 索引备注
 	Created int64          `json:"created"` // 索引时间
+	Time    string         `json:"time"`    // 格式化好的索引时间 "2006-01-02 15:04:05"
 	Files   []*entity.File `json:"files"`   // 文件列表
 	Size    int64          `json:"size"`    // 文件总大小
 }
@@ -129,6 +131,7 @@ func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
 		Parent:  index.Parent,
 		Message: index.Message,
 		Created: index.Created,
+		Time:    time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
 		Size:    index.Size,
 	}
 
