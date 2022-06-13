@@ -145,9 +145,16 @@ func (repo *Repo) Checkout(id string) (err error) {
 	return
 }
 
+type Callback func(context, arg interface{}, err error)
+
 // Index 将 repo 数据文件夹中的文件索引到仓库中。
-func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
+func (repo *Repo) Index(message string, callbackContext interface{}, callbacks map[string]Callback) (ret *entity.Index, err error) {
 	var files []*entity.File
+	if nil == callbacks {
+		callbacks = make(map[string]Callback)
+	}
+
+	var walkDataCallback = callbacks["walkData"]
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -157,6 +164,9 @@ func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
 		}
 
 		files = append(files, entity.NewFile(repo.RelPath(path), info.Size(), info.ModTime().UnixMilli()))
+		if nil != walkDataCallback {
+			walkDataCallback(callbackContext, path, err)
+		}
 		return nil
 	})
 	if nil != err {
@@ -168,10 +178,14 @@ func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
 		return
 	}
 	var upserts, removes, latestFiles []*entity.File
+	var getLatestFileCallback = callbacks["getLatestFile"]
 	if "" != latest.Parent {
 		for _, f := range latest.Files {
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
+			if nil != getLatestFileCallback {
+				getLatestFileCallback(callbackContext, file, err)
+			}
 			if nil != err {
 				return
 			}
@@ -184,6 +198,7 @@ func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
 		return
 	}
 
+	var upsertFileCallback = callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
 	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
@@ -194,6 +209,7 @@ func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
 			putErr = repo.store.PutChunk(obj)
 		case *entity.File:
 			putErr = repo.store.PutFile(obj)
+			upsertFileCallback(callbackContext, obj, putErr)
 		case *entity.Index:
 			putErr = repo.store.PutIndex(obj)
 		}
@@ -233,12 +249,13 @@ func (repo *Repo) Index(message string) (ret *entity.Index, err error) {
 		}
 	}
 
+	waitGroup.Wait()
+	p.Release()
+
 	for _, file := range files {
 		ret.Files = append(ret.Files, file.ID)
 		ret.Size += file.Size
 	}
-	waitGroup.Wait()
-	p.Release()
 
 	err = repo.store.PutIndex(ret)
 	if nil != err {

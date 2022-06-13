@@ -34,7 +34,7 @@ func TestIndexCheckout(t *testing.T) {
 	clearTestdata(t)
 
 	repo, index := initIndex(t)
-	index2, err := repo.Index("Index 2")
+	index2, err := repo.Index("Index 2", nil, nil)
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
@@ -76,6 +76,21 @@ func clearTestdata(t *testing.T) {
 	}
 }
 
+var indexCallbacks = map[string]Callback{
+	"walkData": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("walkData: %+v", arg)
+	},
+	"getLatestFile": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("getLatestFile: %+v", arg)
+	},
+	"upsertFile": func(context, arg interface{}, err error) {
+		t := context.(*testing.T)
+		t.Logf("upsertFile: %+v", arg)
+	},
+}
+
 func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 	aesKey, err := encryption.KDF(testRepoPassword, testRepoPasswordSalt)
 	if nil != err {
@@ -87,7 +102,7 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err = repo.Index("Index 1")
+	index, err = repo.Index("Index 1", t, indexCallbacks)
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
