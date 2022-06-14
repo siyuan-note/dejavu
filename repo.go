@@ -106,8 +106,12 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 
 	upsertFileCallback := callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
+	poolSize := runtime.NumCPU()
+	if 4 < poolSize {
+		poolSize = 4
+	}
 	var errs []error
-	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
+	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		file := arg.(*entity.File)
 		file, getErr := repo.store.GetFile(file.ID)
@@ -234,7 +238,11 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 	upsertFileCallback := callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
-	p, _ := ants.NewPoolWithFunc(runtime.NumCPU(), func(arg interface{}) {
+	poolSize := runtime.NumCPU()
+	if 4 < poolSize {
+		poolSize = 4
+	}
+	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		var putErr error
 		switch obj := arg.(type) {
