@@ -110,6 +110,7 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 			return
 		}
 	}
+	pageCount = totalCount/pageSize + 1
 
 	for _, idx := range indices {
 		var log *Log
@@ -117,10 +118,8 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		if nil != err {
 			return
 		}
-
 		ret = append(ret, log)
 	}
-	pageCount = totalCount / pageSize
 	return
 }
 
