@@ -42,7 +42,7 @@ func TestIndexCheckout(t *testing.T) {
 		return
 	}
 	if index.ID != index2.ID {
-		t.Fatalf("index failed: %s", err)
+		t.Fatalf("index id not match")
 		return
 	}
 

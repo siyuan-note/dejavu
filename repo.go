@@ -202,25 +202,19 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 	}
 
 	latest, err := repo.Latest()
+	init := false
 	if nil != err {
 		if ErrNotFoundIndex != err {
 			return
 		}
 
 		// 如果没有索引，则创建第一个索引
-		latest = &entity.Index{ID: util.RandHash(), Memo: "Init index", Created: time.Now().UnixMilli()}
-		err = repo.store.PutIndex(latest)
-		if nil != err {
-			return
-		}
-		err = repo.UpdateLatest(latest.ID)
-		if nil != err {
-			return
-		}
+		latest = &entity.Index{ID: util.RandHash(), Memo: memo, Created: time.Now().UnixMilli()}
+		init = true
 	}
 	var upserts, removes, latestFiles []*entity.File
 	getLatestFileCallback := callbacks["getLatestFile"]
-	if "" != latest.Parent {
+	if !init {
 		for _, f := range latest.Files {
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
@@ -260,11 +254,15 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 		}
 	})
 
-	ret = &entity.Index{
-		ID:      util.RandHash(),
-		Parent:  latest.ID,
-		Memo:    memo,
-		Created: time.Now().UnixMilli(),
+	if init {
+		ret = latest
+	} else {
+		ret = &entity.Index{
+			ID:      util.RandHash(),
+			Parent:  latest.ID,
+			Memo:    memo,
+			Created: time.Now().UnixMilli(),
+		}
 	}
 	for _, file := range upserts {
 		absPath := repo.absPath(file.Path)
