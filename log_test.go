@@ -23,7 +23,7 @@ func TestGetIndexLogs(t *testing.T) {
 
 	repo, _ := initIndex(t)
 
-	logs, err := repo.GetIndexLogs(0, 10)
+	logs, pageCount, totalCount, err := repo.GetIndexLogs(0, 10)
 	if nil != err {
 		t.Fatalf("get index logs failed: %s", err)
 		return
@@ -33,6 +33,7 @@ func TestGetIndexLogs(t *testing.T) {
 		return
 	}
 
+	t.Logf("page count [%d], total count [%d]", pageCount, totalCount)
 	for _, log := range logs {
 		t.Logf("%+v", log)
 	}
