@@ -31,6 +31,7 @@ type Log struct {
 	Created  int64          `json:"created"`  // 索引时间
 	HCreated string         `json:"hCreated"` // 格式化好的索引时间 "2006-01-02 15:04:05"
 	Files    []*entity.File `json:"files"`    // 文件列表
+	Count    int            `json:"count"`    // 文件总数
 	Size     int64          `json:"size"`     // 文件总大小
 	HSize    string         `json:"hSize"`    // 格式化好的文件总大小 "10.00 MB"
 }
@@ -131,16 +132,8 @@ func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
 		Created:  index.Created,
 		HCreated: time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
 		Size:     index.Size,
+		Count:    index.Count,
 		HSize:    humanize.Bytes(uint64(index.Size)),
-	}
-
-	for _, f := range index.Files {
-		var file *entity.File
-		file, err = repo.store.GetFile(f)
-		if nil != err {
-			return
-		}
-		ret.Files = append(ret.Files, file)
 	}
 	return
 }
