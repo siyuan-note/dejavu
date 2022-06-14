@@ -92,6 +92,8 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 		return
 	}
 
+	defer util.RemoveEmptyDirs(repo.DataPath)
+
 	var upserts, removes, latestFiles []*entity.File
 	for _, f := range index.Files {
 		var file *entity.File

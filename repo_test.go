@@ -59,7 +59,7 @@ func TestIndexCheckout(t *testing.T) {
 	}
 
 	if !gulu.File.IsExist(filepath.Join(testDataCheckoutPath, "foo")) {
-		t.Fatalf("checkout failed: %s", err)
+		t.Fatalf("checkout failed")
 		return
 	}
 }
