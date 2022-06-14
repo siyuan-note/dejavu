@@ -343,22 +343,19 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	defer reader.Close()
 	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, chunker.MinSize, chunker.MaxSize)
 	for {
-		buf := repo.bufferPool.Get()
-		chnk, chnkErr := chnkr.Next(buf.Data)
+		buf := make([]byte, chunker.MaxSize)
+		chnk, chnkErr := chnkr.Next(buf)
 		if io.EOF == chnkErr {
-			buf.Release()
 			break
 		}
 		if nil != chnkErr {
 			err = chnkErr
-			buf.Release()
 			return
 		}
 
 		chnkHash := util.Hash(chnk.Data)
 		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: chnk.Data})
 		chunkHashes = append(chunkHashes, chnkHash)
-		buf.Release()
 	}
 	return
 }
