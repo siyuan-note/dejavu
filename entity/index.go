@@ -20,5 +20,6 @@ type Index struct {
 	Memo    string   `json:"memo"`    // 索引备注
 	Created int64    `json:"created"` // 索引时间
 	Files   []string `json:"files"`   // 文件列表
+	Count   int      `json:"count"`   // 文件总数
 	Size    int64    `json:"size"`    // 文件总大小
 }

@@ -301,6 +301,7 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 		ret.Files = append(ret.Files, file.ID)
 		ret.Size += file.Size
 	}
+	ret.Count = len(ret.Files)
 
 	err = repo.store.PutIndex(ret)
 	if nil != err {
