@@ -203,7 +203,20 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 
 	latest, err := repo.Latest()
 	if nil != err {
-		return
+		if ErrNotFoundIndex != err {
+			return
+		}
+
+		// 如果没有索引，则创建第一个索引
+		latest = &entity.Index{ID: util.RandHash(), Memo: "Init index", Created: time.Now().UnixMilli()}
+		err = repo.store.PutIndex(latest)
+		if nil != err {
+			return
+		}
+		err = repo.UpdateLatest(latest.ID)
+		if nil != err {
+			return
+		}
 	}
 	var upserts, removes, latestFiles []*entity.File
 	getLatestFileCallback := callbacks["getLatestFile"]

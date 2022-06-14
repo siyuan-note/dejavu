@@ -18,22 +18,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/dejavu/util"
 )
+
+var ErrNotFoundIndex = errors.New("not found index")
 
 func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	latest := filepath.Join(repo.Path, "refs", "latest")
 	if !gulu.File.IsExist(latest) {
-		ret = &entity.Index{ID: util.RandHash(), Memo: "Init index", Created: time.Now().UnixMilli()}
-		err = repo.store.PutIndex(ret)
-		if nil != err {
-			return
-		}
-		err = repo.UpdateLatest(ret.ID)
+		err = ErrNotFoundIndex
 		return
 	}
 
