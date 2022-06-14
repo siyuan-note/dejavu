@@ -12,6 +12,7 @@
 
 * Git-like version control
 * File deduplication in chunks
+* Data compression
 * AES Encrypted
 * Connect to cloud storage
 
