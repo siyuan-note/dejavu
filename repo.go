@@ -36,19 +36,17 @@ type Repo struct {
 	Path     string // 仓库的绝对路径，如：F:\\SiYuan\\history\\
 	store    *Store // 仓库的存储
 
-	ChunkPol     chunker.Pol // 文件分块多项式值
-	ChunkMinSize int64       // 文件分块最小大小，单位：字节
-	ChunkMaxSize int64       // 文件分块最大大小，单位：字节
+	ChunkPol   chunker.Pol      // 文件分块多项式值
+	bufferPool *util.BufferPool // 文件分块数据缓冲池
 }
 
 // NewRepo 创建一个新的仓库。
 func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	ret = &Repo{
-		DataPath:     filepath.Clean(dataPath),
-		Path:         filepath.Clean(repoPath),
-		ChunkPol:     chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
-		ChunkMinSize: 512 * 1024,                    // 分块最小 512KB
-		ChunkMaxSize: 8 * 1024 * 1024,               // 分块最大 8MB
+		DataPath:   filepath.Clean(dataPath),
+		Path:       filepath.Clean(repoPath),
+		ChunkPol:   chunker.Pol(0x3DA3358B4DC173), // TODO：固定多项式值副作用
+		bufferPool: util.NewBufferPool(4, chunker.MaxSize),
 	}
 	ret.DataPath = filepath.Clean(ret.DataPath)
 	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {
@@ -326,7 +324,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		return
 	}
 
-	if repo.ChunkMinSize > info.Size() {
+	if chunker.MinSize > info.Size() {
 		data, readErr := os.ReadFile(absPath)
 		if nil != readErr {
 			err = readErr
@@ -343,21 +341,24 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		return
 	}
 	defer reader.Close()
-	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, uint(repo.ChunkMinSize), uint(repo.ChunkMaxSize))
-	buf := make([]byte, 8*1024*1024)
+	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, chunker.MinSize, chunker.MaxSize)
 	for {
-		chnk, chnkErr := chnkr.Next(buf)
+		buf := repo.bufferPool.Get()
+		chnk, chnkErr := chnkr.Next(buf.Data)
 		if io.EOF == chnkErr {
+			buf.Release()
 			break
 		}
 		if nil != chnkErr {
 			err = chnkErr
+			buf.Release()
 			return
 		}
 
 		chnkHash := util.Hash(chnk.Data)
 		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: chnk.Data})
 		chunkHashes = append(chunkHashes, chnkHash)
+		buf.Release()
 	}
 	return
 }
