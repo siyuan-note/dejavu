@@ -105,6 +105,10 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		if "" == parent {
 			break
 		}
+		index, err = repo.store.GetIndex(parent)
+		if nil != err {
+			return
+		}
 	}
 
 	for _, idx := range indices {
