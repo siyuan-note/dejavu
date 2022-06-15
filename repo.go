@@ -28,6 +28,7 @@ import (
 	"github.com/restic/chunker"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
+	"github.com/siyuan-note/filelock"
 )
 
 // Repo 描述了逮虾户仓库。
@@ -107,8 +108,8 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 	upsertFileCallback := callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
 	poolSize := runtime.NumCPU()
-	if 4 < poolSize {
-		poolSize = 4
+	if 2 < poolSize {
+		poolSize = 2
 	}
 	var errs []error
 	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
@@ -166,7 +167,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 	removeFileCallback := callbacks["removeFile"]
 	for _, f := range removes {
 		absPath := repo.absPath(f.Path)
-		if err = os.Remove(absPath); nil != err {
+		if err = filelock.RemoveFile(absPath); nil != err {
 			return
 		}
 		removeFileCallback(callbackContext, absPath, nil)
@@ -239,8 +240,8 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
 	poolSize := runtime.NumCPU()
-	if 4 < poolSize {
-		poolSize = 4
+	if 2 < poolSize {
+		poolSize = 2
 	}
 	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
@@ -332,7 +333,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	}
 
 	if chunker.MinSize > info.Size() {
-		data, readErr := os.ReadFile(absPath)
+		data, readErr := filelock.NoLockFileRead(absPath)
 		if nil != readErr {
 			err = readErr
 			return
@@ -343,11 +344,11 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		return
 	}
 
-	reader, err := os.OpenFile(absPath, os.O_RDONLY, 0644)
+	reader, err := filelock.OpenFile(absPath)
 	if nil != err {
 		return
 	}
-	defer reader.Close()
+	defer filelock.CloseFile(reader)
 	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, chunker.MinSize, chunker.MaxSize)
 	for {
 		buf := make([]byte, chunker.MaxSize)
