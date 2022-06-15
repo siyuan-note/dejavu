@@ -15,6 +15,7 @@
 package dejavu
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -91,27 +92,33 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 	}
 
 	var indices []*entity.Index
-	for i := 1; ; i++ {
+	for {
 		totalCount++
-		currentPage := totalCount / pageSize
+		currentPage := int(math.Ceil(float64(totalCount) / float64(pageSize)))
 		if page > currentPage {
+			if "" == index.Parent {
+				break
+			}
+			index, err = repo.store.GetIndex(index.Parent)
+			if nil != err {
+				return
+			}
 			continue
 		}
-		if page < currentPage {
-			break
+
+		if page == currentPage {
+			indices = append(indices, index)
 		}
 
-		indices = append(indices, index)
-		parent := index.Parent
-		if "" == parent {
+		if "" == index.Parent {
 			break
 		}
-		index, err = repo.store.GetIndex(parent)
+		index, err = repo.store.GetIndex(index.Parent)
 		if nil != err {
 			return
 		}
 	}
-	pageCount = totalCount/pageSize + 1
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
 
 	for _, idx := range indices {
 		var log *Log
