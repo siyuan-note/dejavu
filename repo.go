@@ -155,7 +155,9 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 			errs = append(errs, chtErr)
 			return
 		}
-		upsertFileCallback(callbackContext, file, nil)
+		if nil != upsertFileCallback {
+			upsertFileCallback(callbackContext, file, nil)
+		}
 	})
 
 	for _, f := range upserts {
@@ -175,7 +177,9 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 		if err = filelock.RemoveFile(absPath); nil != err {
 			return
 		}
-		removeFileCallback(callbackContext, absPath, nil)
+		if nil != removeFileCallback {
+			removeFileCallback(callbackContext, absPath, nil)
+		}
 	}
 	return
 }
@@ -259,7 +263,9 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 			putErr = repo.store.PutChunk(obj)
 		case *entity.File:
 			putErr = repo.store.PutFile(obj)
-			upsertFileCallback(callbackContext, obj, putErr)
+			if nil != upsertFileCallback {
+				upsertFileCallback(callbackContext, obj, putErr)
+			}
 		case *entity.Index:
 			putErr = repo.store.PutIndex(obj)
 		}
