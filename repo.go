@@ -35,9 +35,10 @@ import (
 type Repo struct {
 	DataPath string // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
 	Path     string // 仓库的绝对路径，如：F:\\SiYuan\\history\\
-	store    *Store // 仓库的存储
 
-	ChunkPol chunker.Pol // 文件分块多项式值
+	store    *Store      // 仓库的存储
+	chunkPol chunker.Pol // 文件分块多项式值
+	lock     *sync.Mutex // 仓库锁， Checkout 和 Index 不能同时执行
 }
 
 // NewRepo 创建一个新的仓库。
@@ -45,7 +46,8 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	ret = &Repo{
 		DataPath: filepath.Clean(dataPath),
 		Path:     filepath.Clean(repoPath),
-		ChunkPol: chunker.Pol(0x3DA3358B4DC173), // 固定多项式值
+		chunkPol: chunker.Pol(0x3DA3358B4DC173), // 固定多项式值
+		lock:     &sync.Mutex{},
 	}
 	ret.DataPath = filepath.Clean(ret.DataPath)
 	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {
@@ -61,6 +63,9 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
 func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map[string]Callback) (err error) {
+	repo.lock.Lock()
+	defer repo.lock.Unlock()
+
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		return
@@ -180,6 +185,9 @@ type Callback func(context, arg interface{}, err error)
 
 // Index 将 repo 数据文件夹中的文件索引到仓库中。
 func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[string]Callback) (ret *entity.Index, err error) {
+	repo.lock.Lock()
+	defer repo.lock.Unlock()
+
 	var files []*entity.File
 	if nil == callbacks {
 		callbacks = make(map[string]Callback)
@@ -349,7 +357,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		return
 	}
 	defer filelock.CloseFile(reader)
-	chnkr := chunker.NewWithBoundaries(reader, repo.ChunkPol, chunker.MinSize, chunker.MaxSize)
+	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
 	for {
 		buf := make([]byte, chunker.MaxSize)
 		chnk, chnkErr := chnkr.Next(buf)
