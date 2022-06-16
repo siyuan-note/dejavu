@@ -9,7 +9,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.5.0
 	github.com/restic/chunker v0.4.0
 	github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676
-	github.com/siyuan-note/filelock v0.0.0-20220616061747-44ce6e8a682f
+	github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee
 )
 
 require (
