@@ -2,8 +2,6 @@
 
 [English](README.md)
 
-**状态：开发中**
-
 ## 💡 简介
 
 [DejaVu](https://github.com/siyuan-note/dejavu) 是一个用于数据快照和同步的 golang 库。

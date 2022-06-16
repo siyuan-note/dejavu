@@ -61,6 +61,20 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	return
 }
 
+// GetIndex 从仓库根据 id 获取索引。
+func (repo *Repo) GetIndex(id string) (index *entity.Index, err error) {
+	repo.lock.Lock()
+	defer repo.lock.Unlock()
+	return repo.store.GetIndex(id)
+}
+
+// PutIndex 将索引 index 写入仓库。
+func (repo *Repo) PutIndex(index *entity.Index) (err error) {
+	repo.lock.Lock()
+	defer repo.lock.Unlock()
+	return repo.store.PutIndex(index)
+}
+
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
 func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map[string]Callback) (err error) {
 	repo.lock.Lock()

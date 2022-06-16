@@ -54,9 +54,6 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 		return errors.New("invalid id")
 	}
 	dir, file := store.AbsPath(index.ID)
-	if gulu.File.IsExist(file) {
-		return
-	}
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}

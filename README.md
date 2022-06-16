@@ -2,8 +2,6 @@
 
 [中文](README_zh_CN.md)
 
-**Status: In development**
-
 ## 💡 Introduction
 
 [DejaVu](https://github.com/siyuan-note/dejavu) is a golang library for data snapshot and synchronization.
