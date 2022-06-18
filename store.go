@@ -63,9 +63,8 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 		return errors.New("put index failed: " + err.Error())
 	}
 
-	if data, err = store.encodeData(data); nil != err {
-		return
-	}
+	// Index 仅压缩，不加密
+	data = store.compressEncoder.EncodeAll(data, nil)
 
 	err = gulu.File.WriteFileSafer(file, data, 0644)
 	if nil != err {
@@ -81,12 +80,30 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 		return
 	}
 
-	if data, err = store.decodeData(data); nil != err {
+	originalData := data
+	// Index 没有加密，直接解压
+	data, err = store.compressDecoder.DecodeAll(data, nil)
+	if nil == err {
+		ret = &entity.Index{}
+		err = gulu.JSON.UnmarshalJSON(data, ret)
 		return
 	}
 
-	ret = &entity.Index{}
-	err = gulu.JSON.UnmarshalJSON(data, ret)
+	if zstd.ErrMagicMismatch == err {
+		// 之前的快照数据是加密的，这里解密兼容处理
+		// TODO: 未来版本会删除这里的兼容处理
+		if data, err = store.decodeData(originalData); nil != err {
+			return
+		}
+
+		ret = &entity.Index{}
+		err = gulu.JSON.UnmarshalJSON(data, ret)
+		if nil != err {
+			return
+		}
+		// 重新入库
+		err = store.PutIndex(ret)
+	}
 	return
 }
 
