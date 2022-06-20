@@ -80,7 +80,15 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 		var data []byte
 		data, err = os.ReadFile(file)
 		if nil != err {
-			return
+			if os.IsNotExist(err) {
+				_, file = store.AbsPath(id)
+				data, err = os.ReadFile(file)
+				if nil != err {
+					return
+				}
+			} else {
+				return
+			}
 		}
 
 		// Index 没有加密，直接解压
