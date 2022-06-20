@@ -54,38 +54,54 @@
 仓库文件夹结构如下：
 
 ```text
-+---objects
-|   +---00
-|   |       e605c489491e553ef60eb13911cd1446ac6a0d
-|   |
-|   +---01
-|   |       453ac7651a523eda839a0ef9b4d653f884c84a
-|   |       cca40956df1159e8bbb56724cc80aca5fe378c
-|   |       e58c0ae476b3fd79630e118e05527fc0a4ae54
-|   |
-|   +---03
-|   |       0c904b32935936cafada2f54b6cfe3d02b2080
-|   |       d61fb01c9abf0e6ec1279f98a3f1abfadcbfad
-|   |       d6a0e2fba3b8d97539b9a54865d4e4f18b4a2f
-|   |
-|   +---08
-|   |       8f46fa8bd3af4a32d17e80c93c849435d8e703
-|   |
-|   +---09
-|   |       03cba26bd73c8849b750a07e19624f51df02ad
-|   |       8fe907ab51c47082a83d0086d820aa1750c8a9
-|   |
-|   +---0a
-|   |       7a7d148d34c87c344b1aa86edeef5242b5db6f
-|   |       da61c49a77d61a7db9ef48def08b61311cff8b
-|   \---ff
-|           3d40c741e5a8491e578e93a5c20e054941ea07
-|           41a69dd2283707cbd7baba1db6c8ce8116c9b5
-|           ab8b9036fe7fabf3281d25de8c335cfbd77229
-\---refs
-    |   latest
-    |
-    \---tags
+├─indexes
+│      0531732dca85404e716abd6bb896319a41fa372b
+│      19fc2c2e5317b86f9e048f8d8da2e4ed8300d8af
+│      5f32d78d69e314beee36ad7de302b984da47ddd2
+│      cbd254ca246498978d4f47e535bac87ad7640fe6
+│
+├─objects
+│  ├─1e
+│  │      0ac5f319f5f24b3fe5bf63639e8dbc31a52e3b
+│  │
+│  ├─56
+│  │      322ccdb61feab7f2f76f5eb82006bd51da7348
+│  │
+│  ├─7e
+│  │      dccca8340ebe149b10660a079f34a20f35c4d4
+│  │
+│  ├─83
+│  │      a7d72fe9a071b696fc81a3dc041cf36cbde802
+│  │
+│  ├─85
+│  │      26b9a7efde615b67b4666ae509f9fbc91d370b
+│  │
+│  ├─87
+│  │      1355acd062116d1713e8f7f55969dbb507a040
+│  │
+│  ├─96
+│  │      46ba13a4e8eabeca4f5259bfd7da41d368a1a6
+│  │
+│  ├─a5
+│  │      5b8e6b9ccad3fc9b792d3d453a0793f8635b9f
+│  │      b28787922f4e2a477b4f027e132aa7e35253d4
+│  │
+│  ├─be
+│  │      c7a729d1b5f021f8eca0dd8b6ef689ad753567
+│  │
+│  ├─d1
+│  │      324c714bde18442b5629a84a361b5e7528b14a
+│  │
+│  ├─f1
+│  │      d7229171f4fa1c5eacb411995b16938a04f7f6
+│  │
+│  └─f7
+│          ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0
+│
+└─refs
+    │  latest
+    │
+    └─tags
             v1.0.0
             v1.0.1
 ```

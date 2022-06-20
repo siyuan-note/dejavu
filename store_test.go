@@ -28,7 +28,7 @@ func TestPutGet(t *testing.T) {
 		return
 	}
 
-	store, err := NewStore(testRepoPath+"/objects/", aesKey)
+	store, err := NewStore(testRepoPath, aesKey)
 	if nil != err {
 		t.Fatalf("new store failed: %s", err)
 		return

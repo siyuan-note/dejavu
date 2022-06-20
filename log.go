@@ -91,7 +91,7 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		return
 	}
 
-	var indices []*entity.Index
+	var indexes []*entity.Index
 	for {
 		totalCount++
 		pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
@@ -107,7 +107,7 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		}
 
 		if page == pageCount {
-			indices = append(indices, index)
+			indexes = append(indexes, index)
 		}
 
 		if "" == index.Parent {
@@ -119,7 +119,7 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		}
 	}
 
-	for _, idx := range indices {
+	for _, idx := range indexes {
 		var log *Log
 		log, err = repo.getLog(idx)
 		if nil != err {

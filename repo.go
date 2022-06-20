@@ -56,7 +56,7 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	if !strings.HasSuffix(ret.Path, string(os.PathSeparator)) {
 		ret.Path += string(os.PathSeparator)
 	}
-	storePath := filepath.Join(repoPath, "objects") + string(os.PathSeparator)
+	storePath := filepath.Join(repoPath) + string(os.PathSeparator)
 	ret.store, err = NewStore(storePath, aesKey)
 	return
 }
