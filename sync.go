@@ -69,12 +69,31 @@ func (repo *Repo) Sync() (err error) {
 	var allIndexes []*entity.Index
 	allIndexes = append(allIndexes, localIndexes...)
 	allIndexes = append(allIndexes, cloudIndexes...)
-	// 按索引时间重新排序
+
+	// 按索引时间排序
 	sort.Slice(allIndexes, func(i, j int) bool {
 		return allIndexes[i].Created >= allIndexes[j].Created
 	})
-	// TODO: 将合并后的索引写入仓库
 
+	// 重新排列索引
+	for i := 0; i < len(allIndexes); i++ {
+		index := allIndexes[i]
+		if i < len(allIndexes)-1 {
+			index.Parent = allIndexes[i+1].ID
+		} else {
+			index.Parent = latest.ID
+		}
+		err = repo.store.PutIndex(index)
+		if nil != err {
+			return
+		}
+	}
+
+	latest = allIndexes[0]
+	err = repo.UpdateLatest(latest.ID)
+	if nil != err {
+		return
+	}
 	return
 }
 
