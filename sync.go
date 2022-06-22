@@ -43,16 +43,79 @@ func (repo *Repo) Sync() (err error) {
 
 	// TODO: 请求云端返回索引列表
 	_ = latestSync
-
 	var cloudIndexes []*entity.Index
+	cloudFiles, err := repo.getFiles(cloudIndexes)
+	if nil != err {
+		return
+	}
+
+	fetchFiles, err := repo.localNotFoundFiles(cloudFiles)
+	if nil != err {
+		return
+	}
+
+	// TODO: 请求云端文件，获得分块
+	_ = fetchFiles
+	var cloudChunkIDs []string
+	fetchChunks, err := repo.localNotFoundChunks(cloudChunkIDs)
+	if nil != err {
+		return
+	}
+
+	// TODO: 云端下载分块
+	_ = fetchChunks
+
+	// 合并云端和本地索引
 	var allIndexes []*entity.Index
-	// 合并所有索引，然后按索引时间排序
 	allIndexes = append(allIndexes, localIndexes...)
 	allIndexes = append(allIndexes, cloudIndexes...)
+	// 按索引时间重新排序
 	sort.Slice(allIndexes, func(i, j int) bool {
 		return allIndexes[i].Created >= allIndexes[j].Created
 	})
+	// TODO: 将合并后的索引写入仓库
 
+	return
+}
+
+func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err error) {
+	for _, chunkID := range chunkIDs {
+		if _, getChunkErr := repo.store.Stat(chunkID); nil != getChunkErr {
+			if os.IsNotExist(getChunkErr) {
+				ret = append(ret, chunkID)
+				continue
+			}
+			err = getChunkErr
+			return
+		}
+	}
+	return
+}
+
+func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error) {
+	for _, fileID := range fileIDs {
+		if _, getFileErr := repo.store.Stat(fileID); nil != getFileErr {
+			if os.IsNotExist(getFileErr) {
+				ret = append(ret, fileID)
+				continue
+			}
+			err = getFileErr
+			return
+		}
+	}
+	return
+}
+
+func (repo *Repo) getFiles(indexes []*entity.Index) (fileIDs []string, err error) {
+	files := map[string]bool{}
+	for _, index := range indexes {
+		for _, file := range index.Files {
+			files[file] = true
+		}
+	}
+	for file := range files {
+		fileIDs = append(fileIDs, file)
+	}
 	return
 }
 
