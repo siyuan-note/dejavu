@@ -143,3 +143,33 @@ func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
 	}
 	return
 }
+
+func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err error) {
+	for {
+		if "" == latest.Parent {
+			ret = latest
+			return
+		}
+		latest, err = repo.store.GetIndex(latest.Parent)
+		if nil != err {
+			return
+		}
+	}
+	return
+}
+
+func (repo *Repo) getIndexes(from, to string) (ret []*entity.Index, err error) {
+	for {
+		var index *entity.Index
+		index, err = repo.store.GetIndex(from)
+		if nil != err {
+			return
+		}
+		ret = append(ret, index)
+		if index.ID == to || "" == index.Parent {
+			return
+		}
+		from = index.Parent
+	}
+	return
+}
