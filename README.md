@@ -112,8 +112,7 @@ TBD
 
 ## 📄 License
 
-DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source
-license.
+DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source license.
 
 ## 🙏 Acknowledgement
 

@@ -158,18 +158,23 @@ func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err err
 	return
 }
 
-func (repo *Repo) getIndexes(from, to string) (ret []*entity.Index, err error) {
+func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index, err error) {
+	const max = 32768
+	var i int
 	for {
 		var index *entity.Index
-		index, err = repo.store.GetIndex(from)
+		index, err = repo.store.GetIndex(fromID)
 		if nil != err {
 			return
 		}
 		ret = append(ret, index)
-		if index.ID == to || "" == index.Parent {
+		if index.ID == toID || "" == index.Parent {
 			return
 		}
-		from = index.Parent
+		fromID = index.Parent
+		i++
+		if max < i {
+			return
+		}
 	}
-	return
 }

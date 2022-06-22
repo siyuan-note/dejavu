@@ -15,15 +15,17 @@
 package dejavu
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/httpclient"
 )
 
-func (repo *Repo) Sync() (err error) {
+func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err error) {
 	// TODO: 先打快照
 
 	latest, err := repo.Latest()
@@ -41,9 +43,10 @@ func (repo *Repo) Sync() (err error) {
 		return
 	}
 
-	// TODO: 请求云端返回索引列表
-	_ = latestSync
-	var cloudIndexes []*entity.Index
+	// 从云端获取索引列表
+	cloudIndexes, err := repo.requestCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server)
+
+	// 从索引中得到去重后的文件列表
 	cloudFiles, err := repo.getFiles(cloudIndexes)
 	if nil != err {
 		return
@@ -153,5 +156,39 @@ func (repo *Repo) latestSync(latest *entity.Index) (ret *entity.Index, err error
 	}
 	hash := string(data)
 	ret, err = repo.store.GetIndex(hash)
+	return
+}
+
+func (repo *Repo) requestCloudIndexes(repoDir, latestSync, userId, token, proxyURL, server string) (indexes []*entity.Index, err error) {
+	var result map[string]interface{}
+	resp, err := httpclient.NewCloudRequest(proxyURL).
+		SetResult(&result).
+		SetBody(map[string]interface{}{"token": token, "repo": repoDir, "latestSync": latestSync}).
+		Post(server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + userId)
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = errors.New("account authentication failed, please login again")
+			return
+		}
+		err = errors.New("download file URL failed")
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New(result["msg"].(string))
+		return
+	}
+
+	data := result["data"].(map[string]interface{})
+	bytes, err := gulu.JSON.MarshalJSON(data)
+	if nil != err {
+		return
+	}
+	err = gulu.JSON.UnmarshalJSON(bytes, &indexes)
 	return
 }
