@@ -48,12 +48,10 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	cloudIndexes, err := repo.requestCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server)
 
 	// 从索引中得到去重后的文件列表
-	cloudFiles, err := repo.getFiles(cloudIndexes)
-	if nil != err {
-		return
-	}
+	cloudFileIDs := repo.getFileIDs(cloudIndexes)
 
-	fetchFiles, err := repo.localNotFoundFiles(cloudFiles)
+	// 计算缺失的文件
+	fetchFiles, err := repo.localNotFoundFiles(cloudFileIDs)
 	if nil != err {
 		return
 	}
@@ -69,12 +67,10 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		files = append(files, file)
 	}
 
+	// 从文件列表中得到去重后的分块列表
+	cloudChunkIDs := repo.getChunks(files)
+
 	// 计算缺失的分块
-	var cloudChunkIDs []string
-	for _, file := range files {
-		cloudChunkIDs = append(cloudChunkIDs, file.Chunks...)
-	}
-	cloudChunkIDs = gulu.Str.RemoveDuplicatedElem(cloudChunkIDs)
 	fetchChunks, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
@@ -168,16 +164,19 @@ func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error)
 	return
 }
 
-func (repo *Repo) getFiles(indexes []*entity.Index) (fileIDs []string, err error) {
-	files := map[string]bool{}
+func (repo *Repo) getChunks(files []*entity.File) (chunkIDs []string) {
+	for _, file := range files {
+		chunkIDs = append(chunkIDs, file.Chunks...)
+	}
+	chunkIDs = gulu.Str.RemoveDuplicatedElem(chunkIDs)
+	return
+}
+
+func (repo *Repo) getFileIDs(indexes []*entity.Index) (fileIDs []string) {
 	for _, index := range indexes {
-		for _, file := range index.Files {
-			files[file] = true
-		}
+		fileIDs = append(fileIDs, index.Files...)
 	}
-	for file := range files {
-		fileIDs = append(fileIDs, file)
-	}
+	fileIDs = gulu.Str.RemoveDuplicatedElem(fileIDs)
 	return
 }
 
