@@ -23,7 +23,6 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/httpclient"
 )
 
@@ -75,7 +74,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	for _, file := range files {
 		cloudChunkIDs = append(cloudChunkIDs, file.Chunks...)
 	}
-	cloudChunkIDs = util.RemoveDuplicatedElem(cloudChunkIDs)
+	cloudChunkIDs = gulu.Str.RemoveDuplicatedElem(cloudChunkIDs)
 	fetchChunks, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
@@ -150,7 +149,7 @@ func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err erro
 			return
 		}
 	}
-	ret = util.RemoveDuplicatedElem(ret)
+	ret = gulu.Str.RemoveDuplicatedElem(ret)
 	return
 }
 
@@ -165,7 +164,7 @@ func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error)
 			return
 		}
 	}
-	ret = util.RemoveDuplicatedElem(ret)
+	ret = gulu.Str.RemoveDuplicatedElem(ret)
 	return
 }
 

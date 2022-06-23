@@ -1,7 +1,7 @@
 github.com/88250/flock v0.8.2 h1:LLbRJw3hoYfjD4g7DiYsYcTCCFTxm8icn/WepLlxIg0=
 github.com/88250/flock v0.8.2/go.mod h1:k+PZxETAUe4vLZx3R39ykvQCIlwHhc7AI2P2NUQV6zw=
-github.com/88250/gulu v1.2.2 h1:LsuDSXI4GjqAD2XasG/DJEHuboKXU2lhZ9w0mnfJj3Y=
-github.com/88250/gulu v1.2.2/go.mod h1:I1qBzsksFL2ciGSuqDE7R3XW4BUMrfDgOvSXEk7FsAI=
+github.com/88250/gulu v1.2.3-0.20220623112232-c502d9016360 h1:afQ0cjIA/tzwvIDFy9Jf0jFCb1FvWwKuG1QidEMMi4M=
+github.com/88250/gulu v1.2.3-0.20220623112232-c502d9016360/go.mod h1:I1qBzsksFL2ciGSuqDE7R3XW4BUMrfDgOvSXEk7FsAI=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
