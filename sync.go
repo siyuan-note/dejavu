@@ -15,13 +15,17 @@
 package dejavu
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/88250/gulu"
+	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/httpclient"
 )
@@ -45,12 +49,12 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	}
 
 	// 从云端获取索引列表
-	cloudIndexes, err := repo.requestCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server)
+	cloudIndexes, err := repo.downloadCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server)
 
 	// 从索引中得到去重后的文件列表
 	cloudFileIDs := repo.getFileIDs(cloudIndexes)
 
-	// 计算缺失的文件
+	// 计算本地缺失的文件
 	fetchFiles, err := repo.localNotFoundFiles(cloudFileIDs)
 	if nil != err {
 		return
@@ -60,7 +64,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	var files []*entity.File
 	for _, fileID := range fetchFiles {
 		var file *entity.File
-		file, err = repo.requestCloudFile(cloudDir, fileID, userId, token, proxyURL, server)
+		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server)
 		if nil != err {
 			return
 		}
@@ -70,17 +74,45 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(files)
 
-	// 计算缺失的分块
+	// 计算本地缺失的分块
 	fetchChunks, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
+	}
+
+	// 计算待上传云端的本地变更文件
+	upsertFiles, err := repo.localUpsertFiles(latest, latestSync)
+	if nil != err {
+		return
+	}
+
+	// 计算待上传云端的分块
+	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
+	if nil != err {
+		return
+	}
+
+	// 上传分块
+	for _, upsertChunkID := range upsertChunkIDs {
+		err = repo.uploadLocalObject(cloudDir, upsertChunkID, userId, token, proxyURL, server)
+		if nil != err {
+			return
+		}
+	}
+
+	// 上传文件
+	for _, upsertFile := range upsertFiles {
+		err = repo.uploadLocalObject(cloudDir, upsertFile.ID, userId, token, proxyURL, server)
+		if nil != err {
+			return
+		}
 	}
 
 	var chunks []*entity.Chunk
 	// 从云端获取分块
 	for _, chunkID := range fetchChunks {
 		var chunk *entity.Chunk
-		chunk, err = repo.requestCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server)
+		chunk, err = repo.downloadCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server)
 		if nil != err {
 			return
 		}
@@ -180,6 +212,57 @@ func (repo *Repo) getFileIDs(indexes []*entity.Index) (fileIDs []string) {
 	return
 }
 
+func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs []string) (ret []string, err error) {
+	chunks := map[string]bool{}
+	for _, file := range localFiles {
+		for _, chunkID := range file.Chunks {
+			chunks[chunkID] = true
+		}
+	}
+
+	for _, cloudChunkID := range cloudChunkIDs {
+		delete(chunks, cloudChunkID)
+	}
+
+	for chunkID := range chunks {
+		ret = append(ret, chunkID)
+	}
+	return
+}
+
+func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index) (ret []*entity.File, err error) {
+	files := map[string]bool{}
+	for {
+		for _, file := range latest.Files {
+			files[file] = true
+		}
+
+		if latest.Parent == latestSync.ID {
+			break
+		}
+
+		latest, err = repo.store.GetIndex(latest.Parent)
+		if nil != err {
+			return
+		}
+	}
+
+	for _, file := range latestSync.Files {
+		delete(files, file)
+	}
+
+	for fileID := range files {
+		var file *entity.File
+		file, err = repo.store.GetFile(fileID)
+		if nil != err {
+			return
+		}
+
+		ret = append(ret, file)
+	}
+	return
+}
+
 // latestSync 获取最近一次同步点。
 func (repo *Repo) latestSync(latest *entity.Index) (ret *entity.Index, err error) {
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
@@ -198,8 +281,72 @@ func (repo *Repo) latestSync(latest *entity.Index) (ret *entity.Index, err error
 	return
 }
 
-func (repo *Repo) requestCloudChunk(repoDir, id, userId, token, proxyURL, server string) (ret *entity.Chunk, err error) {
-	data, err := repo.requestCloudObjects(repoDir, id, userId, token, proxyURL, server)
+func (repo *Repo) uploadLocalObject(repoDir, id, userId, token, proxyURL, server string) (err error) {
+	info, statErr := repo.store.Stat(id)
+	if nil != statErr {
+		err = statErr
+		return
+	}
+
+	uploadToken, err := repo.requestObjectUploadToken(repoDir, id, userId, token, proxyURL, server, info.Size())
+	if nil != err {
+		return
+	}
+
+	key := path.Join("siyuan", userId, "repo", repoDir, "objects", id[:2], id[2:])
+	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	ret := storage.PutRet{}
+	filePath := filepath.Join(repo.Path, "objects", id[:2], id[2:])
+	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+	if nil != err {
+		time.Sleep(3 * time.Second)
+		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+		if nil != err {
+			return
+		}
+	}
+	return
+}
+
+func (repo *Repo) requestObjectUploadToken(repoDir, id, userId, token, proxyURL, server string, length int64) (ret string, err error) {
+	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
+
+	var result map[string]interface{}
+	req := httpclient.NewCloudRequest(proxyURL).
+		SetResult(&result)
+	req.SetBody(map[string]interface{}{
+		"token":  token,
+		"repo":   repoDir,
+		"id":     id,
+		"length": length})
+	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoObjectUploadToken?uid=" + userId)
+	if nil != err {
+		err = errors.New("request object upload token failed: " + err.Error())
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = errors.New("account authentication failed, please login again")
+			return
+		}
+		err = errors.New("request object upload token failed")
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New("request object upload token failed: " + result["msg"].(string))
+		return
+	}
+
+	resultData := result["data"].(map[string]interface{})
+	ret = resultData["token"].(string)
+	return
+}
+
+func (repo *Repo) downloadCloudChunk(repoDir, id, userId, token, proxyURL, server string) (ret *entity.Chunk, err error) {
+	data, err := repo.downloadCloudObject(repoDir, id, userId, token, proxyURL, server)
 	if nil != err {
 		return
 	}
@@ -208,8 +355,8 @@ func (repo *Repo) requestCloudChunk(repoDir, id, userId, token, proxyURL, server
 	return
 }
 
-func (repo *Repo) requestCloudFile(repoDir, id, userId, token, proxyURL, server string) (ret *entity.File, err error) {
-	data, err := repo.requestCloudObjects(repoDir, id, userId, token, proxyURL, server)
+func (repo *Repo) downloadCloudFile(repoDir, id, userId, token, proxyURL, server string) (ret *entity.File, err error) {
+	data, err := repo.downloadCloudObject(repoDir, id, userId, token, proxyURL, server)
 	if nil != err {
 		return
 	}
@@ -218,13 +365,14 @@ func (repo *Repo) requestCloudFile(repoDir, id, userId, token, proxyURL, server 
 	return
 }
 
-func (repo *Repo) requestCloudObjects(repoDir, id, userId, token, proxyURL, server string) (ret []byte, err error) {
+func (repo *Repo) downloadCloudObject(repoDir, id, userId, token, proxyURL, server string) (ret []byte, err error) {
 	var result map[string]interface{}
 	resp, err := httpclient.NewCloudRequest(proxyURL).
 		SetResult(&result).
 		SetBody(map[string]interface{}{"token": token, "repo": repoDir, "id": id}).
-		Post(server + "/apis/siyuan/dejavu/getRepoObject?uid=" + userId)
+		Post(server + "/apis/siyuan/dejavu/getRepoObjectURL?uid=" + userId)
 	if nil != err {
+		err = errors.New("request object url failed: " + err.Error())
 		return
 	}
 
@@ -239,7 +387,7 @@ func (repo *Repo) requestCloudObjects(repoDir, id, userId, token, proxyURL, serv
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New(result["msg"].(string))
+		err = errors.New("request object url failed: " + result["msg"].(string))
 		return
 	}
 
@@ -271,7 +419,7 @@ func (repo *Repo) requestCloudObjects(repoDir, id, userId, token, proxyURL, serv
 	return
 }
 
-func (repo *Repo) requestCloudIndexes(repoDir, latestSync, userId, token, proxyURL, server string) (indexes []*entity.Index, err error) {
+func (repo *Repo) downloadCloudIndexes(repoDir, latestSync, userId, token, proxyURL, server string) (indexes []*entity.Index, err error) {
 	var result map[string]interface{}
 	resp, err := httpclient.NewCloudRequest(proxyURL).
 		SetResult(&result).
@@ -292,7 +440,7 @@ func (repo *Repo) requestCloudIndexes(repoDir, latestSync, userId, token, proxyU
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New(result["msg"].(string))
+		err = errors.New("request object url failed: " + result["msg"].(string))
 		return
 	}
 
