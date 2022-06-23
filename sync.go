@@ -16,12 +16,14 @@ package dejavu
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/httpclient"
 )
 
@@ -57,16 +59,52 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		return
 	}
 
-	// TODO: 请求云端文件，获得分块
-	_ = fetchFiles
+	// 从云端获取文件列表
+	var files []*entity.File
+	for _, fileID := range fetchFiles {
+		var file *entity.File
+		file, err = repo.requestCloudFile(cloudDir, fileID, userId, token, proxyURL, server)
+		if nil != err {
+			return
+		}
+		files = append(files, file)
+	}
+
+	// 计算缺失的分块
 	var cloudChunkIDs []string
+	for _, file := range files {
+		cloudChunkIDs = append(cloudChunkIDs, file.Chunks...)
+	}
+	cloudChunkIDs = util.RemoveDuplicatedElem(cloudChunkIDs)
 	fetchChunks, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
 	}
 
-	// TODO: 云端下载分块
-	_ = fetchChunks
+	var chunks []*entity.Chunk
+	// 从云端获取分块
+	for _, chunkID := range fetchChunks {
+		var chunk *entity.Chunk
+		chunk, err = repo.requestCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server)
+		if nil != err {
+			return
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	// 分库入库
+	for _, chunk := range chunks {
+		if err = repo.store.PutChunk(chunk); nil != err {
+			return
+		}
+	}
+
+	// 文件入库
+	for _, file := range files {
+		if err = repo.store.PutFile(file); nil != err {
+			return
+		}
+	}
 
 	// 合并云端和本地索引
 	var allIndexes []*entity.Index
@@ -78,7 +116,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		return allIndexes[i].Created >= allIndexes[j].Created
 	})
 
-	// 重新排列索引
+	// 重新排列索引入库
 	for i := 0; i < len(allIndexes); i++ {
 		index := allIndexes[i]
 		if i < len(allIndexes)-1 {
@@ -92,6 +130,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		}
 	}
 
+	// 更新 latest
 	latest = allIndexes[0]
 	err = repo.UpdateLatest(latest.ID)
 	if nil != err {
@@ -111,6 +150,7 @@ func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err erro
 			return
 		}
 	}
+	ret = util.RemoveDuplicatedElem(ret)
 	return
 }
 
@@ -125,6 +165,7 @@ func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error)
 			return
 		}
 	}
+	ret = util.RemoveDuplicatedElem(ret)
 	return
 }
 
@@ -159,6 +200,79 @@ func (repo *Repo) latestSync(latest *entity.Index) (ret *entity.Index, err error
 	return
 }
 
+func (repo *Repo) requestCloudChunk(repoDir, id, userId, token, proxyURL, server string) (ret *entity.Chunk, err error) {
+	data, err := repo.requestCloudObjects(repoDir, id, userId, token, proxyURL, server)
+	if nil != err {
+		return
+	}
+	ret = &entity.Chunk{}
+	err = gulu.JSON.UnmarshalJSON(data, ret)
+	return
+}
+
+func (repo *Repo) requestCloudFile(repoDir, id, userId, token, proxyURL, server string) (ret *entity.File, err error) {
+	data, err := repo.requestCloudObjects(repoDir, id, userId, token, proxyURL, server)
+	if nil != err {
+		return
+	}
+	ret = &entity.File{}
+	err = gulu.JSON.UnmarshalJSON(data, ret)
+	return
+}
+
+func (repo *Repo) requestCloudObjects(repoDir, id, userId, token, proxyURL, server string) (ret []byte, err error) {
+	var result map[string]interface{}
+	resp, err := httpclient.NewCloudRequest(proxyURL).
+		SetResult(&result).
+		SetBody(map[string]interface{}{"token": token, "repo": repoDir, "id": id}).
+		Post(server + "/apis/siyuan/dejavu/getRepoObject?uid=" + userId)
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = errors.New("account authentication failed, please login again")
+			return
+		}
+		err = errors.New("request object url failed")
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New(result["msg"].(string))
+		return
+	}
+
+	resultData := result["data"].(map[string]interface{})
+	downloadURL := resultData["url"].(string)
+	resp, err = httpclient.NewCloudFileRequest15s(proxyURL).Get(downloadURL)
+	if nil != err {
+		err = errors.New("download object failed")
+		return
+	}
+	if 200 != resp.StatusCode {
+		err = errors.New(fmt.Sprintf("download object failed [%d]", resp.StatusCode))
+		if 404 == resp.StatusCode {
+			err = errors.New("not found object")
+		}
+		return
+	}
+
+	ret, err = resp.ToBytes()
+	if nil != err {
+		err = errors.New("download read data failed")
+		return
+	}
+
+	ret, err = repo.store.decodeData(ret)
+	if nil != err {
+		return
+	}
+	return
+}
+
 func (repo *Repo) requestCloudIndexes(repoDir, latestSync, userId, token, proxyURL, server string) (indexes []*entity.Index, err error) {
 	var result map[string]interface{}
 	resp, err := httpclient.NewCloudRequest(proxyURL).
@@ -174,7 +288,7 @@ func (repo *Repo) requestCloudIndexes(repoDir, latestSync, userId, token, proxyU
 			err = errors.New("account authentication failed, please login again")
 			return
 		}
-		err = errors.New("download file URL failed")
+		err = errors.New("request repo index failed")
 		return
 	}
 
