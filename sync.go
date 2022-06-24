@@ -22,9 +22,11 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/panjf2000/ants/v2"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/httpclient"
@@ -98,19 +100,69 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	}
 
 	// 上传分块
-	for _, upsertChunkID := range upsertChunkIDs {
-		err = repo.uploadLocalObject(cloudDir, upsertChunkID, userId, token, proxyURL, server)
-		if nil != err {
+	waitGroup := &sync.WaitGroup{}
+	var uploadErr error
+	poolSize := 4
+	if poolSize > len(upsertChunkIDs) {
+		poolSize = len(upsertChunkIDs)
+	}
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != uploadErr {
+			return // 快速失败
+		}
+
+		upsertChunkID := arg.(string)
+		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
+		uploadErr = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server)
+		if nil != uploadErr {
 			return
 		}
+	})
+	if nil != err {
+		return
+	}
+	for _, upsertChunkID := range upsertChunkIDs {
+		waitGroup.Add(1)
+		p.Invoke(upsertChunkID)
+	}
+	waitGroup.Wait()
+	p.Release()
+	if nil != uploadErr {
+		err = uploadErr
+		return
 	}
 
 	// 上传文件
-	for _, upsertFile := range upsertFiles {
-		err = repo.uploadLocalObject(cloudDir, upsertFile.ID, userId, token, proxyURL, server)
-		if nil != err {
+	poolSize = 4
+	if poolSize > len(upsertFiles) {
+		poolSize = len(upsertFiles)
+	}
+	p, err = ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != uploadErr {
+			return // 快速失败
+		}
+
+		upsertFileID := arg.(string)
+		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
+		uploadErr = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server)
+		if nil != uploadErr {
 			return
 		}
+	})
+	if nil != err {
+		return
+	}
+	for _, upsertFile := range upsertFiles {
+		waitGroup.Add(1)
+		p.Invoke(upsertFile.ID)
+	}
+	waitGroup.Wait()
+	p.Release()
+	if nil != uploadErr {
+		err = uploadErr
+		return
 	}
 
 	var chunks []*entity.Chunk
@@ -179,7 +231,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	}
 
 	// 更新云端 latest
-	err = repo.UpdateCloudLatest(cloudDir, userId, token, proxyURL, server)
+	err = repo.UploadObject(cloudDir, path.Join("refs", "latest"), userId, token, proxyURL, server)
 	if nil != err {
 		return
 	}
@@ -190,11 +242,36 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 }
 
 func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId, token, proxyURL, server string) (err error) {
-	for _, index := range indexes {
-		err = repo.uploadLocalIndex(cloudDir, index.ID, userId, token, proxyURL, server)
-		if nil != err {
+	waitGroup := &sync.WaitGroup{}
+	var uploadErr error
+	poolSize := 4
+	if poolSize > len(indexes) {
+		poolSize = len(indexes)
+	}
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != uploadErr {
+			return // 快速失败
+		}
+
+		indexID := arg.(string)
+		uploadErr = repo.UploadObject(cloudDir, path.Join("indexes", indexID), userId, token, proxyURL, server)
+		if nil != uploadErr {
 			return
 		}
+	})
+	if nil != err {
+		return
+	}
+	for _, index := range indexes {
+		waitGroup.Add(1)
+		p.Invoke(index.ID)
+	}
+	waitGroup.Wait()
+	p.Release()
+	if nil != uploadErr {
+		err = uploadErr
+		return
 	}
 	return
 }
@@ -322,20 +399,20 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	return
 }
 
-func (repo *Repo) UpdateCloudLatest(repoDir, userId, token, proxyURL, server string) (err error) {
-	uploadToken, err := repo.requestLatestUploadToken(repoDir, userId, token, proxyURL, server, 40)
+func (repo *Repo) UploadObject(repoDir, filePath, userId, token, proxyURL, server string) (err error) {
+	key := path.Join("siyuan", userId, "repo", repoDir, filePath)
+	uploadToken, err := repo.requestUploadToken(repoDir, key, userId, token, proxyURL, server, 40)
 	if nil != err {
 		return
 	}
 
-	key := path.Join("siyuan", userId, "repo", repoDir, "refs", "latest")
+	absFilePath := filepath.Join(repo.Path, filePath)
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
 	ret := storage.PutRet{}
-	filePath := filepath.Join(repo.Path, "refs", "latest")
-	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
 		time.Sleep(3 * time.Second)
-		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 		if nil != err {
 			return
 		}
@@ -343,62 +420,7 @@ func (repo *Repo) UpdateCloudLatest(repoDir, userId, token, proxyURL, server str
 	return
 }
 
-func (repo *Repo) uploadLocalIndex(repoDir string, id, userId, token, proxyURL, server string) (err error) {
-	_, file := repo.store.IndexAbsPath(id)
-	info, statErr := os.Stat(file)
-	if nil != statErr {
-		err = statErr
-		return
-	}
-
-	uploadToken, err := repo.requestIndexUploadToken(repoDir, id, userId, token, proxyURL, server, info.Size())
-	if nil != err {
-		return
-	}
-
-	key := path.Join("siyuan", userId, "repo", repoDir, "indexes", id)
-	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
-	ret := storage.PutRet{}
-	filePath := filepath.Join(repo.Path, "indexes", id)
-	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
-	if nil != err {
-		time.Sleep(3 * time.Second)
-		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
-		if nil != err {
-			return
-		}
-	}
-	return
-}
-
-func (repo *Repo) uploadLocalObject(repoDir, id, userId, token, proxyURL, server string) (err error) {
-	info, statErr := repo.store.Stat(id)
-	if nil != statErr {
-		err = statErr
-		return
-	}
-
-	uploadToken, err := repo.requestObjectUploadToken(repoDir, id, userId, token, proxyURL, server, info.Size())
-	if nil != err {
-		return
-	}
-
-	key := path.Join("siyuan", userId, "repo", repoDir, "objects", id[:2], id[2:])
-	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
-	ret := storage.PutRet{}
-	filePath := filepath.Join(repo.Path, "objects", id[:2], id[2:])
-	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
-	if nil != err {
-		time.Sleep(3 * time.Second)
-		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
-		if nil != err {
-			return
-		}
-	}
-	return
-}
-
-func (repo *Repo) requestLatestUploadToken(repoDir, userId, token, proxyURL, server string, length int64) (ret string, err error) {
+func (repo *Repo) requestUploadToken(repoDir, key, userId, token, proxyURL, server string, length int64) (ret string, err error) {
 	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
 
 	var result map[string]interface{}
@@ -407,10 +429,11 @@ func (repo *Repo) requestLatestUploadToken(repoDir, userId, token, proxyURL, ser
 	req.SetBody(map[string]interface{}{
 		"token":  token,
 		"repo":   repoDir,
+		"key":    key,
 		"length": length})
-	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoLatestUploadToken?uid=" + userId)
+	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoUploadToken?uid=" + userId)
 	if nil != err {
-		err = errors.New("request object upload token failed: " + err.Error())
+		err = errors.New("request repo upload token failed: " + err.Error())
 		return
 	}
 
@@ -419,87 +442,13 @@ func (repo *Repo) requestLatestUploadToken(repoDir, userId, token, proxyURL, ser
 			err = errors.New("account authentication failed, please login again")
 			return
 		}
-		err = errors.New("request index upload token failed")
+		err = errors.New("request repo upload token failed")
 		return
 	}
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New("request index upload token failed: " + result["msg"].(string))
-		return
-	}
-
-	resultData := result["data"].(map[string]interface{})
-	ret = resultData["token"].(string)
-	return
-}
-
-func (repo *Repo) requestIndexUploadToken(repoDir, id, userId, token, proxyURL, server string, length int64) (ret string, err error) {
-	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
-
-	var result map[string]interface{}
-	req := httpclient.NewCloudRequest(proxyURL).
-		SetResult(&result)
-	req.SetBody(map[string]interface{}{
-		"token":  token,
-		"repo":   repoDir,
-		"id":     id,
-		"length": length})
-	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoIndexUploadToken?uid=" + userId)
-	if nil != err {
-		err = errors.New("request object upload token failed: " + err.Error())
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = errors.New("account authentication failed, please login again")
-			return
-		}
-		err = errors.New("request index upload token failed")
-		return
-	}
-
-	code := result["code"].(float64)
-	if 0 != code {
-		err = errors.New("request index upload token failed: " + result["msg"].(string))
-		return
-	}
-
-	resultData := result["data"].(map[string]interface{})
-	ret = resultData["token"].(string)
-	return
-}
-
-func (repo *Repo) requestObjectUploadToken(repoDir, id, userId, token, proxyURL, server string, length int64) (ret string, err error) {
-	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
-
-	var result map[string]interface{}
-	req := httpclient.NewCloudRequest(proxyURL).
-		SetResult(&result)
-	req.SetBody(map[string]interface{}{
-		"token":  token,
-		"repo":   repoDir,
-		"id":     id,
-		"length": length})
-	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoObjectUploadToken?uid=" + userId)
-	if nil != err {
-		err = errors.New("request object upload token failed: " + err.Error())
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = errors.New("account authentication failed, please login again")
-			return
-		}
-		err = errors.New("request object upload token failed")
-		return
-	}
-
-	code := result["code"].(float64)
-	if 0 != code {
-		err = errors.New("request object upload token failed: " + result["msg"].(string))
+		err = errors.New("request repo upload token failed: " + result["msg"].(string))
 		return
 	}
 
