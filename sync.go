@@ -31,8 +31,6 @@ import (
 )
 
 func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err error) {
-	// TODO: 先打快照
-
 	latest, err := repo.Latest()
 	if nil != err {
 		return
