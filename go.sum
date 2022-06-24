@@ -51,8 +51,8 @@ github.com/rogpeppe/go-internal v1.8.0 h1:FCbCCtXNOY3UtUuHUYaghJg4y7Fd14rXifAYUA
 github.com/rogpeppe/go-internal v1.8.0/go.mod h1:WmiCO8CzOY8rg0OYDC4/i/2WRWAB6poM+XZ2dLUbcbE=
 github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676 h1:QB9TjJQFhXhZ6dAtPpY02DlzHAQm1C+WqZq6OadG8mI=
 github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676/go.mod h1:H8fyqqAbp9XreANjeSbc72zEdFfKTXYN34tc1TjZwtw=
-github.com/siyuan-note/eventbus v0.0.0-20220624160705-a9920b21c7a5 h1:hoAg0ibASAKepRQZLMy1EhyUX489h0snVb3/390pa9g=
-github.com/siyuan-note/eventbus v0.0.0-20220624160705-a9920b21c7a5/go.mod h1:CvRiCpnaluLSG5o7ptiDuVcdV7MyjmtxtzvjYRaEt84=
+github.com/siyuan-note/eventbus v0.0.0-20220624161150-4022894c177d h1:ot6iwjZtt0XpQndHe5CH/Nd6OBz4Ht3M5HEUdIo/NRQ=
+github.com/siyuan-note/eventbus v0.0.0-20220624161150-4022894c177d/go.mod h1:Sqo4FYX5lAXu7gWkbEdJF0e6P57tNNVV4WDKYDctokI=
 github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee h1:8nBBJKHbXuMF2dWKUKsrnnFblgeNBfPjLgVm0aDas/s=
 github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee/go.mod h1:c4vwvWRrnfa75OXiO21K/76BFRJ4cFITKNoVs5lFdwc=
 github.com/siyuan-note/httpclient v0.0.0-20220622170705-004622a8138d h1:zMkahXrTDPhBUg9W7HkGlYP6WY5AkQoJqj7Cmk++qoU=
