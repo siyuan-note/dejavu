@@ -38,7 +38,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		return
 	}
 
-	latestSync, err := repo.latestSync(latest)
+	latestSync, err := repo.latestSync()
 	if nil != err {
 		return
 	}
@@ -50,6 +50,9 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 
 	// 从云端获取索引列表
 	cloudIndexes, err := repo.downloadCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server)
+	if nil != err {
+		return
+	}
 
 	// 从索引中得到去重后的文件列表
 	cloudFileIDs := repo.getFileIDs(cloudIndexes)
@@ -149,7 +152,9 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		if i < len(allIndexes)-1 {
 			index.Parent = allIndexes[i+1].ID
 		} else {
-			index.Parent = latest.ID
+			if "" != index.Parent {
+				index.Parent = latest.ID
+			}
 		}
 		err = repo.store.PutIndex(index)
 		if nil != err {
@@ -237,7 +242,7 @@ func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index) (ret []*ent
 			files[file] = true
 		}
 
-		if latest.Parent == latestSync.ID {
+		if latest.Parent == latestSync.ID || "" == latest.Parent {
 			break
 		}
 
@@ -264,11 +269,10 @@ func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index) (ret []*ent
 }
 
 // latestSync 获取最近一次同步点。
-func (repo *Repo) latestSync(latest *entity.Index) (ret *entity.Index, err error) {
+func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
 	if !gulu.File.IsExist(latestSync) {
-		// 使用第一个索引作为同步点
-		ret, err = repo.getInitIndex(latest)
+		ret = &entity.Index{} // 构造一个空的索引表示没有同步点
 		return
 	}
 
@@ -445,7 +449,8 @@ func (repo *Repo) downloadCloudIndexes(repoDir, latestSync, userId, token, proxy
 	}
 
 	data := result["data"].(map[string]interface{})
-	bytes, err := gulu.JSON.MarshalJSON(data)
+	dataIndexes := data["indexes"].([]interface{})
+	bytes, err := gulu.JSON.MarshalJSON(dataIndexes)
 	if nil != err {
 		return
 	}
