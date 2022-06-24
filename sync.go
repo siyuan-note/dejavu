@@ -29,6 +29,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/httpclient"
 )
 
@@ -52,6 +53,8 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		return
 	}
 
+	eventbus.Publish("repo.sync.beforeDownloadCloudIndexes", latestSync)
+
 	// 从云端获取索引列表
 	cloudIndexes, err := repo.downloadCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server)
 	if nil != err {
@@ -70,6 +73,8 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	// 从云端获取文件列表
 	var files []*entity.File
 	for _, fileID := range fetchFiles {
+		eventbus.Publish("repo.sync.beforeDownloadCloudFile", fileID)
+
 		var file *entity.File
 		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server)
 		if nil != err {
@@ -114,6 +119,8 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
+		eventbus.Publish("repo.sync.beforeUploadObject", filePath)
+
 		uploadErr = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server)
 		if nil != uploadErr {
 			return
@@ -146,6 +153,8 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
+		eventbus.Publish("repo.sync.beforeUploadObject", filePath)
+
 		uploadErr = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server)
 		if nil != uploadErr {
 			return
@@ -165,19 +174,17 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		return
 	}
 
-	var chunks []*entity.Chunk
 	// 从云端获取分块
 	for _, chunkID := range fetchChunks {
+		eventbus.Publish("repo.sync.beforeDownloadCloudChunk", chunkID)
+
 		var chunk *entity.Chunk
 		chunk, err = repo.downloadCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server)
 		if nil != err {
 			return
 		}
-		chunks = append(chunks, chunk)
-	}
 
-	// 分库入库
-	for _, chunk := range chunks {
+		// 分库入库
 		if err = repo.store.PutChunk(chunk); nil != err {
 			return
 		}
@@ -231,7 +238,9 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 	}
 
 	// 更新云端 latest
-	err = repo.UploadObject(cloudDir, path.Join("refs", "latest"), userId, token, proxyURL, server)
+	cloudLatest := path.Join("refs", "latest")
+	eventbus.Publish("repo.sync.beforeUploadObject", cloudLatest)
+	err = repo.UploadObject(cloudDir, cloudLatest, userId, token, proxyURL, server)
 	if nil != err {
 		return
 	}
@@ -255,6 +264,7 @@ func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId
 		}
 
 		indexID := arg.(string)
+		eventbus.Publish("repo.sync.beforeUploadObject", indexID)
 		uploadErr = repo.UploadObject(cloudDir, path.Join("indexes", indexID), userId, token, proxyURL, server)
 		if nil != uploadErr {
 			return

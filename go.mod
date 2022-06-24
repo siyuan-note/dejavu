@@ -10,12 +10,14 @@ require (
 	github.com/qiniu/go-sdk/v7 v7.13.0
 	github.com/restic/chunker v0.4.0
 	github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676
+	github.com/siyuan-note/eventbus v0.0.0-20220624160705-a9920b21c7a5
 	github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee
 	github.com/siyuan-note/httpclient v0.0.0-20220622170705-004622a8138d
 )
 
 require (
 	github.com/88250/flock v0.8.2 // indirect
+	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.13.1 // indirect

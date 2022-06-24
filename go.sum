@@ -2,6 +2,8 @@ github.com/88250/flock v0.8.2 h1:LLbRJw3hoYfjD4g7DiYsYcTCCFTxm8icn/WepLlxIg0=
 github.com/88250/flock v0.8.2/go.mod h1:k+PZxETAUe4vLZx3R39ykvQCIlwHhc7AI2P2NUQV6zw=
 github.com/88250/gulu v1.2.3-0.20220623112232-c502d9016360 h1:afQ0cjIA/tzwvIDFy9Jf0jFCb1FvWwKuG1QidEMMi4M=
 github.com/88250/gulu v1.2.3-0.20220623112232-c502d9016360/go.mod h1:I1qBzsksFL2ciGSuqDE7R3XW4BUMrfDgOvSXEk7FsAI=
+github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef h1:2JGTg6JapxP9/R33ZaagQtAM4EkkSYnIAlOG5EI8gkM=
+github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef/go.mod h1:JS7hed4L1fj0hXcyEejnW57/7LCetXggd+vwrRnYeII=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -49,6 +51,8 @@ github.com/rogpeppe/go-internal v1.8.0 h1:FCbCCtXNOY3UtUuHUYaghJg4y7Fd14rXifAYUA
 github.com/rogpeppe/go-internal v1.8.0/go.mod h1:WmiCO8CzOY8rg0OYDC4/i/2WRWAB6poM+XZ2dLUbcbE=
 github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676 h1:QB9TjJQFhXhZ6dAtPpY02DlzHAQm1C+WqZq6OadG8mI=
 github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676/go.mod h1:H8fyqqAbp9XreANjeSbc72zEdFfKTXYN34tc1TjZwtw=
+github.com/siyuan-note/eventbus v0.0.0-20220624160705-a9920b21c7a5 h1:hoAg0ibASAKepRQZLMy1EhyUX489h0snVb3/390pa9g=
+github.com/siyuan-note/eventbus v0.0.0-20220624160705-a9920b21c7a5/go.mod h1:CvRiCpnaluLSG5o7ptiDuVcdV7MyjmtxtzvjYRaEt84=
 github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee h1:8nBBJKHbXuMF2dWKUKsrnnFblgeNBfPjLgVm0aDas/s=
 github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee/go.mod h1:c4vwvWRrnfa75OXiO21K/76BFRJ4cFITKNoVs5lFdwc=
 github.com/siyuan-note/httpclient v0.0.0-20220622170705-004622a8138d h1:zMkahXrTDPhBUg9W7HkGlYP6WY5AkQoJqj7Cmk++qoU=
