@@ -43,6 +43,10 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		return
 	}
 
+	if latest.ID == latestSync.ID {
+		return
+	}
+
 	localIndexes, err := repo.getIndexes(latest.ID, latestSync.ID)
 	if nil != err {
 		return
@@ -162,11 +166,37 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		}
 	}
 
-	// 更新 latest
+	// 上传索引
+	err = repo.uploadIndexes(cloudDir, allIndexes, userId, token, proxyURL, server)
+	if nil != err {
+		return
+	}
+
 	latest = allIndexes[0]
+
+	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
 	if nil != err {
 		return
+	}
+
+	// 更新云端 latest
+	err = repo.UpdateCloudLatest(cloudDir, userId, token, proxyURL, server)
+	if nil != err {
+		return
+	}
+
+	// 更新本地同步点
+	err = repo.UpdateLatestSync(latest.ID)
+	return
+}
+
+func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId, token, proxyURL, server string) (err error) {
+	for _, index := range indexes {
+		err = repo.uploadLocalIndex(cloudDir, index.ID, userId, token, proxyURL, server)
+		if nil != err {
+			return
+		}
 	}
 	return
 }
@@ -268,7 +298,16 @@ func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index) (ret []*ent
 	return
 }
 
-// latestSync 获取最近一次同步点。
+func (repo *Repo) UpdateLatestSync(id string) (err error) {
+	refs := filepath.Join(repo.Path, "refs")
+	err = os.MkdirAll(refs, 0755)
+	if nil != err {
+		return
+	}
+	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest-sync"), []byte(id), 0644)
+	return
+}
+
 func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
 	if !gulu.File.IsExist(latestSync) {
@@ -282,6 +321,55 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	}
 	hash := string(data)
 	ret, err = repo.store.GetIndex(hash)
+	return
+}
+
+func (repo *Repo) UpdateCloudLatest(repoDir, userId, token, proxyURL, server string) (err error) {
+	uploadToken, err := repo.requestLatestUploadToken(repoDir, userId, token, proxyURL, server, 40)
+	if nil != err {
+		return
+	}
+
+	key := path.Join("siyuan", userId, "repo", repoDir, "refs", "latest")
+	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	ret := storage.PutRet{}
+	filePath := filepath.Join(repo.Path, "refs", "latest")
+	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+	if nil != err {
+		time.Sleep(3 * time.Second)
+		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+		if nil != err {
+			return
+		}
+	}
+	return
+}
+
+func (repo *Repo) uploadLocalIndex(repoDir string, id, userId, token, proxyURL, server string) (err error) {
+	_, file := repo.store.IndexAbsPath(id)
+	info, statErr := os.Stat(file)
+	if nil != statErr {
+		err = statErr
+		return
+	}
+
+	uploadToken, err := repo.requestIndexUploadToken(repoDir, id, userId, token, proxyURL, server, info.Size())
+	if nil != err {
+		return
+	}
+
+	key := path.Join("siyuan", userId, "repo", repoDir, "indexes", id)
+	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	ret := storage.PutRet{}
+	filePath := filepath.Join(repo.Path, "indexes", id)
+	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+	if nil != err {
+		time.Sleep(3 * time.Second)
+		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, filePath, nil)
+		if nil != err {
+			return
+		}
+	}
 	return
 }
 
@@ -309,6 +397,79 @@ func (repo *Repo) uploadLocalObject(repoDir, id, userId, token, proxyURL, server
 			return
 		}
 	}
+	return
+}
+
+func (repo *Repo) requestLatestUploadToken(repoDir, userId, token, proxyURL, server string, length int64) (ret string, err error) {
+	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
+
+	var result map[string]interface{}
+	req := httpclient.NewCloudRequest(proxyURL).
+		SetResult(&result)
+	req.SetBody(map[string]interface{}{
+		"token":  token,
+		"repo":   repoDir,
+		"length": length})
+	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoLatestUploadToken?uid=" + userId)
+	if nil != err {
+		err = errors.New("request object upload token failed: " + err.Error())
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = errors.New("account authentication failed, please login again")
+			return
+		}
+		err = errors.New("request index upload token failed")
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New("request index upload token failed: " + result["msg"].(string))
+		return
+	}
+
+	resultData := result["data"].(map[string]interface{})
+	ret = resultData["token"].(string)
+	return
+}
+
+func (repo *Repo) requestIndexUploadToken(repoDir, id, userId, token, proxyURL, server string, length int64) (ret string, err error) {
+	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
+
+	var result map[string]interface{}
+	req := httpclient.NewCloudRequest(proxyURL).
+		SetResult(&result)
+	req.SetBody(map[string]interface{}{
+		"token":  token,
+		"repo":   repoDir,
+		"id":     id,
+		"length": length})
+	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoIndexUploadToken?uid=" + userId)
+	if nil != err {
+		err = errors.New("request object upload token failed: " + err.Error())
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = errors.New("account authentication failed, please login again")
+			return
+		}
+		err = errors.New("request index upload token failed")
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New("request index upload token failed: " + result["msg"].(string))
+		return
+	}
+
+	resultData := result["data"].(map[string]interface{})
+	ret = resultData["token"].(string)
 	return
 }
 
