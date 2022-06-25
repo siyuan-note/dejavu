@@ -158,7 +158,13 @@ func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err err
 	return
 }
 
+// getIndexes 返回 [fromID, toID) 区间内的索引。
 func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index, err error) {
+	ret = []*entity.Index{}
+	if fromID == toID {
+		return
+	}
+
 	const max = 32768
 	var i int
 	for {
@@ -168,7 +174,7 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index, err erro
 			return
 		}
 		ret = append(ret, index)
-		if index.ID == toID || "" == index.Parent {
+		if index.Parent == toID || "" == index.Parent || "" == toID {
 			return
 		}
 		fromID = index.Parent

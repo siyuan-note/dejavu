@@ -194,29 +194,31 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string) (err er
 		}
 	}
 
-	// 合并云端和本地索引
 	var allIndexes []*entity.Index
 	allIndexes = append(allIndexes, localIndexes...)
-	allIndexes = append(allIndexes, cloudIndexes...)
+	if 0 < len(cloudIndexes) {
+		// 合并云端和本地索引
+		allIndexes = append(allIndexes, cloudIndexes...)
 
-	// 按索引时间排序
-	sort.Slice(allIndexes, func(i, j int) bool {
-		return allIndexes[i].Created >= allIndexes[j].Created
-	})
+		// 按索引时间排序
+		sort.Slice(allIndexes, func(i, j int) bool {
+			return allIndexes[i].Created >= allIndexes[j].Created
+		})
 
-	// 重新排列索引入库
-	for i := 0; i < len(allIndexes); i++ {
-		index := allIndexes[i]
-		if i < len(allIndexes)-1 {
-			index.Parent = allIndexes[i+1].ID
-		} else {
-			if "" != index.Parent {
-				index.Parent = latest.ID
+		// 重新排列索引入库
+		for i := 0; i < len(allIndexes); i++ {
+			index := allIndexes[i]
+			if i < len(allIndexes)-1 {
+				index.Parent = allIndexes[i+1].ID
+			} else {
+				if "" != index.Parent {
+					index.Parent = latest.ID
+				}
 			}
-		}
-		err = repo.store.PutIndex(index)
-		if nil != err {
-			return
+			err = repo.store.PutIndex(index)
+			if nil != err {
+				return
+			}
 		}
 	}
 
