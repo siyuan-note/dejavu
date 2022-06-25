@@ -96,7 +96,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 计算待上传云端的本地变更文件
-	upsertFiles, err := repo.localUpsertFiles(latest, latestSync)
+	upsertFiles, err := repo.localUpsertFiles(latest, latestSync, cloudFileIDs)
 	if nil != err {
 		return
 	}
@@ -347,7 +347,7 @@ func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs [
 	return
 }
 
-func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index) (ret []*entity.File, err error) {
+func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index, cloudFileIDs []string) (ret []*entity.File, err error) {
 	files := map[string]bool{}
 	for {
 		for _, file := range latest.Files {
@@ -366,6 +366,10 @@ func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index) (ret []*ent
 
 	for _, file := range latestSync.Files {
 		delete(files, file)
+	}
+
+	for _, cloudFileID := range cloudFileIDs {
+		delete(files, cloudFileID)
 	}
 
 	for fileID := range files {
