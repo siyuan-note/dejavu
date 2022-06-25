@@ -28,6 +28,7 @@ import (
 	"github.com/restic/chunker"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
+	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 )
 
@@ -75,8 +76,17 @@ func (repo *Repo) PutIndex(index *entity.Index) (err error) {
 	return repo.store.PutIndex(index)
 }
 
+const (
+	EvtCheckoutWalkData   = "repo.checkout.walkData"
+	EvtCheckoutUpsertFile = "repo.checkout.upsertFile"
+	EvtCheckoutRemoveFile = "repo.checkout.removeFile"
+	EvtIndexWalkData      = "repo.index.walkData"
+	EvtIndexGetLatestFile = "repo.index.getLatestFile"
+	EvtIndexUpsertFile    = "repo.index.upsertFile"
+)
+
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。
-func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map[string]Callback) (err error) {
+func (repo *Repo) Checkout(id string) (err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -85,7 +95,6 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 		return
 	}
 
-	walkDataCallback := callbacks["walkData"]
 	if err = os.MkdirAll(repo.DataPath, 0755); nil != err {
 		return
 	}
@@ -99,9 +108,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 		}
 
 		files = append(files, entity.NewFile(repo.relPath(path), info.Size(), info.ModTime().UnixMilli()))
-		if nil != walkDataCallback {
-			walkDataCallback(callbackContext, path, err)
-		}
+		eventbus.Publish(EvtCheckoutWalkData, path)
 		return nil
 	})
 	if nil != err {
@@ -124,7 +131,6 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 		return
 	}
 
-	upsertFileCallback := callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
 	poolSize := runtime.NumCPU()
 	if 2 < poolSize {
@@ -169,9 +175,7 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 			errs = append(errs, chtErr)
 			return
 		}
-		if nil != upsertFileCallback {
-			upsertFileCallback(callbackContext, file, nil)
-		}
+		eventbus.Publish(EvtCheckoutUpsertFile, file.Path)
 	})
 
 	for _, f := range upserts {
@@ -185,33 +189,23 @@ func (repo *Repo) Checkout(id string, callbackContext interface{}, callbacks map
 	waitGroup.Wait()
 	p.Release()
 
-	removeFileCallback := callbacks["removeFile"]
 	for _, f := range removes {
 		absPath := repo.absPath(f.Path)
 		if err = filelock.RemoveFile(absPath); nil != err {
 			return
 		}
-		if nil != removeFileCallback {
-			removeFileCallback(callbackContext, absPath, nil)
-		}
+		eventbus.Publish(EvtCheckoutRemoveFile, absPath)
 	}
 	return
 }
 
-// Callback 描述了 Index/Checkout 回调函数签名。
-type Callback func(context, arg interface{}, err error)
-
 // Index 将 repo 数据文件夹中的文件索引到仓库中。
-func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[string]Callback) (ret *entity.Index, err error) {
+func (repo *Repo) Index(memo string) (ret *entity.Index, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
 	var files []*entity.File
-	if nil == callbacks {
-		callbacks = make(map[string]Callback)
-	}
 
-	walkDataCallback := callbacks["walkData"]
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -221,9 +215,7 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 		}
 
 		files = append(files, entity.NewFile(repo.relPath(path), info.Size(), info.ModTime().UnixMilli()))
-		if nil != walkDataCallback {
-			walkDataCallback(callbackContext, path, err)
-		}
+		eventbus.Publish(EvtIndexWalkData, path)
 		return nil
 	})
 	if nil != err {
@@ -242,14 +234,11 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 		init = true
 	}
 	var upserts, removes, latestFiles []*entity.File
-	getLatestFileCallback := callbacks["getLatestFile"]
 	if !init {
 		for _, f := range latest.Files {
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
-			if nil != getLatestFileCallback {
-				getLatestFileCallback(callbackContext, file, err)
-			}
+			eventbus.Publish(EvtIndexGetLatestFile, file.Path)
 			if nil != err {
 				return
 			}
@@ -262,7 +251,6 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 		return
 	}
 
-	upsertFileCallback := callbacks["upsertFile"]
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
 	poolSize := runtime.NumCPU()
@@ -277,9 +265,7 @@ func (repo *Repo) Index(memo string, callbackContext interface{}, callbacks map[
 			putErr = repo.store.PutChunk(obj)
 		case *entity.File:
 			putErr = repo.store.PutFile(obj)
-			if nil != upsertFileCallback {
-				upsertFileCallback(callbackContext, obj, putErr)
-			}
+			eventbus.Publish(EvtIndexUpsertFile, obj.Path)
 		case *entity.Index:
 			putErr = repo.store.PutIndex(obj)
 		}

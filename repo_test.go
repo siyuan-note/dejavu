@@ -22,6 +22,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
+	"github.com/siyuan-note/eventbus"
 )
 
 const (
@@ -34,9 +35,10 @@ const (
 
 func TestIndexCheckout(t *testing.T) {
 	clearTestdata(t)
+	subscribeEvents(t)
 
 	repo, index := initIndex(t)
-	index2, err := repo.Index("Index 2", nil, nil)
+	index2, err := repo.Index("Index 2")
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
@@ -52,7 +54,7 @@ func TestIndexCheckout(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	err = repo.Checkout(index.ID, t, checkoutCallbacks)
+	err = repo.Checkout(index.ID)
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return
@@ -72,34 +74,26 @@ func clearTestdata(t *testing.T) {
 	}
 }
 
-var checkoutCallbacks = map[string]Callback{
-	"walkData": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("checkout walkData: %+v", arg)
-	},
-	"upsertFile": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("checkout upsertFile: %+v", arg)
-	},
-	"removeFile": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("checkout removeFile: %+v", arg)
-	},
-}
+func subscribeEvents(t *testing.T) {
+	eventbus.Subscribe(EvtIndexWalkData, func(path string) {
+		t.Logf("[%s]: [%s]", EvtIndexWalkData, path)
+	})
+	eventbus.Subscribe(EvtIndexGetLatestFile, func(path string) {
+		t.Logf("[%s]: [%s]", EvtIndexGetLatestFile, path)
+	})
+	eventbus.Subscribe(EvtIndexUpsertFile, func(path string) {
+		t.Logf("[%s]: [%s]", EvtIndexUpsertFile, path)
+	})
 
-var indexCallbacks = map[string]Callback{
-	"walkData": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("index walkData: %+v", arg)
-	},
-	"getLatestFile": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("index getLatestFile: %+v", arg)
-	},
-	"upsertFile": func(context, arg interface{}, err error) {
-		t := context.(*testing.T)
-		t.Logf("index upsertFile: %+v", arg)
-	},
+	eventbus.Subscribe(EvtCheckoutWalkData, func(path string) {
+		t.Logf("[%s]: [%s]", EvtCheckoutWalkData, path)
+	})
+	eventbus.Subscribe(EvtCheckoutUpsertFile, func(path string) {
+		t.Logf("[%s]: [%s]", EvtCheckoutUpsertFile, path)
+	})
+	eventbus.Subscribe(EvtCheckoutRemoveFile, func(path string) {
+		t.Logf("[%s]: [%s]", EvtCheckoutRemoveFile, path)
+	})
 }
 
 func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
@@ -113,7 +107,7 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err = repo.Index("Index 1", t, indexCallbacks)
+	index, err = repo.Index("Index 1")
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
