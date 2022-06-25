@@ -38,7 +38,7 @@ func TestIndexCheckout(t *testing.T) {
 	subscribeEvents(t)
 
 	repo, index := initIndex(t)
-	index2, err := repo.Index("Index 2")
+	index2, err := repo.Index("Index 2", map[string]interface{}{})
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
@@ -54,7 +54,7 @@ func TestIndexCheckout(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	err = repo.Checkout(index.ID)
+	err = repo.Checkout(index.ID, map[string]interface{}{})
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return
@@ -75,23 +75,23 @@ func clearTestdata(t *testing.T) {
 }
 
 func subscribeEvents(t *testing.T) {
-	eventbus.Subscribe(EvtIndexWalkData, func(path string) {
+	eventbus.Subscribe(EvtIndexWalkData, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", EvtIndexWalkData, path)
 	})
-	eventbus.Subscribe(EvtIndexGetLatestFile, func(path string) {
+	eventbus.Subscribe(EvtIndexGetLatestFile, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", EvtIndexGetLatestFile, path)
 	})
-	eventbus.Subscribe(EvtIndexUpsertFile, func(path string) {
+	eventbus.Subscribe(EvtIndexUpsertFile, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", EvtIndexUpsertFile, path)
 	})
 
-	eventbus.Subscribe(EvtCheckoutWalkData, func(path string) {
+	eventbus.Subscribe(EvtCheckoutWalkData, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", EvtCheckoutWalkData, path)
 	})
-	eventbus.Subscribe(EvtCheckoutUpsertFile, func(path string) {
+	eventbus.Subscribe(EvtCheckoutUpsertFile, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", EvtCheckoutUpsertFile, path)
 	})
-	eventbus.Subscribe(EvtCheckoutRemoveFile, func(path string) {
+	eventbus.Subscribe(EvtCheckoutRemoveFile, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", EvtCheckoutRemoveFile, path)
 	})
 }
@@ -107,7 +107,7 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err = repo.Index("Index 1")
+	index, err = repo.Index("Index 1", map[string]interface{}{})
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
