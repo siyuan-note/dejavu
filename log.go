@@ -165,7 +165,7 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index, err erro
 		return
 	}
 
-	const max = 32768
+	const max = 1024
 	var i int
 	for {
 		var index *entity.Index
