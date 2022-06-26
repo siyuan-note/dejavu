@@ -159,22 +159,19 @@ func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err err
 }
 
 // getIndexes 返回 [fromID, toID) 区间内的索引。
-func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index, err error) {
+func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 	ret = []*entity.Index{}
-	if fromID == toID {
-		return
-	}
-
-	const max = 1024
+	added := map[string]bool{} // 意外出现循环引用时跳出
+	const max = 512            // 最大深度跳出
 	var i int
 	for {
-		var index *entity.Index
-		index, err = repo.store.GetIndex(fromID)
-		if nil != err {
+		index, err := repo.store.GetIndex(fromID)
+		if nil != err || added[index.ID] {
 			return
 		}
 		ret = append(ret, index)
-		if index.Parent == toID || "" == index.Parent || "" == toID {
+		added[index.ID] = true
+		if index.Parent == toID || "" == index.Parent || index.ID == toID {
 			return
 		}
 		fromID = index.Parent

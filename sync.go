@@ -55,10 +55,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		return
 	}
 
-	localIndexes, err := repo.getIndexes(latest.ID, latestSync.ID)
-	if nil != err {
-		return
-	}
+	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 从云端获取索引列表
 	cloudIndexes, err := repo.downloadCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server, context)
@@ -96,7 +93,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 计算待上传云端的本地变更文件
-	upsertFiles, err := repo.localUpsertFiles(latest, latestSync, cloudFileIDs)
+	upsertFiles, err := repo.localUpsertFiles(localIndexes, cloudFileIDs)
 	if nil != err {
 		return
 	}
@@ -211,8 +208,8 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 			if i < len(allIndexes)-1 {
 				index.Parent = allIndexes[i+1].ID
 			} else {
-				if "" != index.Parent {
-					index.Parent = latest.ID
+				if index.ID != latestSync.ID {
+					index.Parent = latestSync.ID
 				}
 			}
 			err = repo.store.PutIndex(index)
@@ -347,25 +344,12 @@ func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs [
 	return
 }
 
-func (repo *Repo) localUpsertFiles(latest, latestSync *entity.Index, cloudFileIDs []string) (ret []*entity.File, err error) {
+func (repo *Repo) localUpsertFiles(localIndexes []*entity.Index, cloudFileIDs []string) (ret []*entity.File, err error) {
 	files := map[string]bool{}
-	for {
-		for _, file := range latest.Files {
+	for _, index := range localIndexes {
+		for _, file := range index.Files {
 			files[file] = true
 		}
-
-		if latest.Parent == latestSync.ID || "" == latest.Parent {
-			break
-		}
-
-		latest, err = repo.store.GetIndex(latest.Parent)
-		if nil != err {
-			return
-		}
-	}
-
-	for _, file := range latestSync.Files {
-		delete(files, file)
 	}
 
 	for _, cloudFileID := range cloudFileIDs {
@@ -477,8 +461,7 @@ func (repo *Repo) downloadCloudChunk(repoDir, id, userId, token, proxyURL, serve
 	if nil != err {
 		return
 	}
-	ret = &entity.Chunk{}
-	err = gulu.JSON.UnmarshalJSON(data, ret)
+	ret = &entity.Chunk{ID: id, Data: data}
 	return
 }
 
