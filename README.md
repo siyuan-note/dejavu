@@ -106,10 +106,6 @@ The repo folder layout is as follows:
             v1.0.1
 ```
 
-### Sync merge
-
-TBD
-
 ## 📄 License
 
 DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source license.

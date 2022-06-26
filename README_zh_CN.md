@@ -106,10 +106,6 @@
             v1.0.1
 ```
 
-### 同步合并
-
-TBD
-
 ## 📄 授权
 
 DejaVu 使用 [木兰宽松许可证, 第2版](http://license.coscl.org.cn/MulanPSL2) 开源协议。
