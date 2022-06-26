@@ -197,6 +197,9 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		// 合并云端和本地索引
 		allIndexes = append(allIndexes, cloudIndexes...)
 
+		// 去重
+		allIndexes = removeDuplicatedIndexes(allIndexes)
+
 		// 按索引时间排序
 		sort.Slice(allIndexes, func(i, j int) bool {
 			return allIndexes[i].Created >= allIndexes[j].Created
@@ -565,5 +568,16 @@ func (repo *Repo) downloadCloudIndexes(repoDir, latestSync, userId, token, proxy
 		return
 	}
 	err = gulu.JSON.UnmarshalJSON(bytes, &indexes)
+	return
+}
+
+func removeDuplicatedIndexes(indexes []*entity.Index) (ret []*entity.Index) {
+	allKeys := make(map[string]bool)
+	for _, item := range indexes {
+		if _, value := allKeys[item.ID]; !value {
+			allKeys[item.ID] = true
+			ret = append(ret, item)
+		}
+	}
 	return
 }
