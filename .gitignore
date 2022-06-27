@@ -16,6 +16,7 @@
 
 # Test
 !testdata/data/foo
+!testdata/data/bar
 testdata/data/
 testdata/data-checkout/
 testdata/repo/

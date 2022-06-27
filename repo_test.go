@@ -49,7 +49,7 @@ func TestIndexCheckout(t *testing.T) {
 	}
 
 	aesKey := repo.store.AesKey
-	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, aesKey)
+	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, aesKey, ignoreLines())
 	if nil != err {
 		t.Fatalf("new repo failed: %s", err)
 		return
@@ -102,7 +102,7 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		return
 	}
 
-	repo, err = NewRepo(testDataPath, testRepoPath, aesKey)
+	repo, err = NewRepo(testDataPath, testRepoPath, aesKey, ignoreLines())
 	if nil != err {
 		t.Fatalf("new repo failed: %s", err)
 		return
@@ -113,4 +113,8 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		return
 	}
 	return
+}
+
+func ignoreLines() []string {
+	return []string{"bar"}
 }

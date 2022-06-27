@@ -117,3 +117,4 @@ DejaVu 使用 [木兰宽松许可证, 第2版](http://license.coscl.org.cn/Mulan
 * [https://github.com/panjf2000/ants](https://github.com/panjf2000/ants) `MIT license`
 * [https://github.com/InfuseAI/ArtiVC](https://github.com/InfuseAI/ArtiVC) `Apache-2.0 license`
 * [https://github.com/restic/restic](https://github.com/restic/restic) `BSD-2-Clause license`
+* [https://github.com/sabhiram/go-gitignore](https://github.com/sabhiram/go-gitignore) `MIT license`

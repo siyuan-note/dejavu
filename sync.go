@@ -41,6 +41,9 @@ const (
 )
 
 func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+	repo.lock.Lock()
+	defer repo.lock.Unlock()
+
 	latest, err := repo.Latest()
 	if nil != err {
 		return

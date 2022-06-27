@@ -26,24 +26,26 @@ import (
 	"github.com/88250/gulu"
 	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
+	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 )
 
-// Repo 描述了逮虾户仓库。
+// Repo 描述了逮虾户数据仓库。
 type Repo struct {
-	DataPath string // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
-	Path     string // 仓库的绝对路径，如：F:\\SiYuan\\history\\
+	DataPath    string   // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
+	Path        string   // 仓库的绝对路径，如：F:\\SiYuan\\history\\
+	IgnoreLines []string // 忽略配置文件内容行，是用 .gitignore 语法
 
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
-	lock     *sync.Mutex // 仓库锁， Checkout 和 Index 不能同时执行
+	lock     *sync.Mutex // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
 }
 
 // NewRepo 创建一个新的仓库。
-func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
+func NewRepo(dataPath, repoPath string, aesKey []byte, ignoreLines []string) (ret *Repo, err error) {
 	ret = &Repo{
 		DataPath: filepath.Clean(dataPath),
 		Path:     filepath.Clean(repoPath),
@@ -57,6 +59,8 @@ func NewRepo(dataPath, repoPath string, aesKey []byte) (ret *Repo, err error) {
 	if !strings.HasSuffix(ret.Path, string(os.PathSeparator)) {
 		ret.Path += string(os.PathSeparator)
 	}
+	ignoreLines = gulu.Str.RemoveDuplicatedElem(ignoreLines)
+	ret.IgnoreLines = ignoreLines
 	storePath := filepath.Join(repoPath) + string(os.PathSeparator)
 	ret.store, err = NewStore(storePath, aesKey)
 	return
@@ -99,6 +103,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (err error
 		return
 	}
 	var files []*entity.File
+	ignoreMatcher := repo.ignoreMatcher()
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -108,6 +113,10 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (err error
 		}
 
 		p := repo.relPath(path)
+		if ignoreMatcher.MatchesPath(p) {
+			return nil
+		}
+
 		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
 		eventbus.Publish(EvtCheckoutWalkData, context, p)
 		return nil
@@ -206,7 +215,7 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 	defer repo.lock.Unlock()
 
 	var files []*entity.File
-
+	ignoreMatcher := repo.ignoreMatcher()
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -216,6 +225,10 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 		}
 
 		p := repo.relPath(path)
+		if ignoreMatcher.MatchesPath(p) {
+			return nil
+		}
+
 		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
 		eventbus.Publish(EvtIndexWalkData, context, p)
 		return nil
@@ -330,6 +343,10 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 
 	err = repo.UpdateLatest(ret.ID)
 	return
+}
+
+func (repo *Repo) ignoreMatcher() *ignore.GitIgnore {
+	return ignore.CompileIgnoreLines(repo.IgnoreLines...)
 }
 
 func (repo *Repo) absPath(relPath string) string {
