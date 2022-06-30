@@ -40,11 +40,11 @@ const (
 	EvtSyncBeforeDownloadCloudChunk   = "repo.sync.beforeDownloadCloudChunk"
 )
 
-func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (latest *entity.Index, fetchedFiles []*entity.File, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
-	latest, err := repo.Latest()
+	latest, err = repo.Latest()
 	if nil != err {
 		return
 	}
@@ -70,27 +70,26 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	cloudFileIDs := repo.getFileIDs(cloudIndexes)
 
 	// 计算本地缺失的文件
-	fetchFiles, err := repo.localNotFoundFiles(cloudFileIDs)
+	fetchFileIDs, err := repo.localNotFoundFiles(cloudFileIDs)
 	if nil != err {
 		return
 	}
 
 	// 从云端获取文件列表
-	var files []*entity.File
-	for _, fileID := range fetchFiles {
+	for _, fileID := range fetchFileIDs {
 		var file *entity.File
 		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server, context)
 		if nil != err {
 			return
 		}
-		files = append(files, file)
+		fetchedFiles = append(fetchedFiles, file)
 	}
 
 	// 从文件列表中得到去重后的分块列表
-	cloudChunkIDs := repo.getChunks(files)
+	cloudChunkIDs := repo.getChunks(fetchedFiles)
 
 	// 计算本地缺失的分块
-	fetchChunks, err := repo.localNotFoundChunks(cloudChunkIDs)
+	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
 	}
@@ -174,7 +173,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 从云端获取分块
-	for _, chunkID := range fetchChunks {
+	for _, chunkID := range fetchChunkIDs {
 		var chunk *entity.Chunk
 		chunk, err = repo.downloadCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server, context)
 		if nil != err {
@@ -188,7 +187,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 文件入库
-	for _, file := range files {
+	for _, file := range fetchedFiles {
 		if err = repo.store.PutFile(file); nil != err {
 			return
 		}

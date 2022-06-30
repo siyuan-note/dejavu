@@ -24,9 +24,11 @@ func TestSync(t *testing.T) {
 		return
 	}
 
-	err := repo.Sync("test", userId, token, "", "http://127.0.0.1:64388", nil)
+	latest, fetchedFiles, err := repo.Sync("test", userId, token, "", "http://127.0.0.1:64388", nil)
 	if nil != err {
 		t.Fatalf("sync failed: %s", err)
 		return
 	}
+	_ = latest
+	_ = fetchedFiles
 }
