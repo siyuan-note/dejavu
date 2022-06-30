@@ -54,7 +54,7 @@ func TestIndexCheckout(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	err = repo.Checkout(index.ID, map[string]interface{}{})
+	_, _, err = repo.Checkout(index.ID, map[string]interface{}{})
 	if nil != err {
 		t.Fatalf("checkout failed: %s", err)
 		return
