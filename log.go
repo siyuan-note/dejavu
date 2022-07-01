@@ -162,21 +162,9 @@ func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err err
 func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 	ret = []*entity.Index{}
 	added := map[string]bool{} // 意外出现循环引用时跳出
-	const max = 512            // 最大深度跳出
+	const max = 64             // 最大深度跳出
 	var i int
-	for max > i {
-		index, err := repo.store.GetIndex(fromID)
-		i++
-
-		// 通过内部存储的 ID 检查文件不存在的话跳过该索引
-		if _, statErr := repo.store.Stat(index.ID); nil != statErr {
-			fromID = index.Parent
-			if "" == fromID || fromID == toID {
-				return
-			}
-			continue
-		}
-
+	for index, err := repo.store.GetIndex(fromID); max > i; i++ {
 		if nil != err || added[index.ID] {
 			return
 		}
