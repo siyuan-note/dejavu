@@ -167,14 +167,16 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 	for max > i {
 		index, err := repo.store.GetIndex(fromID)
 		added[index.ID] = true
+
+		// 通过内部存储的 ID 检查文件不存在的话跳过该索引
 		if _, statErr := repo.store.Stat(index.ID); nil != statErr {
-			// 通过 ID 再检查一遍是否存在，如果文件不存在的话就跳过该索引
 			fromID = index.Parent
 			if "" == fromID || fromID == toID || added[index.ID] {
 				return
 			}
 			continue
 		}
+
 		if nil != err || added[index.ID] {
 			return
 		}
