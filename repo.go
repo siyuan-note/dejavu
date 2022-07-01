@@ -108,7 +108,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		if nil != err {
 			return io.EOF
 		}
-		if info.IsDir() || !info.Mode().IsRegular() {
+		if info.IsDir() || !info.Mode().IsRegular() || repo.sizeIgnore(info) {
 			return nil
 		}
 
@@ -220,7 +220,7 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 		if nil != err {
 			return io.EOF
 		}
-		if info.IsDir() || !info.Mode().IsRegular() {
+		if info.IsDir() || !info.Mode().IsRegular() || repo.sizeIgnore(info) {
 			return nil
 		}
 
@@ -343,6 +343,10 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 
 	err = repo.UpdateLatest(ret.ID)
 	return
+}
+
+func (repo *Repo) sizeIgnore(info os.FileInfo) bool {
+	return 1024*1024*100 <= info.Size()
 }
 
 func (repo *Repo) ignoreMatcher() *ignore.GitIgnore {
