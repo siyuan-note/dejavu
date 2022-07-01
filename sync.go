@@ -62,6 +62,12 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	if nil != err {
 		return
 	}
+	if 0 < len(cloudIndexes) {
+		if cloudLatest := cloudIndexes[0]; cloudLatest.ID == latest.ID {
+			// 数据一致，直接返回
+			return
+		}
+	}
 
 	// 从索引中得到去重后的文件列表
 	cloudFileIDs := repo.getFileIDs(cloudIndexes)
