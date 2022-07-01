@@ -175,7 +175,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 			return
 		}
 
-		if writeErr := gulu.File.WriteFileSafer(absPath, data, 0644); nil != writeErr {
+		if writeErr := filelock.NoLockFileWrite(absPath, data); nil != writeErr {
 			errs = append(errs, writeErr)
 			return
 		}
