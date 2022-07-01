@@ -168,6 +168,15 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 		if nil != err || added[index.ID] {
 			return
 		}
+		if index.ID != fromID { // 意外情况：存储的 ID 和文件名不一致
+			// 继续查找上一个索引
+			fromID = index.Parent
+			if fromID == toID || "" == fromID {
+				return
+			}
+			continue
+		}
+
 		ret = append(ret, index)
 		added[index.ID] = true
 		if index.Parent == toID || "" == index.Parent || index.ID == toID {

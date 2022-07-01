@@ -55,10 +55,6 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		return
 	}
 
-	if latest.ID == latestSync.ID {
-		return
-	}
-
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 从云端获取索引列表
