@@ -35,9 +35,10 @@ import (
 
 const (
 	EvtSyncBeforeDownloadCloudIndexes = "repo.sync.beforeDownloadCloudIndexes"
+	EvtSyncAfterDownloadCloudIndexes  = "repo.sync.afterDownloadCloudIndexes"
 	EvtSyncBeforeDownloadCloudFile    = "repo.sync.beforeDownloadCloudFile"
-	EvtSyncBeforeUploadObject         = "repo.sync.beforeUploadObject"
 	EvtSyncBeforeDownloadCloudChunk   = "repo.sync.beforeDownloadCloudChunk"
+	EvtSyncBeforeUploadObject         = "repo.sync.beforeUploadObject"
 )
 
 func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (latest *entity.Index, fetchedFiles []*entity.File, err error) {
@@ -570,6 +571,7 @@ func (repo *Repo) downloadCloudIndexes(repoDir, latestSync, userId, token, proxy
 		return
 	}
 	err = gulu.JSON.UnmarshalJSON(bytes, &indexes)
+	eventbus.Publish(EvtSyncAfterDownloadCloudIndexes, context, indexes)
 	return
 }
 
