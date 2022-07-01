@@ -231,6 +231,11 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		return
 	}
 
+	if 1 > len(allIndexes) {
+		// 意外情况下没有本地和云端索引
+		return
+	}
+
 	latest = allIndexes[0]
 
 	// 更新本地 latest
