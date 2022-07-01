@@ -164,10 +164,14 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 	added := map[string]bool{} // 意外出现循环引用时跳出
 	const max = 512            // 最大深度跳出
 	var i int
-	for {
+	for max > i {
 		index, err := repo.store.GetIndex(fromID)
 		if _, statErr := repo.store.Stat(index.ID); nil != statErr {
-			// 通过 ID 再检查一遍是否存在，如果不存在的话就跳过该索引
+			// 通过 ID 再检查一遍是否存在，如果文件不存在的话就跳过该索引
+			fromID = index.Parent
+			if "" == fromID || fromID == toID {
+				return
+			}
 			continue
 		}
 		if nil != err || added[index.ID] {
@@ -180,8 +184,6 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 		}
 		fromID = index.Parent
 		i++
-		if max < i {
-			return
-		}
 	}
+	return
 }
