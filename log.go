@@ -166,6 +166,10 @@ func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
 	var i int
 	for {
 		index, err := repo.store.GetIndex(fromID)
+		if _, statErr := repo.store.Stat(index.ID); nil != statErr {
+			// 通过 ID 再检查一遍是否存在，如果不存在的话就跳过该索引
+			continue
+		}
 		if nil != err || added[index.ID] {
 			return
 		}
