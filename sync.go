@@ -159,7 +159,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
 
-	// 计算云端相比本地的 upsert 和 remove 差异
+	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	cloudUpserts, mergeRemoves := repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 
 	// 计算能够无冲突合并的 upsert，冲突的文件以本地 upsert 为准
