@@ -42,7 +42,7 @@ const (
 	EvtSyncBeforeUploadObject         = "repo.sync.beforeUploadObject"
 )
 
-func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (latest *entity.Index, fetchedFiles []*entity.File, err error) {
+func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves []*entity.File, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -60,11 +60,12 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 
 	// 从云端获取索引列表
 	cloudIndexes, err := repo.downloadCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server, context)
+	var cloudLatest *entity.Index
 	if nil != err {
 		return
 	}
 	if 0 < len(cloudIndexes) {
-		if cloudLatest := cloudIndexes[0]; cloudLatest.ID == latest.ID {
+		if cloudLatest = cloudIndexes[0]; cloudLatest.ID == latest.ID {
 			// 数据一致，直接返回
 			return
 		}
@@ -80,13 +81,9 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 从云端获取文件列表
-	for _, fileID := range fetchFileIDs {
-		var file *entity.File
-		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server, context)
-		if nil != err {
-			return
-		}
-		fetchedFiles = append(fetchedFiles, file)
+	fetchedFiles, err := repo.getCloudFiles(cloudDir, fetchFileIDs, userId, token, proxyURL, server, context)
+	if nil != err {
+		return
 	}
 
 	// 从文件列表中得到去重后的分块列表
@@ -157,18 +154,41 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	cloudUpserts := repo.DiffUpsert(fetchedFiles, latestFiles)
 
 	// 计算能够无冲突合并的 upserts，冲突的文件以本地 upsert 为准
-	var mergeUpserts []*entity.File
 	for _, cloudUpsert := range cloudUpserts {
 		if !repo.existFile(localUpserts, cloudUpsert.ID) {
 			mergeUpserts = append(mergeUpserts, cloudUpsert)
 		}
 	}
 
-	if 0 < len(mergeUpserts) {
-		// 迁出到工作区
-		err = repo.checkoutFiles(mergeUpserts, context)
-		if nil != err {
-			return
+	// 计算云端已经删除但本地未删除且为修改 remove 差异
+	var cloudRemoves []string
+	if nil != cloudLatest {
+		for _, fileID := range latest.Files {
+			if !gulu.Str.Contains(fileID, cloudLatest.Files) && !repo.existFile(localUpserts, fileID) && !repo.existFile(cloudUpserts, fileID) {
+				cloudRemoves = append(cloudRemoves, fileID)
+			}
+		}
+	}
+	mergeRemoves, err = repo.getFiles(cloudRemoves)
+	if nil != err {
+		return
+	}
+
+	if 0 < len(mergeUpserts) || 0 < len(mergeRemoves) {
+		if 0 < len(mergeUpserts) {
+			// 迁出到工作区
+			err = repo.checkoutFiles(mergeUpserts, context)
+			if nil != err {
+				return
+			}
+		}
+
+		if 0 < len(mergeRemoves) {
+			// 删除工作区文件
+			err = repo.removeFiles(mergeRemoves, context)
+			if nil != err {
+				return
+			}
 		}
 
 		// 创建快照
@@ -230,14 +250,36 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 更新云端 latest
-	cloudLatest := path.Join("refs", "latest")
-	err = repo.uploadObject(cloudDir, cloudLatest, userId, token, proxyURL, server, context)
+	err = repo.uploadObject(cloudDir, path.Join("refs", "latest"), userId, token, proxyURL, server, context)
 	if nil != err {
 		return
 	}
 
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest.ID)
+	return
+}
+
+func (repo *Repo) getCloudFiles(cloudDir string, fileIDs []string, userId, token, proxyURL, server string, context map[string]interface{}) (ret []*entity.File, err error) {
+	for _, fileID := range fileIDs {
+		var file *entity.File
+		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server, context)
+		if nil != err {
+			return
+		}
+		ret = append(ret, file)
+	}
+	return
+}
+
+func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	for _, file := range files {
+		absPath := repo.absPath(file.Path)
+		if err = filelock.RemoveFile(absPath); nil != err {
+			return
+		}
+		eventbus.Publish(EvtCheckoutRemoveFile, context, file.Path)
+	}
 	return
 }
 
