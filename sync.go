@@ -194,7 +194,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 
 	// 更新云端 latest
 	cloudLatest := path.Join("refs", "latest")
-	err = repo.UploadObject(cloudDir, cloudLatest, userId, token, proxyURL, server, context)
+	err = repo.uploadObject(cloudDir, cloudLatest, userId, token, proxyURL, server, context)
 	if nil != err {
 		return
 	}
@@ -218,7 +218,7 @@ func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId
 		}
 
 		indexID := arg.(string)
-		uploadErr = repo.UploadObject(cloudDir, path.Join("indexes", indexID), userId, token, proxyURL, server, context)
+		uploadErr = repo.uploadObject(cloudDir, path.Join("indexes", indexID), userId, token, proxyURL, server, context)
 		if nil != uploadErr {
 			return
 		}
@@ -253,7 +253,7 @@ func (repo *Repo) uploadFiles(cloudDir string, upsertFiles []*entity.File, userI
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		err = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
+		err = repo.uploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
 		if nil != err {
 			return
 		}
@@ -287,7 +287,7 @@ func (repo *Repo) uploadChunks(cloudDir string, upsertChunkIDs []string, userId,
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		err = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
+		err = repo.uploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
 		if nil != err {
 			return
 		}
@@ -421,7 +421,7 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	return
 }
 
-func (repo *Repo) UploadObject(repoDir, filePath, userId, token, proxyURL, server string, ctx map[string]interface{}) (err error) {
+func (repo *Repo) uploadObject(repoDir, filePath, userId, token, proxyURL, server string, ctx map[string]interface{}) (err error) {
 	eventbus.Publish(EvtSyncBeforeUploadObject, ctx, filePath)
 
 	key := path.Join("siyuan", userId, "repo", repoDir, filePath)
