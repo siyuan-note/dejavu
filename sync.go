@@ -110,68 +110,14 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 上传分块
-	waitGroup := &sync.WaitGroup{}
-	var uploadErr error
-	poolSize := 4
-	if poolSize > len(upsertChunkIDs) {
-		poolSize = len(upsertChunkIDs)
-	}
-	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
-		defer waitGroup.Done()
-		if nil != uploadErr {
-			return // 快速失败
-		}
-
-		upsertChunkID := arg.(string)
-		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		uploadErr = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
-		if nil != uploadErr {
-			return
-		}
-	})
+	err = repo.uploadChunks(cloudDir, upsertChunkIDs, userId, token, proxyURL, server, context)
 	if nil != err {
-		return
-	}
-	for _, upsertChunkID := range upsertChunkIDs {
-		waitGroup.Add(1)
-		p.Invoke(upsertChunkID)
-	}
-	waitGroup.Wait()
-	p.Release()
-	if nil != uploadErr {
-		err = uploadErr
 		return
 	}
 
 	// 上传文件
-	poolSize = 4
-	if poolSize > len(upsertFiles) {
-		poolSize = len(upsertFiles)
-	}
-	p, err = ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
-		defer waitGroup.Done()
-		if nil != uploadErr {
-			return // 快速失败
-		}
-
-		upsertFileID := arg.(string)
-		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		uploadErr = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
-		if nil != uploadErr {
-			return
-		}
-	})
+	err = repo.uploadFiles(cloudDir, upsertFiles, userId, token, proxyURL, server, context)
 	if nil != err {
-		return
-	}
-	for _, upsertFile := range upsertFiles {
-		waitGroup.Add(1)
-		p.Invoke(upsertFile.ID)
-	}
-	waitGroup.Wait()
-	p.Release()
-	if nil != uploadErr {
-		err = uploadErr
 		return
 	}
 
@@ -290,6 +236,74 @@ func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId
 		err = uploadErr
 		return
 	}
+	return
+}
+
+func (repo *Repo) uploadFiles(cloudDir string, upsertFiles []*entity.File, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+	waitGroup := &sync.WaitGroup{}
+	poolSize := 4
+	if poolSize > len(upsertFiles) {
+		poolSize = len(upsertFiles)
+	}
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != err {
+			return // 快速失败
+		}
+
+		upsertFileID := arg.(string)
+		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
+		err = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
+		if nil != err {
+			return
+		}
+	})
+	if nil != err {
+		return
+	}
+	for _, upsertFile := range upsertFiles {
+		waitGroup.Add(1)
+		err = p.Invoke(upsertFile.ID)
+		if nil != err {
+			return
+		}
+	}
+	waitGroup.Wait()
+	p.Release()
+	return
+}
+
+func (repo *Repo) uploadChunks(cloudDir string, upsertChunkIDs []string, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+	waitGroup := &sync.WaitGroup{}
+	poolSize := 4
+	if poolSize > len(upsertChunkIDs) {
+		poolSize = len(upsertChunkIDs)
+	}
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != err {
+			return // 快速失败
+		}
+
+		upsertChunkID := arg.(string)
+		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
+		err = repo.UploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
+		if nil != err {
+			return
+		}
+	})
+	if nil != err {
+		return
+	}
+	for _, upsertChunkID := range upsertChunkIDs {
+		waitGroup.Add(1)
+		err = p.Invoke(upsertChunkID)
+		if nil != err {
+			return
+		}
+	}
+	waitGroup.Wait()
+	p.Release()
 	return
 }
 
