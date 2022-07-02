@@ -24,7 +24,15 @@ func TestSync(t *testing.T) {
 		return
 	}
 
-	latest, mergeUpserts, mergeRemoves, err := repo.Sync("test", userId, token, "", "http://127.0.0.1:64388", nil)
+	cloudInfo := &CloudInfo{
+		Dir:       "test",
+		UserID:    userId,
+		LimitSize: 1024 * 1024 * 1024 * 8,
+		Token:     token,
+		ProxyURL:  "",
+		Server:    "http://127.0.0.1:64388",
+	}
+	latest, mergeUpserts, mergeRemoves, err := repo.Sync(cloudInfo, nil)
 	if nil != err {
 		t.Fatalf("sync failed: %s", err)
 		return

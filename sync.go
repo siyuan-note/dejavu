@@ -42,7 +42,16 @@ const (
 	EvtSyncBeforeUploadObject         = "repo.sync.beforeUploadObject"
 )
 
-func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves []*entity.File, err error) {
+type CloudInfo struct {
+	Dir       string // 仓库目录名
+	UserID    string // 用户 ID
+	LimitSize int64  // 存储空间限制
+	Token     string // 鉴权令牌
+	ProxyURL  string // 代理服务器 URL
+	Server    string // 云端接口端点
+}
+
+func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves []*entity.File, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -59,7 +68,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 从云端获取索引列表
-	cloudIndexes, err := repo.downloadCloudIndexes(cloudDir, latestSync.ID, userId, token, proxyURL, server, context)
+	cloudIndexes, err := repo.downloadCloudIndexes(latestSync.ID, cloudInfo, context)
 	var cloudLatest *entity.Index
 	if nil != err {
 		return
@@ -69,6 +78,11 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 			// 数据一致，直接返回
 			return
 		}
+	}
+
+	if cloudInfo.LimitSize <= cloudLatest.Size {
+		err = errors.New("cloud storage limit size exceeded")
+		return
 	}
 
 	// 从索引中得到去重后的文件列表
@@ -81,7 +95,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 从云端下载缺失文件
-	fetchedFiles, err := repo.downloadCloudFiles(cloudDir, fetchFileIDs, userId, token, proxyURL, server, context)
+	fetchedFiles, err := repo.downloadCloudFiles(fetchFileIDs, cloudInfo, context)
 	if nil != err {
 		return
 	}
@@ -108,13 +122,13 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 上传分块
-	err = repo.uploadChunks(cloudDir, upsertChunkIDs, userId, token, proxyURL, server, context)
+	err = repo.uploadChunks(upsertChunkIDs, cloudInfo, context)
 	if nil != err {
 		return
 	}
 
 	// 上传文件
-	err = repo.uploadFiles(cloudDir, upsertFiles, userId, token, proxyURL, server, context)
+	err = repo.uploadFiles(upsertFiles, cloudInfo, context)
 	if nil != err {
 		return
 	}
@@ -122,7 +136,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	// 从云端获取分块并入库
 	for _, chunkID := range fetchChunkIDs {
 		var chunk *entity.Chunk
-		chunk, err = repo.downloadCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server, context)
+		chunk, err = repo.downloadCloudChunk(chunkID, cloudInfo, context)
 		if nil != err {
 			return
 		}
@@ -238,7 +252,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 上传索引
-	err = repo.uploadIndexes(cloudDir, allIndexes, userId, token, proxyURL, server, context)
+	err = repo.uploadIndexes(allIndexes, cloudInfo, context)
 	if nil != err {
 		return
 	}
@@ -257,7 +271,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 
 	// 更新云端 latest
-	err = repo.uploadObject(cloudDir, path.Join("refs", "latest"), userId, token, proxyURL, server, context)
+	err = repo.uploadObject(path.Join("refs", "latest"), cloudInfo, context)
 	if nil != err {
 		return
 	}
@@ -267,10 +281,10 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	return
 }
 
-func (repo *Repo) downloadCloudFiles(cloudDir string, fileIDs []string, userId, token, proxyURL, server string, context map[string]interface{}) (ret []*entity.File, err error) {
+func (repo *Repo) downloadCloudFiles(fileIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (ret []*entity.File, err error) {
 	for _, fileID := range fileIDs {
 		var file *entity.File
-		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server, context)
+		file, err = repo.downloadCloudFile(fileID, cloudInfo, context)
 		if nil != err {
 			return
 		}
@@ -343,7 +357,7 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 	return
 }
 
-func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
 	poolSize := 4
@@ -357,7 +371,7 @@ func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId
 		}
 
 		indexID := arg.(string)
-		uploadErr = repo.uploadObject(cloudDir, path.Join("indexes", indexID), userId, token, proxyURL, server, context)
+		uploadErr = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, context)
 		if nil != uploadErr {
 			return
 		}
@@ -378,7 +392,7 @@ func (repo *Repo) uploadIndexes(cloudDir string, indexes []*entity.Index, userId
 	return
 }
 
-func (repo *Repo) uploadFiles(cloudDir string, upsertFiles []*entity.File, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
 	waitGroup := &sync.WaitGroup{}
 	poolSize := 4
 	if poolSize > len(upsertFiles) {
@@ -392,7 +406,7 @@ func (repo *Repo) uploadFiles(cloudDir string, upsertFiles []*entity.File, userI
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		err = repo.uploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
+		err = repo.uploadObject(filePath, cloudInfo, context)
 		if nil != err {
 			return
 		}
@@ -412,7 +426,7 @@ func (repo *Repo) uploadFiles(cloudDir string, upsertFiles []*entity.File, userI
 	return
 }
 
-func (repo *Repo) uploadChunks(cloudDir string, upsertChunkIDs []string, userId, token, proxyURL, server string, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
 	waitGroup := &sync.WaitGroup{}
 	poolSize := 4
 	if poolSize > len(upsertChunkIDs) {
@@ -426,7 +440,7 @@ func (repo *Repo) uploadChunks(cloudDir string, upsertChunkIDs []string, userId,
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		err = repo.uploadObject(cloudDir, filePath, userId, token, proxyURL, server, context)
+		err = repo.uploadObject(filePath, cloudInfo, context)
 		if nil != err {
 			return
 		}
@@ -560,11 +574,11 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	return
 }
 
-func (repo *Repo) uploadObject(repoDir, filePath, userId, token, proxyURL, server string, ctx map[string]interface{}) (err error) {
+func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, ctx map[string]interface{}) (err error) {
 	eventbus.Publish(EvtSyncBeforeUploadObject, ctx, filePath)
 
-	key := path.Join("siyuan", userId, "repo", repoDir, filePath)
-	uploadToken, err := repo.requestUploadToken(repoDir, key, userId, token, proxyURL, server, 40)
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
+	uploadToken, err := repo.requestUploadToken(key, 40, cloudInfo)
 	if nil != err {
 		return
 	}
@@ -583,18 +597,18 @@ func (repo *Repo) uploadObject(repoDir, filePath, userId, token, proxyURL, serve
 	return
 }
 
-func (repo *Repo) requestUploadToken(repoDir, key, userId, token, proxyURL, server string, length int64) (ret string, err error) {
+func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudInfo) (ret string, err error) {
 	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
 
 	var result map[string]interface{}
-	req := httpclient.NewCloudRequest(proxyURL).
+	req := httpclient.NewCloudRequest(cloudInfo.ProxyURL).
 		SetResult(&result)
 	req.SetBody(map[string]interface{}{
-		"token":  token,
-		"repo":   repoDir,
+		"token":  cloudInfo.Token,
+		"repo":   cloudInfo.Dir,
 		"key":    key,
 		"length": length})
-	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoUploadToken?uid=" + userId)
+	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
 		err = errors.New("request repo upload token failed: " + err.Error())
 		return
@@ -620,10 +634,10 @@ func (repo *Repo) requestUploadToken(repoDir, key, userId, token, proxyURL, serv
 	return
 }
 
-func (repo *Repo) downloadCloudChunk(repoDir, id, userId, token, proxyURL, server string, context map[string]interface{}) (ret *entity.Chunk, err error) {
+func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context map[string]interface{}) (ret *entity.Chunk, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudChunk, context, id)
 
-	data, err := repo.downloadCloudObject(repoDir, id, userId, token, proxyURL, server)
+	data, err := repo.downloadCloudObject(id, cloudInfo)
 	if nil != err {
 		return
 	}
@@ -631,10 +645,10 @@ func (repo *Repo) downloadCloudChunk(repoDir, id, userId, token, proxyURL, serve
 	return
 }
 
-func (repo *Repo) downloadCloudFile(repoDir, id, userId, token, proxyURL, server string, context map[string]interface{}) (ret *entity.File, err error) {
+func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map[string]interface{}) (ret *entity.File, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudFile, context, id)
 
-	data, err := repo.downloadCloudObject(repoDir, id, userId, token, proxyURL, server)
+	data, err := repo.downloadCloudObject(id, cloudInfo)
 	if nil != err {
 		return
 	}
@@ -643,12 +657,12 @@ func (repo *Repo) downloadCloudFile(repoDir, id, userId, token, proxyURL, server
 	return
 }
 
-func (repo *Repo) downloadCloudObject(repoDir, id, userId, token, proxyURL, server string) (ret []byte, err error) {
+func (repo *Repo) downloadCloudObject(id string, cloudInfo *CloudInfo) (ret []byte, err error) {
 	var result map[string]interface{}
-	resp, err := httpclient.NewCloudRequest(proxyURL).
+	resp, err := httpclient.NewCloudRequest(cloudInfo.Server).
 		SetResult(&result).
-		SetBody(map[string]interface{}{"token": token, "repo": repoDir, "id": id}).
-		Post(server + "/apis/siyuan/dejavu/getRepoObjectURL?uid=" + userId)
+		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "id": id}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoObjectURL?uid=" + cloudInfo.UserID)
 	if nil != err {
 		err = errors.New("request object url failed: " + err.Error())
 		return
@@ -671,7 +685,7 @@ func (repo *Repo) downloadCloudObject(repoDir, id, userId, token, proxyURL, serv
 
 	resultData := result["data"].(map[string]interface{})
 	downloadURL := resultData["url"].(string)
-	resp, err = httpclient.NewCloudFileRequest15s(proxyURL).Get(downloadURL)
+	resp, err = httpclient.NewCloudFileRequest15s(cloudInfo.ProxyURL).Get(downloadURL)
 	if nil != err {
 		err = errors.New("download object failed")
 		return
@@ -697,14 +711,14 @@ func (repo *Repo) downloadCloudObject(repoDir, id, userId, token, proxyURL, serv
 	return
 }
 
-func (repo *Repo) downloadCloudIndexes(repoDir, latestSync, userId, token, proxyURL, server string, context map[string]interface{}) (indexes []*entity.Index, err error) {
+func (repo *Repo) downloadCloudIndexes(latestSync string, cloudInfo *CloudInfo, context map[string]interface{}) (indexes []*entity.Index, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudIndexes, context, latestSync)
 
 	var result map[string]interface{}
-	resp, err := httpclient.NewCloudRequest(proxyURL).
+	resp, err := httpclient.NewCloudRequest(cloudInfo.ProxyURL).
 		SetResult(&result).
-		SetBody(map[string]interface{}{"token": token, "repo": repoDir, "latestSync": latestSync}).
-		Post(server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + userId)
+		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "latestSync": latestSync}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + cloudInfo.UserID)
 	if nil != err {
 		return
 	}
