@@ -214,6 +214,11 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
+	ret, err = repo.index(memo, context)
+	return
+}
+
+func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {

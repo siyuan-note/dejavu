@@ -25,6 +25,8 @@ import (
 	"github.com/siyuan-note/encryption"
 )
 
+// TODO: 增加缓存
+
 // Store 描述了存储库。
 type Store struct {
 	Path   string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\objects\\

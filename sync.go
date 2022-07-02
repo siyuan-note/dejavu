@@ -30,6 +30,7 @@ import (
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/eventbus"
+	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/httpclient"
 )
 
@@ -121,7 +122,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		return
 	}
 
-	// 从云端获取分块
+	// 从云端获取分块并入库
 	for _, chunkID := range fetchChunkIDs {
 		var chunk *entity.Chunk
 		chunk, err = repo.downloadCloudChunk(cloudDir, chunkID, userId, token, proxyURL, server, context)
@@ -129,17 +130,53 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 			return
 		}
 
-		// 分库入库
 		if err = repo.store.PutChunk(chunk); nil != err {
 			return
 		}
 	}
 
-	// 文件入库
+	// 从云端获取文件并入库
 	for _, file := range fetchedFiles {
 		if err = repo.store.PutFile(file); nil != err {
 			return
 		}
+	}
+
+	// 计算本地相比上一个同步点的 upsert 差异
+	latestFiles, err := repo.getFiles(latest.Files)
+	if nil != err {
+		return
+	}
+	latestSyncFiles, err := repo.getFiles(latestSync.Files)
+	if nil != err {
+		return
+	}
+	localUpserts := repo.DiffUpsert(latestFiles, latestSyncFiles)
+
+	// 计算云端相比本地的 upsert 差异
+	cloudUpserts := repo.DiffUpsert(fetchedFiles, latestFiles)
+
+	// 计算能够无冲突合并的 upserts，冲突的文件以本地 upsert 为准
+	var mergeUpserts []*entity.File
+	for _, cloudUpsert := range cloudUpserts {
+		if !repo.existFile(localUpserts, cloudUpsert.ID) {
+			mergeUpserts = append(mergeUpserts, cloudUpsert)
+		}
+	}
+
+	if 0 < len(mergeUpserts) {
+		// 迁出到工作区
+		err = repo.checkoutFiles(mergeUpserts, context)
+		if nil != err {
+			return
+		}
+
+		// 创建快照
+		latest, err = repo.index("Merge index", context)
+		if nil != err {
+			return
+		}
+		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 	}
 
 	var allIndexes []*entity.Index
@@ -201,6 +238,59 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest.ID)
+	return
+}
+
+func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	for _, file := range files {
+		var data []byte
+		for _, c := range file.Chunks {
+			chunk, getErr := repo.store.GetChunk(c)
+			if nil != getErr {
+				err = getErr
+				return
+			}
+			data = append(data, chunk.Data...)
+		}
+
+		absPath := filepath.Join(repo.DataPath, file.Path)
+		dir := filepath.Dir(absPath)
+
+		if err = os.MkdirAll(dir, 0755); nil != err {
+			return
+		}
+
+		if err = filelock.NoLockFileWrite(absPath, data); nil != err {
+			return
+		}
+
+		updated := time.UnixMilli(file.Updated)
+		if err = os.Chtimes(absPath, updated, updated); nil != err {
+			return
+		}
+		eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
+	}
+	return
+}
+
+func (repo *Repo) existFile(files []*entity.File, id string) bool {
+	for _, file := range files {
+		if file.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
+	for _, fileID := range fileIDs {
+		file, getErr := repo.store.GetFile(fileID)
+		if nil != getErr {
+			err = getErr
+			return
+		}
+		ret = append(ret, file)
+	}
 	return
 }
 

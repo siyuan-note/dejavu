@@ -113,9 +113,9 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		if "" == index.Parent {
 			break
 		}
-		index, err = repo.store.GetIndex(index.Parent)
-		if nil != err {
-			return
+		index, _ = repo.store.GetIndex(index.Parent)
+		if nil == index {
+			break
 		}
 	}
 
