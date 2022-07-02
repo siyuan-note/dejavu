@@ -80,8 +80,8 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		return
 	}
 
-	// 从云端获取文件列表
-	fetchedFiles, err := repo.getCloudFiles(cloudDir, fetchFileIDs, userId, token, proxyURL, server, context)
+	// 从云端下载缺失文件
+	fetchedFiles, err := repo.downloadCloudFiles(cloudDir, fetchFileIDs, userId, token, proxyURL, server, context)
 	if nil != err {
 		return
 	}
@@ -132,9 +132,18 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		}
 	}
 
-	// 从云端获取文件并入库
+	// 云端缺失文件入库
 	for _, file := range fetchedFiles {
 		if err = repo.store.PutFile(file); nil != err {
+			return
+		}
+	}
+
+	// 组装还原云端最新文件列表
+	var cloudLatestFiles []*entity.File
+	if nil != cloudLatest {
+		cloudLatestFiles, err = repo.getFiles(cloudLatest.Files)
+		if nil != err {
 			return
 		}
 	}
@@ -150,28 +159,14 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	}
 	localUpserts := repo.DiffUpsert(latestFiles, latestSyncFiles)
 
-	// 计算云端相比本地的 upsert 差异
-	cloudUpserts := repo.DiffUpsert(fetchedFiles, latestFiles)
+	// 计算云端相比本地的 upsert 和 remove 差异
+	cloudUpserts, mergeRemoves := repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 
 	// 计算能够无冲突合并的 upserts，冲突的文件以本地 upsert 为准
 	for _, cloudUpsert := range cloudUpserts {
 		if !repo.existFile(localUpserts, cloudUpsert.ID) {
 			mergeUpserts = append(mergeUpserts, cloudUpsert)
 		}
-	}
-
-	// 计算云端已经删除但本地未删除且为修改 remove 差异
-	var cloudRemoves []string
-	if nil != cloudLatest {
-		for _, fileID := range latest.Files {
-			if !gulu.Str.Contains(fileID, cloudLatest.Files) && !repo.existFile(localUpserts, fileID) && !repo.existFile(cloudUpserts, fileID) {
-				cloudRemoves = append(cloudRemoves, fileID)
-			}
-		}
-	}
-	mergeRemoves, err = repo.getFiles(cloudRemoves)
-	if nil != err {
-		return
 	}
 
 	if 0 < len(mergeUpserts) || 0 < len(mergeRemoves) {
@@ -192,7 +187,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		}
 
 		// 创建快照
-		latest, err = repo.index("Merge index", context)
+		latest, err = repo.index("[Auto] Cloud sync merge", context)
 		if nil != err {
 			return
 		}
@@ -260,7 +255,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	return
 }
 
-func (repo *Repo) getCloudFiles(cloudDir string, fileIDs []string, userId, token, proxyURL, server string, context map[string]interface{}) (ret []*entity.File, err error) {
+func (repo *Repo) downloadCloudFiles(cloudDir string, fileIDs []string, userId, token, proxyURL, server string, context map[string]interface{}) (ret []*entity.File, err error) {
 	for _, fileID := range fileIDs {
 		var file *entity.File
 		file, err = repo.downloadCloudFile(cloudDir, fileID, userId, token, proxyURL, server, context)
