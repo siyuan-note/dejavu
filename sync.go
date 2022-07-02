@@ -45,8 +45,8 @@ const (
 type CloudInfo struct {
 	Dir       string // 仓库目录名
 	UserID    string // 用户 ID
+	Token     string // 用户身份鉴权令牌
 	LimitSize int64  // 存储空间限制
-	Token     string // 鉴权令牌
 	ProxyURL  string // 代理服务器 URL
 	Server    string // 云端接口端点
 }
