@@ -194,10 +194,15 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		}
 
 		// 创建快照
+		mergeStart := time.Now()
 		latest, err = repo.index("[Auto] Cloud sync merge", context)
 		if nil != err {
 			return
 		}
+		mergeElapsed := time.Since(mergeStart)
+		mergeMemo := fmt.Sprintf("[Auto] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
+		latest.Memo = mergeMemo
+		_ = repo.store.PutIndex(latest)
 		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 	}
 
