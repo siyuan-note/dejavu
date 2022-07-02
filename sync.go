@@ -148,7 +148,7 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 		}
 	}
 
-	// 计算本地相比上一个同步点的 upsert 差异
+	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
 	if nil != err {
 		return
@@ -157,14 +157,14 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 	if nil != err {
 		return
 	}
-	localUpserts := repo.DiffUpsert(latestFiles, latestSyncFiles)
+	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
 
 	// 计算云端相比本地的 upsert 和 remove 差异
 	cloudUpserts, mergeRemoves := repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 
-	// 计算能够无冲突合并的 upserts，冲突的文件以本地 upsert 为准
+	// 计算能够无冲突合并的 upsert，冲突的文件以本地 upsert 为准
 	for _, cloudUpsert := range cloudUpserts {
-		if !repo.existFile(localUpserts, cloudUpsert.ID) {
+		if !repo.existFile(localUpserts, cloudUpsert.ID) && !repo.existFile(localRemoves, cloudUpsert.ID) {
 			mergeUpserts = append(mergeUpserts, cloudUpsert)
 		}
 	}
