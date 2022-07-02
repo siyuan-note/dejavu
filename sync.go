@@ -164,14 +164,14 @@ func (repo *Repo) Sync(cloudDir, userId, token, proxyURL, server string, context
 
 	// 计算能够无冲突合并的 upsert，冲突的文件以本地 upsert 和 remove 为准
 	for _, cloudUpsert := range cloudUpserts {
-		if !repo.existFile(localUpserts, cloudUpsert.ID) && !repo.existFile(localRemoves, cloudUpsert.ID) {
+		if !repo.existFile(localUpserts, cloudUpsert) && !repo.existFile(localRemoves, cloudUpsert) {
 			mergeUpserts = append(mergeUpserts, cloudUpsert)
 		}
 	}
 
 	// 计算能够无冲突合并的 remove，冲突的文件以本地 upsert 为准
 	for _, cloudRemove := range cloudRemoves {
-		if !repo.existFile(localUpserts, cloudRemove.ID) {
+		if !repo.existFile(localUpserts, cloudRemove) {
 			mergeRemoves = append(mergeRemoves, cloudRemove)
 		}
 	}
@@ -317,9 +317,9 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	return
 }
 
-func (repo *Repo) existFile(files []*entity.File, id string) bool {
-	for _, file := range files {
-		if file.ID == id {
+func (repo *Repo) existFile(files []*entity.File, file *entity.File) bool {
+	for _, f := range files {
+		if f.ID == file.ID || f.Path == file.Path {
 			return true
 		}
 	}
