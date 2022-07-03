@@ -42,6 +42,10 @@ const (
 	EvtSyncBeforeUploadObject         = "repo.sync.beforeUploadObject"
 )
 
+var (
+	ErrSyncCloudStorageSizeExceeded = errors.New("cloud storage limit size exceeded")
+)
+
 type CloudInfo struct {
 	Dir       string // 仓库目录名
 	UserID    string // 用户 ID
@@ -81,7 +85,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	if cloudInfo.LimitSize <= cloudLatest.Size {
-		err = errors.New("cloud storage limit size exceeded")
+		err = ErrSyncCloudStorageSizeExceeded
 		return
 	}
 
