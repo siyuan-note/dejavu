@@ -158,12 +158,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 组装还原云端最新文件列表
-	var cloudLatestFiles []*entity.File
-	if nil != cloudLatest {
-		cloudLatestFiles, err = repo.getFiles(cloudLatest.Files)
-		if nil != err {
-			return
-		}
+	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
+	if nil != err {
+		return
 	}
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
@@ -178,7 +175,10 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
-	cloudUpserts, cloudRemoves := repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
+	var cloudUpserts, cloudRemoves []*entity.File
+	if "" != cloudLatest.ID {
+		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
+	}
 
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
 	// 冲突的文件以本地 upsert 和 remove 为准
@@ -259,7 +259,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 合并云端和本地索引
 	var allIndexes []*entity.Index
 	allIndexes = append(allIndexes, localIndexes...)
-	allIndexes = append(allIndexes, cloudLatest)
+	if "" != cloudLatest.ID {
+		allIndexes = append(allIndexes, cloudLatest)
+	}
 	allIndexes = removeDuplicatedIndexes(allIndexes)
 
 	// 按索引时间排序
@@ -273,7 +275,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		if i < len(allIndexes)-1 {
 			index.Parent = allIndexes[i+1].ID
 		} else {
-			if index.ID != latestSync.ID {
+			if index.ID != latestSync.ID && "" != latestSync.ID {
 				index.Parent = latestSync.ID
 			}
 		}
@@ -604,6 +606,11 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	}
 	hash := string(data)
 	ret, err = repo.store.GetIndex(hash)
+	if os.IsNotExist(err) {
+		err = nil
+		ret = &entity.Index{}
+		return
+	}
 	return
 }
 

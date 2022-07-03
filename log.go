@@ -91,6 +91,7 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		return
 	}
 
+	added := map[string]bool{}
 	var indexes []*entity.Index
 	for {
 		totalCount++
@@ -109,12 +110,15 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 		if page == pageCount {
 			indexes = append(indexes, index)
 		}
-
+		added[index.ID] = true
 		if "" == index.Parent {
 			break
 		}
 		index, _ = repo.store.GetIndex(index.Parent)
 		if nil == index {
+			break
+		}
+		if added[index.ID] {
 			break
 		}
 	}
