@@ -29,7 +29,7 @@ import (
 
 // Store 描述了存储库。
 type Store struct {
-	Path   string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\history\\objects\\
+	Path   string // 存储库文件夹的绝对路径，如：F:\\SiYuan\\repo\\
 	AesKey []byte
 
 	compressEncoder *zstd.Encoder

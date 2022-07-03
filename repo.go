@@ -36,7 +36,9 @@ import (
 // Repo 描述了逮虾户数据仓库。
 type Repo struct {
 	DataPath    string   // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
-	Path        string   // 仓库的绝对路径，如：F:\\SiYuan\\history\\
+	Path        string   // 仓库的绝对路径，如：F:\\SiYuan\\repo\\
+	HistoryPath string   // 数据历史文件夹的绝对路径，如：F:\\SiYuan\\history\\
+	TempPath    string   // 临时文件夹的绝对路径，如：F:\\SiYuan\\temp\\
 	IgnoreLines []string // 忽略配置文件内容行，是用 .gitignore 语法
 
 	store    *Store      // 仓库的存储
@@ -45,24 +47,27 @@ type Repo struct {
 }
 
 // NewRepo 创建一个新的仓库。
-func NewRepo(dataPath, repoPath string, aesKey []byte, ignoreLines []string) (ret *Repo, err error) {
+func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ignoreLines []string) (ret *Repo, err error) {
 	ret = &Repo{
-		DataPath: filepath.Clean(dataPath),
-		Path:     filepath.Clean(repoPath),
-		chunkPol: chunker.Pol(0x3DA3358B4DC173), // 固定多项式值
-		lock:     &sync.Mutex{},
+		DataPath:    filepath.Clean(dataPath),
+		Path:        filepath.Clean(repoPath),
+		HistoryPath: filepath.Clean(historyPath),
+		TempPath:    filepath.Clean(tempPath),
+		chunkPol:    chunker.Pol(0x3DA3358B4DC173), // 固定分块多项式值
+		lock:        &sync.Mutex{},
 	}
-	ret.DataPath = filepath.Clean(ret.DataPath)
 	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {
 		ret.DataPath += string(os.PathSeparator)
 	}
 	if !strings.HasSuffix(ret.Path, string(os.PathSeparator)) {
 		ret.Path += string(os.PathSeparator)
 	}
+	if !strings.HasSuffix(ret.HistoryPath, string(os.PathSeparator)) {
+		ret.HistoryPath += string(os.PathSeparator)
+	}
 	ignoreLines = gulu.Str.RemoveDuplicatedElem(ignoreLines)
 	ret.IgnoreLines = ignoreLines
-	storePath := filepath.Join(repoPath) + string(os.PathSeparator)
-	ret.store, err = NewStore(storePath, aesKey)
+	ret.store, err = NewStore(ret.Path, aesKey)
 	return
 }
 

@@ -46,6 +46,7 @@ const (
 var (
 	ErrSyncCloudStorageSizeExceeded = errors.New("cloud storage limit size exceeded")
 	ErrSyncNotFoundObject           = errors.New("not found object")
+	ErrSyncGenerateConflictHistory  = errors.New("generate conflict history failed")
 )
 
 type CloudInfo struct {
@@ -57,7 +58,7 @@ type CloudInfo struct {
 	Server    string // 云端接口端点
 }
 
-func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves []*entity.File, err error) {
+func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves, mergeConflicts []*entity.File, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -179,20 +180,52 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	cloudUpserts, cloudRemoves := repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 
-	// 计算能够无冲突合并的 upsert，冲突的文件以本地 upsert 和 remove 为准
+	// 计算冲突的 upsert 和无冲突能够合并的 upsert
+	// 冲突的文件以本地 upsert 和 remove 为准
 	for _, cloudUpsert := range cloudUpserts {
-		if !repo.existFile(localUpserts, cloudUpsert) && !repo.existFile(localRemoves, cloudUpsert) {
+		if repo.existDataFile(localUpserts, cloudUpsert) {
+			mergeConflicts = append(mergeConflicts, cloudUpsert)
+			continue
+		}
+
+		if !repo.existDataFile(localRemoves, cloudUpsert) {
 			mergeUpserts = append(mergeUpserts, cloudUpsert)
 		}
 	}
 
 	// 计算能够无冲突合并的 remove，冲突的文件以本地 upsert 为准
 	for _, cloudRemove := range cloudRemoves {
-		if !repo.existFile(localUpserts, cloudRemove) {
+		if !repo.existDataFile(localUpserts, cloudRemove) {
 			mergeRemoves = append(mergeRemoves, cloudRemove)
 		}
 	}
 
+	// 冲突文件复制到数据历史文件夹
+	if 0 < len(mergeConflicts) {
+		now := time.Now().Format("2006-01-02-150405")
+		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
+		for _, file := range mergeConflicts {
+			var checkoutTmp *entity.File
+			checkoutTmp, err = repo.store.GetFile(file.ID)
+			if nil != err {
+				return
+			}
+
+			err = repo.checkoutFile(checkoutTmp, temp, context)
+			if nil != err {
+				return
+			}
+
+			absPath := filepath.Join(temp, checkoutTmp.Path)
+			err = repo.genSyncHistory(now, file.Path, absPath)
+			if nil != err {
+				err = ErrSyncGenerateConflictHistory
+				return
+			}
+		}
+	}
+
+	// 数据变更后需要还原工作区并创建 merge 快照
 	if 0 < len(mergeUpserts) || 0 < len(mergeRemoves) {
 		if 0 < len(mergeUpserts) {
 			// 迁出到工作区
@@ -210,7 +243,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			}
 		}
 
-		// 创建快照
+		// 创建 merge 快照
 		mergeStart := time.Now()
 		latest, err = repo.index("[Auto] Cloud sync merge", context)
 		if nil != err {
@@ -261,6 +294,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
+	// 以合并后的第一个索引作为 latest
 	latest = allIndexes[0]
 
 	// 更新本地 latest
@@ -305,37 +339,45 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
 	for _, file := range files {
-		var data []byte
-		for _, c := range file.Chunks {
-			chunk, getErr := repo.store.GetChunk(c)
-			if nil != getErr {
-				err = getErr
-				return
-			}
-			data = append(data, chunk.Data...)
-		}
-
-		absPath := filepath.Join(repo.DataPath, file.Path)
-		dir := filepath.Dir(absPath)
-
-		if err = os.MkdirAll(dir, 0755); nil != err {
+		err = repo.checkoutFile(file, repo.DataPath, context)
+		if nil != err {
 			return
 		}
-
-		if err = filelock.NoLockFileWrite(absPath, data); nil != err {
-			return
-		}
-
-		updated := time.UnixMilli(file.Updated)
-		if err = os.Chtimes(absPath, updated, updated); nil != err {
-			return
-		}
-		eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
 	}
 	return
 }
 
-func (repo *Repo) existFile(files []*entity.File, file *entity.File) bool {
+func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context map[string]interface{}) (err error) {
+	var data []byte
+	for _, c := range file.Chunks {
+		chunk, getErr := repo.store.GetChunk(c)
+		if nil != getErr {
+			err = getErr
+			return
+		}
+		data = append(data, chunk.Data...)
+	}
+
+	absPath := filepath.Join(checkoutDir, file.Path)
+	dir := filepath.Dir(absPath)
+
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return
+	}
+
+	if err = filelock.NoLockFileWrite(absPath, data); nil != err {
+		return
+	}
+
+	updated := time.UnixMilli(file.Updated)
+	if err = os.Chtimes(absPath, updated, updated); nil != err {
+		return
+	}
+	eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
+	return
+}
+
+func (repo *Repo) existDataFile(files []*entity.File, file *entity.File) bool {
 	for _, f := range files {
 		if f.ID == file.ID || f.Path == file.Path {
 			return true
@@ -728,6 +770,25 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	}
 
 	eventbus.Publish(EvtSyncAfterDownloadCloudLatest, context, index)
+	return
+}
+
+func (repo *Repo) genSyncHistory(now, relPath, absPath string) (err error) {
+	historyDir, err := repo.getHistoryDirNow(now, "sync")
+	if nil != err {
+		return
+	}
+
+	historyPath := filepath.Join(historyDir, relPath)
+	if err = gulu.File.Copy(absPath, historyPath); nil != err {
+		return
+	}
+	return
+}
+
+func (repo *Repo) getHistoryDirNow(now, suffix string) (ret string, err error) {
+	ret = filepath.Join(repo.HistoryPath, now+"-"+suffix)
+	err = os.MkdirAll(ret, 0755)
 	return
 }
 
