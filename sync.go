@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,15 +36,16 @@ import (
 )
 
 const (
-	EvtSyncBeforeDownloadCloudIndexes = "repo.sync.beforeDownloadCloudIndexes"
-	EvtSyncAfterDownloadCloudIndexes  = "repo.sync.afterDownloadCloudIndexes"
-	EvtSyncBeforeDownloadCloudFile    = "repo.sync.beforeDownloadCloudFile"
-	EvtSyncBeforeDownloadCloudChunk   = "repo.sync.beforeDownloadCloudChunk"
-	EvtSyncBeforeUploadObject         = "repo.sync.beforeUploadObject"
+	EvtSyncBeforeDownloadCloudLatest = "repo.sync.beforeDownloadCloudLatest"
+	EvtSyncAfterDownloadCloudLatest  = "repo.sync.afterDownloadCloudLatest"
+	EvtSyncBeforeDownloadCloudFile   = "repo.sync.beforeDownloadCloudFile"
+	EvtSyncBeforeDownloadCloudChunk  = "repo.sync.beforeDownloadCloudChunk"
+	EvtSyncBeforeUploadObject        = "repo.sync.beforeUploadObject"
 )
 
 var (
 	ErrSyncCloudStorageSizeExceeded = errors.New("cloud storage limit size exceeded")
+	ErrSyncNotFoundObject           = errors.New("not found object")
 )
 
 type CloudInfo struct {
@@ -71,17 +73,17 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
-	// 从云端获取索引列表
-	cloudIndexes, err := repo.downloadCloudIndexes(latestSync.ID, cloudInfo, context)
-	var cloudLatest *entity.Index
+	// 从云端获取最新索引
+	cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
 	if nil != err {
-		return
-	}
-	if 0 < len(cloudIndexes) {
-		if cloudLatest = cloudIndexes[0]; cloudLatest.ID == latest.ID {
-			// 数据一致，直接返回
+		if !errors.Is(err, ErrSyncNotFoundObject) {
 			return
 		}
+	}
+
+	if cloudLatest.ID == latest.ID {
+		// 数据一致，直接返回
+		return
 	}
 
 	if cloudInfo.LimitSize <= cloudLatest.Size {
@@ -89,11 +91,8 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
-	// 从索引中得到去重后的文件列表
-	cloudFileIDs := repo.getFileIDs(cloudIndexes)
-
 	// 计算本地缺失的文件
-	fetchFileIDs, err := repo.localNotFoundFiles(cloudFileIDs)
+	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)
 	if nil != err {
 		return
 	}
@@ -114,7 +113,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 计算待上传云端的本地变更文件
-	upsertFiles, err := repo.localUpsertFiles(localIndexes, cloudFileIDs)
+	upsertFiles, err := repo.localUpsertFiles(localIndexes, cloudLatest.Files)
 	if nil != err {
 		return
 	}
@@ -224,34 +223,30 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 	}
 
+	// 合并云端和本地索引
 	var allIndexes []*entity.Index
 	allIndexes = append(allIndexes, localIndexes...)
-	if 0 < len(cloudIndexes) {
-		// 合并云端和本地索引
-		allIndexes = append(allIndexes, cloudIndexes...)
+	allIndexes = append(allIndexes, cloudLatest)
+	allIndexes = removeDuplicatedIndexes(allIndexes)
 
-		// 去重
-		allIndexes = removeDuplicatedIndexes(allIndexes)
+	// 按索引时间排序
+	sort.Slice(allIndexes, func(i, j int) bool {
+		return allIndexes[i].Created >= allIndexes[j].Created
+	})
 
-		// 按索引时间排序
-		sort.Slice(allIndexes, func(i, j int) bool {
-			return allIndexes[i].Created >= allIndexes[j].Created
-		})
-
-		// 重新排列索引入库
-		for i := 0; i < len(allIndexes); i++ {
-			index := allIndexes[i]
-			if i < len(allIndexes)-1 {
-				index.Parent = allIndexes[i+1].ID
-			} else {
-				if index.ID != latestSync.ID {
-					index.Parent = latestSync.ID
-				}
+	// 重新排列索引入库
+	for i := 0; i < len(allIndexes); i++ {
+		index := allIndexes[i]
+		if i < len(allIndexes)-1 {
+			index.Parent = allIndexes[i+1].ID
+		} else {
+			if index.ID != latestSync.ID {
+				index.Parent = latestSync.ID
 			}
-			err = repo.store.PutIndex(index)
-			if nil != err {
-				return
-			}
+		}
+		err = repo.store.PutIndex(index)
+		if nil != err {
+			return
 		}
 	}
 
@@ -502,14 +497,6 @@ func (repo *Repo) getChunks(files []*entity.File) (chunkIDs []string) {
 	return
 }
 
-func (repo *Repo) getFileIDs(indexes []*entity.Index) (fileIDs []string) {
-	for _, index := range indexes {
-		fileIDs = append(fileIDs, index.Files...)
-	}
-	fileIDs = gulu.Str.RemoveDuplicatedElem(fileIDs)
-	return
-}
-
 func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs []string) (ret []string, err error) {
 	chunks := map[string]bool{}
 	for _, file := range localFiles {
@@ -641,7 +628,8 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context map[string]interface{}) (ret *entity.Chunk, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudChunk, context, id)
 
-	data, err := repo.downloadCloudObject(id, cloudInfo)
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
+	data, err := repo.downloadCloudObject(key, cloudInfo)
 	if nil != err {
 		return
 	}
@@ -652,7 +640,8 @@ func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context ma
 func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map[string]interface{}) (ret *entity.File, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudFile, context, id)
 
-	data, err := repo.downloadCloudObject(id, cloudInfo)
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
+	data, err := repo.downloadCloudObject(key, cloudInfo)
 	if nil != err {
 		return
 	}
@@ -661,11 +650,11 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	return
 }
 
-func (repo *Repo) downloadCloudObject(id string, cloudInfo *CloudInfo) (ret []byte, err error) {
+func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []byte, err error) {
 	var result map[string]interface{}
-	resp, err := httpclient.NewCloudRequest(cloudInfo.Server).
+	resp, err := httpclient.NewCloudRequest(cloudInfo.ProxyURL).
 		SetResult(&result).
-		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "id": id}).
+		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "key": key}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoObjectURL?uid=" + cloudInfo.UserID)
 	if nil != err {
 		err = errors.New("request object url failed: " + err.Error())
@@ -697,7 +686,7 @@ func (repo *Repo) downloadCloudObject(id string, cloudInfo *CloudInfo) (ret []by
 	if 200 != resp.StatusCode {
 		err = errors.New(fmt.Sprintf("download object failed [%d]", resp.StatusCode))
 		if 404 == resp.StatusCode {
-			err = errors.New("not found object")
+			err = ErrSyncNotFoundObject
 		}
 		return
 	}
@@ -708,48 +697,37 @@ func (repo *Repo) downloadCloudObject(id string, cloudInfo *CloudInfo) (ret []by
 		return
 	}
 
-	ret, err = repo.store.decodeData(ret)
-	if nil != err {
-		return
+	if strings.Contains(key, "objects") {
+		ret, err = repo.store.decodeData(ret)
+		if nil != err {
+			return
+		}
+	} else if strings.Contains(key, "indexes") {
+		ret, err = repo.store.compressDecoder.DecodeAll(ret, nil)
 	}
 	return
 }
 
-func (repo *Repo) downloadCloudIndexes(latestSync string, cloudInfo *CloudInfo, context map[string]interface{}) (indexes []*entity.Index, err error) {
-	eventbus.Publish(EvtSyncBeforeDownloadCloudIndexes, context, latestSync)
+func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]interface{}) (index *entity.Index, err error) {
+	eventbus.Publish(EvtSyncBeforeDownloadCloudLatest, context)
+	index = &entity.Index{}
 
-	var result map[string]interface{}
-	resp, err := httpclient.NewCloudRequest(cloudInfo.ProxyURL).
-		SetResult(&result).
-		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "latestSync": latestSync}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + cloudInfo.UserID)
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "latest")
+	latestID, err := repo.downloadCloudObject(key, cloudInfo)
+	if nil != err {
+		return
+	}
+	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", string(latestID))
+	data, err := repo.downloadCloudObject(key, cloudInfo)
+	if nil != err {
+		return
+	}
+	err = gulu.JSON.UnmarshalJSON(data, index)
 	if nil != err {
 		return
 	}
 
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = errors.New("account authentication failed, please login again")
-			return
-		}
-		err = errors.New("request repo index failed")
-		return
-	}
-
-	code := result["code"].(float64)
-	if 0 != code {
-		err = errors.New("request object url failed: " + result["msg"].(string))
-		return
-	}
-
-	data := result["data"].(map[string]interface{})
-	dataIndexes := data["indexes"].([]interface{})
-	bytes, err := gulu.JSON.MarshalJSON(dataIndexes)
-	if nil != err {
-		return
-	}
-	err = gulu.JSON.UnmarshalJSON(bytes, &indexes)
-	eventbus.Publish(EvtSyncAfterDownloadCloudIndexes, context, indexes)
+	eventbus.Publish(EvtSyncAfterDownloadCloudLatest, context, index)
 	return
 }
 
