@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +47,7 @@ var (
 	ErrSyncCloudStorageSizeExceeded = errors.New("cloud storage limit size exceeded")
 	ErrSyncNotFoundObject           = errors.New("not found object")
 	ErrSyncGenerateConflictHistory  = errors.New("generate conflict history failed")
+	ErrAuthFailed                   = errors.New("account authentication failed, please login again")
 )
 
 type CloudInfo struct {
@@ -703,10 +705,10 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = errors.New("account authentication failed, please login again")
+			err = ErrAuthFailed
 			return
 		}
-		err = errors.New("request repo upload token failed")
+		err = errors.New(fmt.Sprintf("request repo upload token failed [%d]", resp.StatusCode))
 		return
 	}
 
@@ -761,10 +763,10 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = errors.New("account authentication failed, please login again")
+			err = ErrAuthFailed
 			return
 		}
-		err = errors.New("request object url failed")
+		err = errors.New(fmt.Sprintf("request object url failed [%d]", resp.StatusCode))
 		return
 	}
 
@@ -849,13 +851,42 @@ func (repo *Repo) getHistoryDirNow(now, suffix string) (ret string, err error) {
 	return
 }
 
-func removeDuplicatedIndexes(indexes []*entity.Index) (ret []*entity.Index) {
-	allKeys := make(map[string]bool)
-	for _, item := range indexes {
-		if _, value := allKeys[item.ID]; !value {
-			allKeys[item.ID] = true
-			ret = append(ret, item)
-		}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// 以下部分是一些仓库管理接口
+
+func GetCloudRepos(cloudInfo *CloudInfo) (dirs []map[string]interface{}, size int64, err error) {
+	result := map[string]interface{}{}
+	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	resp, err := request.
+		SetBody(map[string]interface{}{"token": cloudInfo.Token}).
+		SetResult(&result).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepos?uid=" + cloudInfo.UserID)
+	if nil != err {
+		return
 	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("request cloud repo list failed [%d]", resp.StatusCode))
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New("request cloud repo list failed: " + result["msg"].(string))
+		return
+	}
+
+	data := result["data"].(map[string]interface{})
+	retRepos := data["repos"].([]interface{})
+	for _, d := range retRepos {
+		dirs = append(dirs, d.(map[string]interface{}))
+	}
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i]["name"].(string) < dirs[j]["name"].(string) })
+	size = int64(data["size"].(float64))
 	return
 }
