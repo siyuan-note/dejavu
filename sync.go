@@ -57,7 +57,7 @@ type CloudInfo struct {
 	Server    string // 云端接口端点
 }
 
-func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves, mergeConflicts []*entity.File, err error) {
+func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves, mergeConflicts []*entity.File, uploadFileCount, uploadChunkCount, downloadFileCount, downloadChunkCount int, uploadBytes, downloadBytes int64, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -74,12 +74,14 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 从云端获取最新索引
-	cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
+	length, cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
 	if nil != err {
 		if !errors.Is(err, ErrSyncNotFoundObject) {
 			return
 		}
 	}
+	downloadFileCount++
+	downloadBytes += length
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
@@ -125,16 +127,20 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 上传分块
-	err = repo.uploadChunks(upsertChunkIDs, cloudInfo, context)
+	length, err = repo.uploadChunks(upsertChunkIDs, cloudInfo, context)
 	if nil != err {
 		return
 	}
+	uploadChunkCount = len(upsertFiles)
+	uploadBytes += length
 
 	// 上传文件
-	err = repo.uploadFiles(upsertFiles, cloudInfo, context)
+	length, err = repo.uploadFiles(upsertFiles, cloudInfo, context)
 	if nil != err {
 		return
 	}
+	uploadFileCount = len(upsertFiles)
+	uploadBytes += length
 
 	// 从云端获取分块并入库
 	for _, chunkID := range fetchChunkIDs {
@@ -147,7 +153,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		if err = repo.store.PutChunk(chunk); nil != err {
 			return
 		}
+		downloadBytes += int64(len(chunk.Data))
 	}
+	downloadChunkCount = len(fetchChunkIDs)
 
 	// 云端缺失文件入库
 	for _, file := range fetchedFiles {
@@ -155,6 +163,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			return
 		}
 	}
+	downloadFileCount = len(fetchedFiles)
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
@@ -256,10 +265,11 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 上传索引
-	err = repo.uploadIndexes(localIndexes, cloudInfo, context)
+	length, err = repo.uploadIndexes(localIndexes, cloudInfo, context)
 	if nil != err {
 		return
 	}
+	uploadBytes += length
 
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
@@ -268,7 +278,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 更新云端 latest
-	err = repo.uploadObject(path.Join("refs", "latest"), cloudInfo, context)
+	length, err = repo.uploadObject(path.Join("refs", "latest"), cloudInfo, context)
 	if nil != err {
 		return
 	}
@@ -362,7 +372,7 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 	return
 }
 
-func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
 	poolSize := 4
@@ -376,10 +386,12 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, c
 		}
 
 		indexID := arg.(string)
-		uploadErr = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, context)
+		var length int64
+		length, uploadErr = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, context)
 		if nil != uploadErr {
 			return
 		}
+		uploadBytes += length
 	})
 	if nil != err {
 		return
@@ -397,7 +409,7 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, c
 	return
 }
 
-func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
 	waitGroup := &sync.WaitGroup{}
 	poolSize := 4
 	if poolSize > len(upsertFiles) {
@@ -411,10 +423,12 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		err = repo.uploadObject(filePath, cloudInfo, context)
+		var length int64
+		length, err = repo.uploadObject(filePath, cloudInfo, context)
 		if nil != err {
 			return
 		}
+		uploadBytes += length
 	})
 	if nil != err {
 		return
@@ -431,7 +445,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 	return
 }
 
-func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
 	waitGroup := &sync.WaitGroup{}
 	poolSize := 4
 	if poolSize > len(upsertChunkIDs) {
@@ -445,10 +459,12 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		err = repo.uploadObject(filePath, cloudInfo, context)
+		var length int64
+		length, err = repo.uploadObject(filePath, cloudInfo, context)
 		if nil != err {
 			return
 		}
+		uploadBytes += length
 	})
 	if nil != err {
 		return
@@ -576,7 +592,7 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	return
 }
 
-func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, ctx map[string]interface{}) (err error) {
+func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, ctx map[string]interface{}) (length int64, err error) {
 	eventbus.Publish(EvtSyncBeforeUploadObject, ctx, filePath)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
@@ -586,6 +602,12 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, ctx map[st
 	}
 
 	absFilePath := filepath.Join(repo.Path, filePath)
+	info, err := os.Stat(absFilePath)
+	if nil != err {
+		return
+	}
+	length = info.Size()
+
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
@@ -719,7 +741,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 	return
 }
 
-func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]interface{}) (index *entity.Index, err error) {
+func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudLatest, context)
 	index = &entity.Index{}
 
@@ -737,6 +759,7 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	if nil != err {
 		return
 	}
+	downloadBytes += int64(len(data))
 
 	eventbus.Publish(EvtSyncAfterDownloadCloudLatest, context, index)
 	return
