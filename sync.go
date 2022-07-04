@@ -99,11 +99,13 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
-	// 从云端下载缺失文件
-	fetchedFiles, err := repo.downloadCloudFiles(fetchFileIDs, cloudInfo, context)
+	// 从云端下载缺失文件并入库
+	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
 	if nil != err {
 		return
 	}
+	downloadBytes += length
+	downloadFileCount = len(fetchFileIDs)
 
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(fetchedFiles)
@@ -143,27 +145,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	uploadBytes += length
 
 	// 从云端获取分块并入库
-	for _, chunkID := range fetchChunkIDs {
-		var chunk *entity.Chunk
-		chunk, err = repo.downloadCloudChunk(chunkID, cloudInfo, context)
-		if nil != err {
-			return
-		}
-
-		if err = repo.store.PutChunk(chunk); nil != err {
-			return
-		}
-		downloadBytes += int64(len(chunk.Data))
-	}
+	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
+	downloadBytes += length
 	downloadChunkCount = len(fetchChunkIDs)
-
-	// 云端缺失文件入库
-	for _, file := range fetchedFiles {
-		if err = repo.store.PutFile(file); nil != err {
-			return
-		}
-	}
-	downloadFileCount = len(fetchedFiles)
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
@@ -288,14 +272,93 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	return
 }
 
-func (repo *Repo) downloadCloudFiles(fileIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (ret []*entity.File, err error) {
-	for _, fileID := range fileIDs {
-		var file *entity.File
-		file, err = repo.downloadCloudFile(fileID, cloudInfo, context)
-		if nil != err {
+func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, err error) {
+	waitGroup := &sync.WaitGroup{}
+	var downloadErr error
+	poolSize := 4
+	if poolSize > len(chunkIDs) {
+		poolSize = len(chunkIDs)
+	}
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != downloadErr {
+			return // 快速失败
+		}
+
+		chunkID := arg.(string)
+		var length int64
+		var chunk *entity.Chunk
+		length, chunk, downloadErr = repo.downloadCloudChunk(chunkID, cloudInfo, context)
+		if nil != downloadErr {
 			return
 		}
+		if err = repo.store.PutChunk(chunk); nil != err {
+			return
+		}
+		downloadBytes += length
+	})
+	if nil != err {
+		return
+	}
+	for _, chunkID := range chunkIDs {
+		waitGroup.Add(1)
+		if err = p.Invoke(chunkID); nil != err {
+			return
+		}
+	}
+	waitGroup.Wait()
+	p.Release()
+	if nil != downloadErr {
+		err = downloadErr
+		return
+	}
+	return
+}
+
+func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, ret []*entity.File, err error) {
+	lock := &sync.Mutex{}
+	waitGroup := &sync.WaitGroup{}
+	var downloadErr error
+	poolSize := 4
+	if poolSize > len(fileIDs) {
+		poolSize = len(fileIDs)
+	}
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != downloadErr {
+			return // 快速失败
+		}
+
+		fileID := arg.(string)
+		var length int64
+		var file *entity.File
+		length, file, downloadErr = repo.downloadCloudFile(fileID, cloudInfo, context)
+		if nil != downloadErr {
+			return
+		}
+		if err = repo.store.PutFile(file); nil != err {
+			return
+		}
+		downloadBytes += length
+
+		lock.Lock()
 		ret = append(ret, file)
+		lock.Unlock()
+	})
+	if nil != err {
+		return
+	}
+	for _, fileID := range fileIDs {
+		waitGroup.Add(1)
+		if err = p.Invoke(fileID); nil != err {
+			return
+		}
+	}
+	waitGroup.Wait()
+	p.Release()
+	if nil != downloadErr {
+		err = downloadErr
+		return
 	}
 	return
 }
@@ -658,7 +721,7 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 	return
 }
 
-func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context map[string]interface{}) (ret *entity.Chunk, err error) {
+func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudChunk, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
@@ -666,11 +729,12 @@ func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context ma
 	if nil != err {
 		return
 	}
+	length = int64(len(data))
 	ret = &entity.Chunk{ID: id, Data: data}
 	return
 }
 
-func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map[string]interface{}) (ret *entity.File, err error) {
+func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map[string]interface{}) (length int64, ret *entity.File, err error) {
 	eventbus.Publish(EvtSyncBeforeDownloadCloudFile, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
@@ -678,6 +742,7 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	if nil != err {
 		return
 	}
+	length = int64(len(data))
 	ret = &entity.File{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	return
