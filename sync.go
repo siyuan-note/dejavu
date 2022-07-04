@@ -853,7 +853,57 @@ func (repo *Repo) getHistoryDirNow(now, suffix string) (ret string, err error) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// 以下部分是一些仓库管理接口
+// 以下是仓库管理接口
+
+func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
+	result := map[string]interface{}{}
+	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepo")
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("remove cloud repo failed [%d]", resp.StatusCode))
+		return
+	}
+	return
+}
+
+func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
+	result := map[string]interface{}{}
+	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/createRepo")
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("create cloud repo failed [%d]", resp.StatusCode))
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New(fmt.Sprintf("create cloud repo failed: %s", result["msg"]))
+		return
+	}
+	return
+}
 
 func GetCloudRepos(cloudInfo *CloudInfo) (dirs []map[string]interface{}, size int64, err error) {
 	result := map[string]interface{}{}
