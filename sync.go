@@ -21,7 +21,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -256,48 +255,11 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 	}
 
-	// 合并云端和本地索引
-	var allIndexes []*entity.Index
-	allIndexes = append(allIndexes, localIndexes...)
-	if "" != cloudLatest.ID {
-		allIndexes = append(allIndexes, cloudLatest)
-	}
-	allIndexes = removeDuplicatedIndexes(allIndexes)
-
-	// 按索引时间排序
-	sort.Slice(allIndexes, func(i, j int) bool {
-		return allIndexes[i].Created >= allIndexes[j].Created
-	})
-
-	// 重新排列索引入库
-	for i := 0; i < len(allIndexes); i++ {
-		index := allIndexes[i]
-		if i < len(allIndexes)-1 {
-			index.Parent = allIndexes[i+1].ID
-		} else {
-			if index.ID != latestSync.ID && "" != latestSync.ID {
-				index.Parent = latestSync.ID
-			}
-		}
-		err = repo.store.PutIndex(index)
-		if nil != err {
-			return
-		}
-	}
-
 	// 上传索引
-	err = repo.uploadIndexes(allIndexes, cloudInfo, context)
+	err = repo.uploadIndexes(localIndexes, cloudInfo, context)
 	if nil != err {
 		return
 	}
-
-	if 1 > len(allIndexes) {
-		// 意外情况下没有本地和云端索引
-		return
-	}
-
-	// 以合并后的第一个索引作为 latest
-	latest = allIndexes[0]
 
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
