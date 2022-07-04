@@ -856,10 +856,8 @@ func (repo *Repo) getHistoryDirNow(now, suffix string) (ret string, err error) {
 // 以下是仓库管理接口
 
 func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
-	result := map[string]interface{}{}
 	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
 	resp, err := request.
-		SetResult(&result).
 		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepo")
 	if nil != err {
