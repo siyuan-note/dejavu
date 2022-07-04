@@ -55,8 +55,8 @@ github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676 h1:QB9TjJQF
 github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676/go.mod h1:H8fyqqAbp9XreANjeSbc72zEdFfKTXYN34tc1TjZwtw=
 github.com/siyuan-note/eventbus v0.0.0-20220624162334-ca7c06dc771f h1:JMobMNZ7AqaKKyEK+WeWFhix/2TDQXgPZDajU00IybU=
 github.com/siyuan-note/eventbus v0.0.0-20220624162334-ca7c06dc771f/go.mod h1:Sqo4FYX5lAXu7gWkbEdJF0e6P57tNNVV4WDKYDctokI=
-github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee h1:8nBBJKHbXuMF2dWKUKsrnnFblgeNBfPjLgVm0aDas/s=
-github.com/siyuan-note/filelock v0.0.0-20220616063212-74cfba0754ee/go.mod h1:c4vwvWRrnfa75OXiO21K/76BFRJ4cFITKNoVs5lFdwc=
+github.com/siyuan-note/filelock v0.0.0-20220704075450-dcde55e12071 h1:EHz+Mn7VQFDeKLfVrajovjWnF5O7RzrzgJwrXSaKNZw=
+github.com/siyuan-note/filelock v0.0.0-20220704075450-dcde55e12071/go.mod h1:c4vwvWRrnfa75OXiO21K/76BFRJ4cFITKNoVs5lFdwc=
 github.com/siyuan-note/httpclient v0.0.0-20220622170705-004622a8138d h1:zMkahXrTDPhBUg9W7HkGlYP6WY5AkQoJqj7Cmk++qoU=
 github.com/siyuan-note/httpclient v0.0.0-20220622170705-004622a8138d/go.mod h1:W/5hysNTpI8a52hSMzNHvf29tbM+VmD/l+c2wvkqlL8=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
@@ -87,8 +87,8 @@ golang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20211020174200-9d6173849985/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.0.0-20220624220833-87e55d714810 h1:rHZQSjJdAI4Xf5Qzeh2bBc5YJIkPFVM6oDtMFYmgws0=
-golang.org/x/sys v0.0.0-20220624220833-87e55d714810/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20220702020025-31831981b65f h1:xdsejrW/0Wf2diT5CPp3XmKUNbr7Xvw8kYilQ+6qjRY=
+golang.org/x/sys v0.0.0-20220702020025-31831981b65f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/text v0.3.2/go.mod h1:bEr9sfX3Q8Zfm5fL9x+3itogRgK3+ptLWKqgva+5dAk=
 golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
