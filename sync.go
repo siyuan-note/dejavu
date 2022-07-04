@@ -57,7 +57,7 @@ type CloudInfo struct {
 	Server    string // 云端接口端点
 }
 
-func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves, mergeConflicts []*entity.File, uploadFileCount, uploadChunkCount, downloadFileCount, downloadChunkCount int, uploadBytes, downloadBytes int64, err error) {
+func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves, mergeConflicts []*entity.File, uploadFileCount, downloadFileCount, uploadChunkCount, downloadChunkCount int, uploadBytes, downloadBytes int64, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -131,7 +131,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		return
 	}
-	uploadChunkCount = len(upsertFiles)
+	uploadChunkCount = len(upsertChunkIDs)
 	uploadBytes += length
 
 	// 上传文件
