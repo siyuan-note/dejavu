@@ -18,7 +18,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -147,12 +146,8 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	}
 
 	waitGroup := &sync.WaitGroup{}
-	poolSize := runtime.NumCPU()
-	if 2 < poolSize {
-		poolSize = 2
-	}
 	var errs []error
-	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+	p, _ := ants.NewPoolWithFunc(2, func(arg interface{}) {
 		defer waitGroup.Done()
 		file := arg.(*entity.File)
 		file, getErr := repo.store.GetFile(file.ID)
@@ -278,11 +273,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
-	poolSize := runtime.NumCPU()
-	if 2 < poolSize {
-		poolSize = 2
-	}
-	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+	p, _ := ants.NewPoolWithFunc(2, func(arg interface{}) {
 		defer waitGroup.Done()
 		var putErr error
 		switch obj := arg.(type) {
