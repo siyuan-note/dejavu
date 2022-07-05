@@ -90,7 +90,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
-	if cloudInfo.LimitSize <= cloudLatest.Size {
+	if cloudInfo.LimitSize <= cloudLatest.Size || cloudLatest.Size <= latest.Size {
 		err = ErrSyncCloudStorageSizeExceeded
 		return
 	}
@@ -903,7 +903,7 @@ func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 	return
 }
 
-func GetCloudRepos(cloudInfo *CloudInfo) (dirs []map[string]interface{}, size int64, err error) {
+func GetCloudRepos(cloudInfo *CloudInfo) (repos []map[string]interface{}, size int64, err error) {
 	result := map[string]interface{}{}
 	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
 	resp, err := request.
@@ -932,9 +932,9 @@ func GetCloudRepos(cloudInfo *CloudInfo) (dirs []map[string]interface{}, size in
 	data := result["data"].(map[string]interface{})
 	retRepos := data["repos"].([]interface{})
 	for _, d := range retRepos {
-		dirs = append(dirs, d.(map[string]interface{}))
+		repos = append(repos, d.(map[string]interface{}))
 	}
-	sort.Slice(dirs, func(i, j int) bool { return dirs[i]["name"].(string) < dirs[j]["name"].(string) })
+	sort.Slice(repos, func(i, j int) bool { return repos[i]["name"].(string) < repos[j]["name"].(string) })
 	size = int64(data["size"].(float64))
 	return
 }
