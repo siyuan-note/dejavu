@@ -64,6 +64,12 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	downloadBytes += length
 	downloadChunkCount = len(fetchChunkIDs)
 
+	// 更新本地索引
+	err = repo.store.PutIndex(index)
+	if nil != err {
+		return
+	}
+
 	// 更新本地标签
 	err = repo.AddTag(id, tag)
 	if nil != err {
