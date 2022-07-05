@@ -89,10 +89,13 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 			continue
 		}
 		var data []byte
-		data, err = os.ReadFile(filepath.Join(tags, entry.Name()))
+		name := entry.Name()
+		data, err = os.ReadFile(filepath.Join(tags, name))
 		if nil != err {
 			return
 		}
+		info, _ := os.Stat(filepath.Join(tags, name))
+		updated := info.ModTime().Format("2006-01-02 15:04:05")
 		id := string(data)
 		if 40 != len(id) {
 			continue
@@ -108,7 +111,8 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 		if nil != err {
 			return
 		}
-
+		log.Tag = name
+		log.HTagUpdated = updated
 		ret = append(ret, log)
 	}
 	return

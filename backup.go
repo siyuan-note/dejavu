@@ -125,6 +125,11 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadFileCount = len(uploadFiles)
 	uploadBytes += length
 
+	// 上传索引
+	length, err = repo.uploadIndexes([]*entity.Index{index}, cloudInfo, context)
+	uploadFileCount++
+	uploadBytes += length
+
 	// 上传标签
 	length, err = repo.uploadObject(path.Join("refs", "tags", tag), cloudInfo, context)
 	uploadFileCount++
@@ -133,6 +138,10 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 }
 
 func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *CloudInfo) (chunks []string, err error) {
+	if 1 > len(uploadChunkIDs) {
+		return
+	}
+
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
 	resp, err := request.

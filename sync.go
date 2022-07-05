@@ -437,6 +437,10 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 }
 
 func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
+	if 1 > len(indexes) {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
 	poolSize := 4
@@ -474,6 +478,10 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, c
 }
 
 func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
+	if 1 > len(upsertFiles) {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
 	poolSize := 4
 	if poolSize > len(upsertFiles) {
@@ -510,6 +518,10 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 }
 
 func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
+	if 1 > len(upsertChunkIDs) {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
 	poolSize := 4
 	if poolSize > len(upsertChunkIDs) {
