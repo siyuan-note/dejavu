@@ -24,7 +24,7 @@ import (
 	"github.com/siyuan-note/httpclient"
 )
 
-func (repo *Repo) Recover(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
+func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -69,13 +69,10 @@ func (repo *Repo) Recover(tag, id string, cloudInfo *CloudInfo, context map[stri
 	if nil != err {
 		return
 	}
-
-	// 恢复到工作区
-	_, _, err = repo.Checkout(id, context)
 	return
 }
 
-func (repo *Repo) Backup(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
+func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
