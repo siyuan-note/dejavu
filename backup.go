@@ -17,13 +17,65 @@ package dejavu
 import (
 	"errors"
 	"fmt"
+	"path"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/httpclient"
 )
 
-func (repo *Repo) Backup(id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
+func (repo *Repo) Recover(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
+	repo.lock.Lock()
+	defer repo.lock.Unlock()
+
+	// 从云端下载标签指向的索引
+	length, index, err := repo.downloadCloudIndex(id, cloudInfo, context)
+	if nil != err {
+		return
+	}
+	downloadFileCount++
+	downloadBytes += length
+
+	// 计算本地缺失的文件
+	fetchFileIDs, err := repo.localNotFoundFiles(index.Files)
+	if nil != err {
+		return
+	}
+
+	// 从云端下载缺失文件并入库
+	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
+	if nil != err {
+		return
+	}
+	downloadBytes += length
+	downloadFileCount = len(fetchFileIDs)
+
+	// 从文件列表中得到去重后的分块列表
+	cloudChunkIDs := repo.getChunks(fetchedFiles)
+
+	// 计算本地缺失的分块
+	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
+	if nil != err {
+		return
+	}
+
+	// 从云端获取分块并入库
+	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
+	downloadBytes += length
+	downloadChunkCount = len(fetchChunkIDs)
+
+	// 更新本地标签
+	err = repo.AddTag(id, tag)
+	if nil != err {
+		return
+	}
+
+	// 恢复到工作区
+	_, _, err = repo.Checkout(id, context)
+	return
+}
+
+func (repo *Repo) Backup(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
@@ -76,7 +128,10 @@ func (repo *Repo) Backup(id string, cloudInfo *CloudInfo, context map[string]int
 	uploadFileCount = len(uploadFiles)
 	uploadBytes += length
 
-	// TODO: 上传 Tags
+	// 上传标签
+	length, err = repo.uploadObject(path.Join("refs", "tags", tag), cloudInfo, context)
+	uploadFileCount++
+	uploadBytes += length
 	return
 }
 
