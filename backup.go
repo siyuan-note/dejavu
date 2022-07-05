@@ -81,6 +81,11 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 		return
 	}
 
+	if cloudInfo.LimitSize <= index.Size {
+		err = ErrSyncCloudStorageSizeExceeded
+		return
+	}
+
 	// 从云端获取文件列表
 	cloudFileIDs, err := repo.getCloudRepoRefsFiles(cloudInfo)
 	if nil != err {

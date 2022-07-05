@@ -89,7 +89,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
-	if cloudInfo.LimitSize <= cloudLatest.Size || cloudLatest.Size <= latest.Size {
+	if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
 		err = ErrSyncCloudStorageSizeExceeded
 		return
 	}
