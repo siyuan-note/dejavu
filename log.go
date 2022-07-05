@@ -26,15 +26,17 @@ import (
 )
 
 type Log struct {
-	ID       string         `json:"id"`       // Hash
-	Parent   string         `json:"parent"`   // 指向上一个索引
-	Memo     string         `json:"memo"`     // 索引备注
-	Created  int64          `json:"created"`  // 索引时间
-	HCreated string         `json:"hCreated"` // 格式化好的索引时间 "2006-01-02 15:04:05"
-	Files    []*entity.File `json:"files"`    // 文件列表
-	Count    int            `json:"count"`    // 文件总数
-	Size     int64          `json:"size"`     // 文件总大小
-	HSize    string         `json:"hSize"`    // 格式化好的文件总大小 "10.00 MB"
+	ID          string         `json:"id"`          // Hash
+	Parent      string         `json:"parent"`      // 指向上一个索引
+	Memo        string         `json:"memo"`        // 索引备注
+	Created     int64          `json:"created"`     // 索引时间
+	HCreated    string         `json:"hCreated"`    // 索引时间 "2006-01-02 15:04:05"
+	Files       []*entity.File `json:"files"`       // 文件列表
+	Count       int            `json:"count"`       // 文件总数
+	Size        int64          `json:"size"`        // 文件总大小
+	HSize       string         `json:"hSize"`       // 格式化好的文件总大小 "10.00 MB"
+	Tag         string         `json:"tag"`         // 索引标记名称
+	HTagUpdated string         `json:"hTagUpdated"` // 标记时间 "2006-01-02 15:04:05"
 }
 
 func (log *Log) String() string {
@@ -43,6 +45,33 @@ func (log *Log) String() string {
 		return "print log [" + log.ID + "] failed"
 	}
 	return string(data)
+}
+
+func (repo *Repo) GetCloudRepoTagLogs(cloudInfo *CloudInfo, context map[string]interface{}) (ret []*Log, err error) {
+	cloudTags, err := repo.GetCloudRepoTags(cloudInfo)
+	if nil != err {
+		return
+	}
+	for _, tag := range cloudTags {
+		id := tag["id"].(string)
+		var index *entity.Index
+		_, index, err = repo.downloadCloudIndex(id, cloudInfo, context)
+		if nil != err {
+			return
+		}
+
+		name := tag["name"].(string)
+		updated := tag["updated"].(string)
+		var log *Log
+		log, err = repo.getLog(index)
+		if nil != err {
+			return
+		}
+		log.Tag = name
+		log.HTagUpdated = updated
+		ret = append(ret, log)
+	}
+	return
 }
 
 func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
