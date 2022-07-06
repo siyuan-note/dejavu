@@ -85,3 +85,13 @@ func (repo *Repo) AddTag(id, tag string) (err error) {
 	err = gulu.File.WriteFileSafer(tag, []byte(id), 0644)
 	return
 }
+
+func (repo *Repo) RemoveTag(tag string) (err error) {
+	tag = filepath.Join(repo.Path, "refs", "tags", tag)
+	if !gulu.File.IsExist(tag) {
+		return
+	}
+
+	err = os.Remove(tag)
+	return
+}

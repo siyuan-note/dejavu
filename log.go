@@ -15,14 +15,18 @@
 package dejavu
 
 import (
+	"errors"
+	"fmt"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
 	"github.com/88250/gulu"
 	"github.com/dustin/go-humanize"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/httpclient"
 )
 
 type Log struct {
@@ -45,6 +49,34 @@ func (log *Log) String() string {
 		return "print log [" + log.ID + "] failed"
 	}
 	return string(data)
+}
+
+func (repo *Repo) RemoveCloudRepoTag(tag string, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "tags", tag)
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token, "key": key}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepoObject?uid=" + cloudInfo.UserID)
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("remove cloud repo tag failed [%d]", resp.StatusCode))
+		return
+	}
+
+	if 0 != result.Code {
+		err = errors.New(fmt.Sprintf("remove cloud repo tag failed: %s", result.Msg))
+		return
+	}
+	return
 }
 
 func (repo *Repo) GetCloudRepoTagLogs(cloudInfo *CloudInfo, context map[string]interface{}) (ret []*Log, err error) {
