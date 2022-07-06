@@ -107,7 +107,7 @@ func (repo *Repo) GetCloudRepoTagLogs(cloudInfo *CloudInfo, context map[string]i
 		log.HTagUpdated = updated
 		ret = append(ret, log)
 	}
-	sort.Slice(ret, func(i, j int) bool { return ret[i].Created < ret[j].Created })
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Created > ret[j].Created })
 	return
 }
 
@@ -152,7 +152,7 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 		log.HTagUpdated = updated
 		ret = append(ret, log)
 	}
-	sort.Slice(ret, func(i, j int) bool { return ret[i].Created < ret[j].Created })
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Created > ret[j].Created })
 	return
 }
 
