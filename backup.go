@@ -92,6 +92,16 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 		return
 	}
 
+	// 获取云端数据仓库统计信息
+	cloudRepoSize, err := repo.getCloudRepoSize(cloudInfo)
+	if nil != err {
+		return
+	}
+	if cloudInfo.LimitSize <= cloudRepoSize+index.Size {
+		err = ErrSyncCloudStorageSizeExceeded
+		return
+	}
+
 	// 从云端获取文件列表
 	cloudFileIDs, err := repo.getCloudRepoRefsFiles(cloudInfo)
 	if nil != err {
@@ -182,6 +192,47 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *C
 	for _, retChunk := range retChunks {
 		chunks = append(chunks, retChunk.(string))
 	}
+	return
+}
+
+func (repo *Repo) getCloudRepoSize(cloudInfo *CloudInfo) (ret int64, err error) {
+	repoStat, err := repo.GetCloudRepoStat(cloudInfo)
+	if nil != err {
+		return
+	}
+
+	syncSize := int64(repoStat["sync"].(map[string]interface{})["size"].(float64))
+	backupSize := int64(repoStat["backup"].(map[string]interface{})["size"].(float64))
+	ret = syncSize + backupSize
+	return
+}
+
+func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interface{}, err error) {
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoStat?uid=" + cloudInfo.UserID)
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("get cloud repo stat failed [%d]", resp.StatusCode))
+		return
+	}
+
+	if 0 != result.Code {
+		err = errors.New(fmt.Sprintf("get cloud repo stat failed: %s", result.Msg))
+		return
+	}
+
+	ret = result.Data.(map[string]interface{})
 	return
 }
 
