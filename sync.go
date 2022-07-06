@@ -160,6 +160,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	// 从云端获取分块并入库
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
+	if nil != err {
+		return
+	}
 	downloadBytes += length
 	downloadChunkCount = len(fetchChunkIDs)
 
@@ -168,6 +171,20 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		return
 	}
+
+	// 校验本地缺失的分块，如果不全则下载补全
+	// 因为前面下载文件成功后下载分块可能失败，导致文件对象并不完整
+	cloudChunkIDs = repo.getChunks(cloudLatestFiles)
+	fetchChunkIDs, err = repo.localNotFoundChunks(cloudChunkIDs)
+	if nil != err {
+		return
+	}
+	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
+	if nil != err {
+		return
+	}
+	downloadBytes += length
+	downloadChunkCount = len(fetchChunkIDs)
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
