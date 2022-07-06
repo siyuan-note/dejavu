@@ -97,7 +97,7 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	if nil != err {
 		return
 	}
-	if 12 < cloudBackupCount {
+	if 12 <= cloudBackupCount {
 		err = ErrCloudBackupCountExceeded
 		return
 	}
