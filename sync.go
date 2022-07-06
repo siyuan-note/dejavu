@@ -45,9 +45,9 @@ const (
 var (
 	ErrCloudStorageSizeExceeded     = errors.New("cloud storage limit size exceeded")
 	ErrCloudBackupCountExceeded     = errors.New("cloud backup count exceeded")
-	ErrCloudNotFoundObject          = errors.New("not found object")
+	ErrCloudObjectNotFound          = errors.New("cloud object not found")
 	ErrCloudGenerateConflictHistory = errors.New("generate conflict history failed")
-	ErrCloudAuthFailed              = errors.New("account authentication failed, please login again")
+	ErrCloudAuthFailed              = errors.New("cloud account auth failed")
 )
 
 type CloudInfo struct {
@@ -78,7 +78,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 从云端获取最新索引
 	length, cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
 	if nil != err {
-		if !errors.Is(err, ErrCloudNotFoundObject) {
+		if !errors.Is(err, ErrCloudObjectNotFound) {
 			return
 		}
 	}
@@ -810,7 +810,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 	if 200 != resp.StatusCode {
 		err = errors.New(fmt.Sprintf("download object failed [%d]", resp.StatusCode))
 		if 404 == resp.StatusCode {
-			err = ErrCloudNotFoundObject
+			err = ErrCloudObjectNotFound
 		}
 		return
 	}
