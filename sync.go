@@ -101,6 +101,10 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
+	if 64 < len(fetchFileIDs) {
+		context[CtxPushMsg] = CtxPushMsgToStatusBarAndProgress
+	}
+
 	// 从云端下载缺失文件并入库
 	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
 	if nil != err {
@@ -118,6 +122,10 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
+	if 64 < len(fetchChunkIDs) {
+		context[CtxPushMsg] = CtxPushMsgToStatusBarAndProgress
+	}
+
 	// 计算待上传云端的本地变更文件
 	upsertFiles, err := repo.localUpsertFiles(localIndexes, cloudLatest.Files)
 	if nil != err {
@@ -128,6 +136,10 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
 	if nil != err {
 		return
+	}
+
+	if 64 < len(upsertChunkIDs) || 64 < len(upsertFiles) {
+		context[CtxPushMsg] = CtxPushMsgToStatusBarAndProgress
 	}
 
 	// 上传分块

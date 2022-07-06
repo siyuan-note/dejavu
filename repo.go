@@ -93,6 +93,14 @@ const (
 	EvtIndexUpsertFile    = "repo.index.upsertFile"
 )
 
+const (
+	CtxPushMsg = "pushMsg"
+
+	CtxPushMsgToProgress = iota
+	CtxPushMsgToStatusBar
+	CtxPushMsgToStatusBarAndProgress
+)
+
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。context 参数用于发布事件时传递调用上下文。
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
 	repo.lock.Lock()
