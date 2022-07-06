@@ -43,10 +43,11 @@ const (
 )
 
 var (
-	ErrSyncCloudStorageSizeExceeded = errors.New("cloud storage limit size exceeded")
-	ErrSyncNotFoundObject           = errors.New("not found object")
-	ErrSyncGenerateConflictHistory  = errors.New("generate conflict history failed")
-	ErrAuthFailed                   = errors.New("account authentication failed, please login again")
+	ErrCloudStorageSizeExceeded     = errors.New("cloud storage limit size exceeded")
+	ErrCloudBackupCountExceeded     = errors.New("cloud backup count exceeded")
+	ErrCloudNotFoundObject          = errors.New("not found object")
+	ErrCloudGenerateConflictHistory = errors.New("generate conflict history failed")
+	ErrCloudAuthFailed              = errors.New("account authentication failed, please login again")
 )
 
 type CloudInfo struct {
@@ -77,7 +78,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 从云端获取最新索引
 	length, cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
 	if nil != err {
-		if !errors.Is(err, ErrSyncNotFoundObject) {
+		if !errors.Is(err, ErrCloudNotFoundObject) {
 			return
 		}
 	}
@@ -90,7 +91,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
-		err = ErrSyncCloudStorageSizeExceeded
+		err = ErrCloudStorageSizeExceeded
 		return
 	}
 
@@ -212,7 +213,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			absPath := filepath.Join(temp, checkoutTmp.Path)
 			err = repo.genSyncHistory(now, file.Path, absPath)
 			if nil != err {
-				err = ErrSyncGenerateConflictHistory
+				err = ErrCloudGenerateConflictHistory
 				return
 			}
 		}
@@ -716,7 +717,7 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("request repo upload token failed [%d]", resp.StatusCode))
@@ -774,7 +775,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("request object url failed [%d]", resp.StatusCode))
@@ -797,7 +798,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 	if 200 != resp.StatusCode {
 		err = errors.New(fmt.Sprintf("download object failed [%d]", resp.StatusCode))
 		if 404 == resp.StatusCode {
-			err = ErrSyncNotFoundObject
+			err = ErrCloudNotFoundObject
 		}
 		return
 	}
@@ -892,7 +893,7 @@ func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("remove cloud repo failed [%d]", resp.StatusCode))
@@ -914,7 +915,7 @@ func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("create cloud repo failed [%d]", resp.StatusCode))
@@ -942,7 +943,7 @@ func GetCloudRepos(cloudInfo *CloudInfo) (repos []map[string]interface{}, size i
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("request cloud repo list failed [%d]", resp.StatusCode))

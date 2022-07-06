@@ -65,7 +65,7 @@ func (repo *Repo) RemoveCloudRepoTag(tag string, cloudInfo *CloudInfo, context m
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("remove cloud repo tag failed [%d]", resp.StatusCode))

@@ -88,17 +88,22 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	}
 
 	if cloudInfo.LimitSize <= index.Size {
-		err = ErrSyncCloudStorageSizeExceeded
+		err = ErrCloudStorageSizeExceeded
 		return
 	}
 
 	// 获取云端数据仓库统计信息
-	cloudRepoSize, err := repo.getCloudRepoSize(cloudInfo)
+	cloudRepoSize, cloudBackupCount, err := repo.getCloudRepoStat(cloudInfo)
 	if nil != err {
 		return
 	}
+	if 12 < cloudBackupCount {
+		err = ErrCloudBackupCountExceeded
+		return
+	}
+
 	if cloudInfo.LimitSize <= cloudRepoSize+index.Size {
-		err = ErrSyncCloudStorageSizeExceeded
+		err = ErrCloudStorageSizeExceeded
 		return
 	}
 
@@ -175,7 +180,7 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *C
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("get cloud repo refs chunks failed [%d]", resp.StatusCode))
@@ -195,7 +200,7 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *C
 	return
 }
 
-func (repo *Repo) getCloudRepoSize(cloudInfo *CloudInfo) (ret int64, err error) {
+func (repo *Repo) getCloudRepoStat(cloudInfo *CloudInfo) (repoSize int64, backupCount int, err error) {
 	repoStat, err := repo.GetCloudRepoStat(cloudInfo)
 	if nil != err {
 		return
@@ -203,7 +208,8 @@ func (repo *Repo) getCloudRepoSize(cloudInfo *CloudInfo) (ret int64, err error) 
 
 	syncSize := int64(repoStat["sync"].(map[string]interface{})["size"].(float64))
 	backupSize := int64(repoStat["backup"].(map[string]interface{})["size"].(float64))
-	ret = syncSize + backupSize
+	repoSize = syncSize + backupSize
+	backupCount = int(repoStat["backup"].(map[string]interface{})["count"].(float64))
 	return
 }
 
@@ -220,7 +226,7 @@ func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interfa
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("get cloud repo stat failed [%d]", resp.StatusCode))
@@ -249,7 +255,7 @@ func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, e
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("get cloud repo refs files failed [%d]", resp.StatusCode))
@@ -282,7 +288,7 @@ func (repo *Repo) GetCloudRepoTags(cloudInfo *CloudInfo) (tags []map[string]inte
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrAuthFailed
+			err = ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("get cloud repo tags failed [%d]", resp.StatusCode))
