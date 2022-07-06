@@ -87,10 +87,13 @@ func (repo *Repo) GetCloudRepoTagLogs(cloudInfo *CloudInfo, context map[string]i
 	}
 	for _, tag := range cloudTags {
 		id := tag["id"].(string)
-		var index *entity.Index
-		_, index, err = repo.downloadCloudIndex(id, cloudInfo, context)
-		if nil != err {
-			return
+
+		index, _ := repo.store.GetIndex(id)
+		if nil == index {
+			_, index, err = repo.downloadCloudIndex(id, cloudInfo, context)
+			if nil != err {
+				return
+			}
 		}
 
 		name := tag["name"].(string)
