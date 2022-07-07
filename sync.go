@@ -61,9 +61,33 @@ type CloudInfo struct {
 	Server    string // 云端接口端点
 }
 
-func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeUpserts, mergeRemoves, mergeConflicts []*entity.File, uploadFileCount, downloadFileCount, uploadChunkCount, downloadChunkCount int, uploadBytes, downloadBytes int64, err error) {
+type MergeResult struct {
+	Upserts, Removes, Conflicts []*entity.File
+}
+
+type DownloadTrafficStat struct {
+	DownloadFileCount  int
+	DownloadChunkCount int
+	DownloadBytes      int64
+}
+
+type UploadTrafficStat struct {
+	UploadFileCount  int
+	UploadChunkCount int
+	UploadBytes      int64
+}
+
+type TrafficStat struct {
+	DownloadTrafficStat
+	UploadTrafficStat
+}
+
+func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
+
+	mergeResult = &MergeResult{}
+	trafficStat = &TrafficStat{}
 
 	latest, err = repo.Latest()
 	if nil != err {
@@ -84,8 +108,8 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			return
 		}
 	}
-	downloadFileCount++
-	downloadBytes += length
+	trafficStat.DownloadFileCount++
+	trafficStat.DownloadBytes += length
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
@@ -112,8 +136,8 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		return
 	}
-	downloadBytes += length
-	downloadFileCount = len(fetchFileIDs)
+	trafficStat.DownloadBytes += length
+	trafficStat.DownloadFileCount = len(fetchFileIDs)
 
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunksIgnoreAssets(fetchedFiles)
@@ -149,24 +173,24 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		return
 	}
-	uploadChunkCount = len(upsertChunkIDs)
-	uploadBytes += length
+	trafficStat.UploadChunkCount = len(upsertChunkIDs)
+	trafficStat.UploadBytes += length
 
 	// 上传文件
 	length, err = repo.uploadFiles(upsertFiles, cloudInfo, context)
 	if nil != err {
 		return
 	}
-	uploadFileCount = len(upsertFiles)
-	uploadBytes += length
+	trafficStat.UploadFileCount = len(upsertFiles)
+	trafficStat.UploadBytes += length
 
 	// 从云端下载缺失分块并入库
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
 	if nil != err {
 		return
 	}
-	downloadBytes += length
-	downloadChunkCount = len(fetchChunkIDs)
+	trafficStat.DownloadBytes += length
+	trafficStat.DownloadChunkCount = len(fetchChunkIDs)
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
@@ -187,8 +211,8 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		return
 	}
-	downloadBytes += length
-	downloadChunkCount = len(fetchChunkIDs)
+	trafficStat.DownloadBytes += length
+	trafficStat.DownloadChunkCount = len(fetchChunkIDs)
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -211,27 +235,27 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 冲突的文件以本地 upsert 和 remove 为准
 	for _, cloudUpsert := range cloudUpserts {
 		if repo.existDataFile(localUpserts, cloudUpsert) {
-			mergeConflicts = append(mergeConflicts, cloudUpsert)
+			mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
 			continue
 		}
 
 		if !repo.existDataFile(localRemoves, cloudUpsert) {
-			mergeUpserts = append(mergeUpserts, cloudUpsert)
+			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
 		}
 	}
 
 	// 计算能够无冲突合并的 remove，冲突的文件以本地 upsert 为准
 	for _, cloudRemove := range cloudRemoves {
 		if !repo.existDataFile(localUpserts, cloudRemove) {
-			mergeRemoves = append(mergeRemoves, cloudRemove)
+			mergeResult.Removes = append(mergeResult.Removes, cloudRemove)
 		}
 	}
 
 	// 冲突文件复制到数据历史文件夹
-	if 0 < len(mergeConflicts) {
+	if 0 < len(mergeResult.Conflicts) {
 		now := time.Now().Format("2006-01-02-150405")
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
-		for _, file := range mergeConflicts {
+		for _, file := range mergeResult.Conflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
@@ -253,18 +277,18 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 数据变更后需要还原工作区并创建 merge 快照
-	if 0 < len(mergeUpserts) || 0 < len(mergeRemoves) {
-		if 0 < len(mergeUpserts) {
+	if 0 < len(mergeResult.Upserts) || 0 < len(mergeResult.Removes) {
+		if 0 < len(mergeResult.Upserts) {
 			// 迁出到工作区
-			err = repo.checkoutFiles(mergeUpserts, context)
+			err = repo.checkoutFiles(mergeResult.Upserts, context)
 			if nil != err {
 				return
 			}
 		}
 
-		if 0 < len(mergeRemoves) {
+		if 0 < len(mergeResult.Removes) {
 			// 删除工作区文件
-			err = repo.removeFiles(mergeRemoves, context)
+			err = repo.removeFiles(mergeResult.Removes, context)
 			if nil != err {
 				return
 			}
@@ -288,7 +312,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		return
 	}
-	uploadBytes += length
+	trafficStat.UploadBytes += length
 
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
@@ -920,6 +944,25 @@ func (repo *Repo) genSyncHistory(now, relPath, absPath string) (err error) {
 func (repo *Repo) getHistoryDirNow(now, suffix string) (ret string, err error) {
 	ret = filepath.Join(repo.HistoryPath, now+"-"+suffix)
 	err = os.MkdirAll(ret, 0755)
+	return
+}
+
+func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, cloudInfo *CloudInfo, context map[string]interface{}) (stat *DownloadTrafficStat, err error) {
+	stat = &DownloadTrafficStat{}
+
+	chunkIDs := repo.getChunks(files)
+	chunkIDs, err = repo.localNotFoundChunks(chunkIDs)
+	if nil != err {
+		return
+	}
+
+	stat.DownloadBytes, err = repo.downloadCloudChunksPut(chunkIDs, cloudInfo, context)
+	if nil != err {
+		return
+	}
+	stat.DownloadChunkCount += len(chunkIDs)
+
+	err = repo.checkoutFiles(files, context)
 	return
 }
 

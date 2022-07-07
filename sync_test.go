@@ -38,19 +38,12 @@ func TestSync(t *testing.T) {
 		ProxyURL:  "",
 		Server:    "http://127.0.0.1:64388",
 	}
-	latest, mergeUpserts, mergeRemoves, mergeConflicts, uploadFileCount, downloadFileCount, uploadChunkCount, downloadChunkCount, uploadBytes, downloadBytes, err := repo.Sync(cloudInfo, nil)
+	latest, mergeResult, trafficStat, err := repo.Sync(cloudInfo, nil)
 	if nil != err {
 		t.Fatalf("sync failed: %s", err)
 		return
 	}
 	_ = latest
-	_ = mergeUpserts
-	_ = mergeRemoves
-	_ = mergeConflicts
-	_ = uploadFileCount
-	_ = uploadChunkCount
-	_ = downloadFileCount
-	_ = downloadChunkCount
-	_ = uploadBytes
-	_ = downloadBytes
+	_ = mergeResult
+	_ = trafficStat
 }
