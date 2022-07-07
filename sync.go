@@ -909,13 +909,14 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "latest")
 	eventbus.Publish(EvtCloudBeforeDownloadRef, context, "refs/latest")
-	latestID, err := repo.downloadCloudObject(key, cloudInfo)
+	data, err := repo.downloadCloudObject(key, cloudInfo)
 	if nil != err {
 		return
 	}
-	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", string(latestID))
+	latestID := string(data)
+	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", latestID)
 	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, latestID)
-	data, err := repo.downloadCloudObject(key, cloudInfo)
+	data, err = repo.downloadCloudObject(key, cloudInfo)
 	if nil != err {
 		return
 	}
