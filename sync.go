@@ -158,7 +158,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	uploadFileCount = len(upsertFiles)
 	uploadBytes += length
 
-	// 从云端获取分块并入库
+	// 从云端下载缺失分块并入库
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
 	if nil != err {
 		return
@@ -173,7 +173,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 校验本地缺失的分块，如果不全则下载补全
-	// 因为前面下载文件成功后下载分块可能失败，导致文件对象并不完整
+	//
+	// 因为前面通过 fetchedFiles 下载文件成功后下载分块可能失败，导致文件对象并不完整，后续再次重试时 fetchedFiles 就不会再有待获取文件
+	// 所以这里需要根据还原出来的云端最新文件列表中再次校验缺失的块并下载补全
 	cloudChunkIDs = repo.getChunks(cloudLatestFiles)
 	fetchChunkIDs, err = repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
