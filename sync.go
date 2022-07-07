@@ -534,7 +534,9 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, c
 	}
 	for _, index := range indexes {
 		waitGroup.Add(1)
-		p.Invoke(index.ID)
+		if err = p.Invoke(index.ID); nil != err {
+			return
+		}
 	}
 	waitGroup.Wait()
 	p.Release()
@@ -576,8 +578,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 	}
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
-		err = p.Invoke(upsertFile.ID)
-		if nil != err {
+		if err = p.Invoke(upsertFile.ID); nil != err {
 			return
 		}
 	}
@@ -617,8 +618,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 	}
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
-		err = p.Invoke(upsertChunkID)
-		if nil != err {
+		if err = p.Invoke(upsertChunkID); nil != err {
 			return
 		}
 	}
