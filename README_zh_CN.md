@@ -4,7 +4,7 @@
 
 ## 💡 简介
 
-[DejaVu](https://github.com/siyuan-note/dejavu) 是一个用于数据快照和同步的 golang 库。
+[DejaVu](https://github.com/siyuan-note/dejavu) 是思源笔记的数据快照和同步组件。
 
 ## ✨ 特性
 

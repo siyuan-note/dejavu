@@ -4,7 +4,7 @@
 
 ## 💡 Introduction
 
-[DejaVu](https://github.com/siyuan-note/dejavu) is a golang library for data snapshot and synchronization.
+[DejaVu](https://github.com/siyuan-note/dejavu) is the component of data snapshot and sync for SiYuan.
 
 ## ✨ Features
 
