@@ -13,6 +13,7 @@
 * 数据压缩
 * AES 加密
 * 云端同步和备份
+* 按需加载资源文件
 
 ⚠️ 注意
 
@@ -108,7 +109,7 @@
 
 ## 📄 授权
 
-DejaVu 使用 [木兰宽松许可证, 第2版](http://license.coscl.org.cn/MulanPSL2) 开源协议。
+DejaVu 使用 [GNU Affero 通用公共许可证, 版本 3](https://www.gnu.org/licenses/agpl-3.0.txt) 开源协议。
 
 ## 🙏 鸣谢
 

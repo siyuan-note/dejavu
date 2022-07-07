@@ -13,6 +13,7 @@
 * Data compression
 * AES Encrypted
 * Cloud sync and backup
+* Load assets on demand
 
 ⚠️ Attention
 
@@ -108,8 +109,7 @@ The repo folder layout is as follows:
 
 ## 📄 License
 
-DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source
-license.
+DejaVu uses the [GNU AFFERO GENERAL PUBLIC LICENSE, Version 3](https://www.gnu.org/licenses/agpl-3.0.txt) open source license.
 
 ## 🙏 Acknowledgement
 
