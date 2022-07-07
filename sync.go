@@ -309,6 +309,32 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		latest.Memo = mergeMemo
 		_ = repo.store.PutIndex(latest)
 		localIndexes = append([]*entity.Index{latest}, localIndexes...)
+
+		// 索引后的 upserts 需要上传到云端
+
+		upsertFiles, err = repo.localUpsertFiles(localIndexes, cloudLatest.Files)
+		if nil != err {
+			return
+		}
+
+		upsertChunkIDs, err = repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
+		if nil != err {
+			return
+		}
+
+		length, err = repo.uploadChunks(upsertChunkIDs, cloudInfo, context)
+		if nil != err {
+			return
+		}
+		trafficStat.UploadChunkCount = len(upsertChunkIDs)
+		trafficStat.UploadBytes += length
+
+		length, err = repo.uploadFiles(upsertFiles, cloudInfo, context)
+		if nil != err {
+			return
+		}
+		trafficStat.UploadFileCount = len(upsertFiles)
+		trafficStat.UploadBytes += length
 	}
 
 	// 上传索引
