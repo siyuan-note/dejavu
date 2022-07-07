@@ -33,7 +33,7 @@ func (repo *Repo) DiffUpsert(left, right []*entity.File) (ret []*entity.File) {
 			ret = append(ret, l[lPath])
 			continue
 		}
-		if lFile.Updated != rFile.Updated || lFile.Size != rFile.Size || lFile.Path != rFile.Path {
+		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
 			ret = append(ret, l[lPath])
 			continue
 		}
@@ -58,7 +58,7 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 			upserts = append(upserts, l[lPath])
 			continue
 		}
-		if lFile.Updated != rFile.Updated || lFile.Size != rFile.Size || lFile.Path != rFile.Path {
+		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
 			upserts = append(upserts, l[lPath])
 			continue
 		}
