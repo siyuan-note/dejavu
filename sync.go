@@ -116,10 +116,10 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	downloadFileCount = len(fetchFileIDs)
 
 	// 从文件列表中得到去重后的分块列表
-	cloudChunkIDs := repo.getChunks(fetchedFiles)
+	cloudChunkIDs := repo.getChunksIgnoreAssets(fetchedFiles)
 
 	// 计算本地缺失的分块
-	fetchChunkIDs, err := repo.localNotFoundChunks(fetchedFiles, cloudChunkIDs)
+	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
 	}
@@ -178,8 +178,8 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	//
 	// 因为前面通过 fetchedFiles 下载文件成功后下载分块可能失败，导致文件对象并不完整，后续再次重试时 fetchedFiles 就不会再有待获取文件
 	// 所以这里需要根据还原出来的云端最新文件列表中再次校验缺失的块并下载补全
-	cloudChunkIDs = repo.getChunks(cloudLatestFiles)
-	fetchChunkIDs, err = repo.localNotFoundChunks(cloudLatestFiles, cloudChunkIDs)
+	cloudChunkIDs = repo.getChunksIgnoreAssets(cloudLatestFiles)
+	fetchChunkIDs, err = repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
 	}
@@ -591,7 +591,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 	return
 }
 
-func (repo *Repo) localNotFoundChunks(files []*entity.File, chunkIDs []string) (ret []string, err error) {
+func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err error) {
 	for _, chunkID := range chunkIDs {
 		if _, getChunkErr := repo.store.Stat(chunkID); nil != getChunkErr {
 			if os.IsNotExist(getChunkErr) {
@@ -618,6 +618,18 @@ func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error)
 		}
 	}
 	ret = gulu.Str.RemoveDuplicatedElem(ret)
+	return
+}
+
+func (repo *Repo) getChunksIgnoreAssets(files []*entity.File) (chunkIDs []string) {
+	for _, file := range files {
+		if strings.Contains(file.Path, "assets/") {
+			continue
+		}
+
+		chunkIDs = append(chunkIDs, file.Chunks...)
+	}
+	chunkIDs = gulu.Str.RemoveDuplicatedElem(chunkIDs)
 	return
 }
 

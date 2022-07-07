@@ -53,10 +53,10 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	downloadFileCount = len(fetchFileIDs)
 
 	// 从文件列表中得到去重后的分块列表
-	cloudChunkIDs := repo.getChunks(fetchedFiles)
+	cloudChunkIDs := repo.getChunksIgnoreAssets(fetchedFiles)
 
 	// 计算本地缺失的分块
-	fetchChunkIDs, err := repo.localNotFoundChunks(fetchedFiles, cloudChunkIDs)
+	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
 		return
 	}
