@@ -12,7 +12,7 @@
 * File deduplication in chunks
 * Data compression
 * AES Encrypted
-* Connect to cloud storage
+* Cloud sync and backup
 
 ⚠️ Attention
 
@@ -108,7 +108,8 @@ The repo folder layout is as follows:
 
 ## 📄 License
 
-DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source license.
+DejaVu uses the [Mulan Permissive Software License, Version 2](http://license.coscl.org.cn/MulanPSL2) open source
+license.
 
 ## 🙏 Acknowledgement
 
