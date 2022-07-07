@@ -38,13 +38,14 @@ import (
 )
 
 const (
-	EvtCloudBeforeUploadIndex    = "repo.cloudBeforeUploadIndex"
-	EvtCloudBeforeUploadFile     = "repo.cloudBeforeUploadFile"
-	EvtCloudBeforeUploadChunk    = "repo.cloudBeforeUploadChunk"
-	EvtCloudBeforeDownloadIndex  = "repo.cloudBeforeDownloadIndex"
-	EvtCloudBeforeDownloadFile   = "repo.cloudBeforeDownloadFile"
-	EvtCloudBeforeDownloadChunk  = "repo.cloudBeforeDownloadChunk"
-	EvtCloudBeforeUpdateCloudRef = "repo.cloudBeforeUpdateRef"
+	EvtCloudBeforeUploadIndex   = "repo.cloudBeforeUploadIndex"
+	EvtCloudBeforeUploadFile    = "repo.cloudBeforeUploadFile"
+	EvtCloudBeforeUploadChunk   = "repo.cloudBeforeUploadChunk"
+	EvtCloudBeforeDownloadIndex = "repo.cloudBeforeDownloadIndex"
+	EvtCloudBeforeDownloadFile  = "repo.cloudBeforeDownloadFile"
+	EvtCloudBeforeDownloadChunk = "repo.cloudBeforeDownloadChunk"
+	EvtCloudBeforeDownloadRef   = "repo.cloudBeforeDownloadRef"
+	EvtCloudBeforeUploadRef     = "repo.cloudBeforeUploadRef"
 )
 
 var (
@@ -498,7 +499,7 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 }
 
 func (repo *Repo) updateCloudLatest(ref string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
-	eventbus.Publish(EvtCloudBeforeUpdateCloudRef, context, ref)
+	eventbus.Publish(EvtCloudBeforeUploadRef, context, ref)
 	return repo.uploadObject(ref, cloudInfo, context)
 }
 
@@ -887,7 +888,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 }
 
 func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
-	eventbus.Publish(EvtCloudBeforeDownloadIndex, context)
+	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, index)
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", id)
@@ -904,15 +905,16 @@ func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context ma
 }
 
 func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
-	eventbus.Publish(EvtCloudBeforeDownloadIndex, context)
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "latest")
+	eventbus.Publish(EvtCloudBeforeDownloadRef, context, "refs/latest")
 	latestID, err := repo.downloadCloudObject(key, cloudInfo)
 	if nil != err {
 		return
 	}
 	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", string(latestID))
+	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, latestID)
 	data, err := repo.downloadCloudObject(key, cloudInfo)
 	if nil != err {
 		return
