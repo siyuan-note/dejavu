@@ -365,6 +365,10 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 }
 
 func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, err error) {
+	if 1 > len(chunkIDs) {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
 	poolSize := 4
@@ -410,6 +414,10 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 }
 
 func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, ret []*entity.File, err error) {
+	if 1 > len(fileIDs) {
+		return
+	}
+
 	lock := &sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
