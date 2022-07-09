@@ -87,12 +87,16 @@ func (repo *Repo) PutIndex(index *entity.Index) (err error) {
 }
 
 const (
-	EvtCheckoutWalkData   = "repo.checkout.walkData"
-	EvtCheckoutUpsertFile = "repo.checkout.upsertFile"
-	EvtCheckoutRemoveFile = "repo.checkout.removeFile"
-	EvtIndexWalkData      = "repo.index.walkData"
-	EvtIndexGetLatestFile = "repo.index.getLatestFile"
-	EvtIndexUpsertFile    = "repo.index.upsertFile"
+	EvtCheckoutBeforeWalkData    = "repo.checkout.beforeWalkData"
+	EvtCheckoutWalkData          = "repo.checkout.walkData"
+	EvtCheckoutUpsertFile        = "repo.checkout.upsertFile"
+	EvtCheckoutRemoveFile        = "repo.checkout.removeFile"
+	EvtIndexBeforeWalkData       = "repo.index.beforeWalkData"
+	EvtIndexWalkData             = "repo.index.walkData"
+	EvtIndexBeforeGetLatestFiles = "repo.index.beforeGetLatestFiles"
+	EvtIndexGetLatestFile        = "repo.index.getLatestFile"
+	EvtIndexUpsertFiles          = "repo.index.upsertFiles"
+	EvtIndexUpsertFile           = "repo.index.upsertFile"
 )
 
 const (
@@ -118,6 +122,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	}
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
+	eventbus.Publish(EvtCheckoutBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -231,6 +236,7 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
+	eventbus.Publish(EvtIndexBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -265,10 +271,11 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	}
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
+		eventbus.Publish(EvtIndexBeforeGetLatestFiles, context, latest.Files)
 		for _, f := range latest.Files {
+			eventbus.Publish(EvtIndexGetLatestFile, context, f)
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
-			eventbus.Publish(EvtIndexGetLatestFile, context, file.Path)
 			if nil != err {
 				return
 			}
@@ -290,8 +297,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		case *entity.Chunk:
 			putErr = repo.store.PutChunk(obj)
 		case *entity.File:
-			putErr = repo.store.PutFile(obj)
 			eventbus.Publish(EvtIndexUpsertFile, context, obj.Path)
+			putErr = repo.store.PutFile(obj)
 		case *entity.Index:
 			putErr = repo.store.PutIndex(obj)
 		}
@@ -311,6 +318,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			Created: time.Now().UnixMilli(),
 		}
 	}
+
+	eventbus.Publish(EvtIndexUpsertFiles, context, upserts)
 	for _, file := range upserts {
 		absPath := repo.absPath(file.Path)
 		chunks, hashes, chunkErr := repo.fileChunks(absPath)

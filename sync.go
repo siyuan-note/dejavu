@@ -38,14 +38,18 @@ import (
 )
 
 const (
-	EvtCloudBeforeUploadIndex   = "repo.cloudBeforeUploadIndex"
-	EvtCloudBeforeUploadFile    = "repo.cloudBeforeUploadFile"
-	EvtCloudBeforeUploadChunk   = "repo.cloudBeforeUploadChunk"
-	EvtCloudBeforeDownloadIndex = "repo.cloudBeforeDownloadIndex"
-	EvtCloudBeforeDownloadFile  = "repo.cloudBeforeDownloadFile"
-	EvtCloudBeforeDownloadChunk = "repo.cloudBeforeDownloadChunk"
-	EvtCloudBeforeDownloadRef   = "repo.cloudBeforeDownloadRef"
-	EvtCloudBeforeUploadRef     = "repo.cloudBeforeUploadRef"
+	EvtCloudBeforeUploadIndex    = "repo.cloudBeforeUploadIndex"
+	EvtCloudBeforeUploadFiles    = "repo.cloudBeforeUploadFiles"
+	EvtCloudBeforeUploadFile     = "repo.cloudBeforeUploadFile"
+	EvtCloudBeforeUploadChunks   = "repo.cloudBeforeUploadChunks"
+	EvtCloudBeforeUploadChunk    = "repo.cloudBeforeUploadChunk"
+	EvtCloudBeforeDownloadIndex  = "repo.cloudBeforeDownloadIndex"
+	EvtCloudBeforeDownloadFiles  = "repo.cloudBeforeDownloadFiles"
+	EvtCloudBeforeDownloadFile   = "repo.cloudBeforeDownloadFile"
+	EvtCloudBeforeDownloadChunks = "repo.cloudBeforeDownloadChunks"
+	EvtCloudBeforeDownloadChunk  = "repo.cloudBeforeDownloadChunk"
+	EvtCloudBeforeDownloadRef    = "repo.cloudBeforeDownloadRef"
+	EvtCloudBeforeUploadRef      = "repo.cloudBeforeUploadRef"
 )
 
 var (
@@ -388,6 +392,8 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 	if nil != err {
 		return
 	}
+
+	eventbus.Publish(EvtCloudBeforeDownloadChunks, context, chunkIDs)
 	for _, chunkID := range chunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(chunkID); nil != err {
@@ -436,6 +442,8 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 	if nil != err {
 		return
 	}
+
+	eventbus.Publish(EvtCloudBeforeDownloadFiles, context, fileIDs)
 	for _, fileID := range fileIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(fileID); nil != err {
@@ -601,6 +609,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 	if nil != err {
 		return
 	}
+
+	eventbus.Publish(EvtCloudBeforeUploadFiles, context, upsertFiles)
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertFile.ID); nil != err {
@@ -641,6 +651,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 	if nil != err {
 		return
 	}
+
+	eventbus.Publish(EvtCloudBeforeUploadChunks, context, upsertChunkIDs)
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertChunkID); nil != err {
