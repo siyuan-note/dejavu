@@ -13,7 +13,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20220612074546-f1dd94fe8676
 	github.com/siyuan-note/eventbus v0.0.0-20220624162334-ca7c06dc771f
 	github.com/siyuan-note/filelock v0.0.0-20220704090116-54dfb035283f
-	github.com/siyuan-note/httpclient v0.0.0-20220622170705-004622a8138d
+	github.com/siyuan-note/httpclient v0.0.0-20220709030145-2bfb50f28e73
 )
 
 require (
@@ -21,11 +21,11 @@ require (
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/imroc/req/v3 v3.13.1 // indirect
+	github.com/imroc/req/v3 v3.13.2 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
-	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
+	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f // indirect
 	golang.org/x/sys v0.0.0-20220704084225-05e143d24a9e // indirect
 	golang.org/x/text v0.3.7 // indirect

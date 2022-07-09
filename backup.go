@@ -171,7 +171,7 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *C
 	}
 
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]interface{}{"repo": cloudInfo.Dir, "token": cloudInfo.Token, "chunks": uploadChunkIDs}).
@@ -217,7 +217,7 @@ func (repo *Repo) getCloudRepoStat(cloudInfo *CloudInfo) (repoSize int64, backup
 
 func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interface{}, err error) {
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
@@ -246,7 +246,7 @@ func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interfa
 
 func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, err error) {
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
@@ -279,7 +279,7 @@ func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, e
 
 func (repo *Repo) GetCloudRepoTags(cloudInfo *CloudInfo) (tags []map[string]interface{}, err error) {
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).

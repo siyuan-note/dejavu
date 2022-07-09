@@ -56,7 +56,7 @@ func (log *Log) String() string {
 
 func (repo *Repo) RemoveCloudRepoTag(tag string, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "tags", tag)
 	resp, err := request.
 		SetResult(&result).

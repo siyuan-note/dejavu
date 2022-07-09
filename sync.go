@@ -61,7 +61,6 @@ type CloudInfo struct {
 	UserID    string // 用户 ID
 	Token     string // 用户身份鉴权令牌
 	LimitSize int64  // 存储空间限制
-	ProxyURL  string // 代理服务器 URL
 	Server    string // 云端接口端点
 }
 
@@ -795,7 +794,7 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
 
 	var result map[string]interface{}
-	req := httpclient.NewCloudRequest(cloudInfo.ProxyURL).
+	req := httpclient.NewCloudRequest().
 		SetResult(&result)
 	req.SetBody(map[string]interface{}{
 		"token":  cloudInfo.Token,
@@ -857,7 +856,7 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 
 func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []byte, err error) {
 	var result map[string]interface{}
-	resp, err := httpclient.NewCloudRequest(cloudInfo.ProxyURL).
+	resp, err := httpclient.NewCloudRequest().
 		SetResult(&result).
 		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "key": key}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoObjectURL?uid=" + cloudInfo.UserID)
@@ -883,7 +882,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 
 	resultData := result["data"].(map[string]interface{})
 	downloadURL := resultData["url"].(string)
-	resp, err = httpclient.NewCloudFileRequest15s(cloudInfo.ProxyURL).Get(downloadURL)
+	resp, err = httpclient.NewCloudFileRequest15s().Get(downloadURL)
 	if nil != err {
 		err = errors.New("download object failed")
 		return
@@ -997,7 +996,7 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, cloudInfo *CloudI
 // 以下是仓库管理接口
 
 func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepo")
@@ -1018,7 +1017,7 @@ func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 
 func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 	result := map[string]interface{}{}
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
@@ -1046,7 +1045,7 @@ func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 
 func GetCloudRepos(cloudInfo *CloudInfo) (repos []map[string]interface{}, size int64, err error) {
 	result := map[string]interface{}{}
-	request := httpclient.NewCloudRequest(cloudInfo.ProxyURL)
+	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetBody(map[string]interface{}{"token": cloudInfo.Token}).
 		SetResult(&result).

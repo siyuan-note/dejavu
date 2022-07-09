@@ -35,7 +35,6 @@ func TestSync(t *testing.T) {
 		UserID:    userId,
 		LimitSize: 1024 * 1024 * 1024 * 8,
 		Token:     token,
-		ProxyURL:  "",
 		Server:    "http://127.0.0.1:64388",
 	}
 	latest, mergeResult, trafficStat, err := repo.Sync(cloudInfo, nil)
