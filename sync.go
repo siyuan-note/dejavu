@@ -607,7 +607,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
 		var length int64
-		eventbus.Publish(EvtCloudBeforeUploadFile, context, filePath)
+		eventbus.Publish(EvtCloudBeforeUploadFile, context, upsertFileID)
 		length, err = repo.uploadObject(filePath, cloudInfo, context)
 		if nil != err {
 			return
@@ -649,7 +649,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
 		var length int64
-		eventbus.Publish(EvtCloudBeforeUploadChunk, context, filePath)
+		eventbus.Publish(EvtCloudBeforeUploadChunk, context, upsertChunkID)
 		length, err = repo.uploadObject(filePath, cloudInfo, context)
 		if nil != err {
 			return
