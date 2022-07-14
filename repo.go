@@ -127,8 +127,8 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		if nil != err {
 			return io.EOF
 		}
-		if info.IsDir() || !info.Mode().IsRegular() || repo.sizeIgnore(info) {
-			return nil
+		if ignored, ignoreResult := repo.builtInIgnore(info); ignored || nil != ignoreResult {
+			return ignoreResult
 		}
 
 		p := repo.relPath(path)
@@ -241,8 +241,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		if nil != err {
 			return io.EOF
 		}
-		if info.IsDir() || !info.Mode().IsRegular() || repo.sizeIgnore(info) {
-			return nil
+		if ignored, ignoreResult := repo.builtInIgnore(info); ignored || nil != ignoreResult {
+			return ignoreResult
 		}
 
 		p := repo.relPath(path)
@@ -365,8 +365,20 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	return
 }
 
-func (repo *Repo) sizeIgnore(info os.FileInfo) bool {
-	return 1024*1024*100 <= info.Size()
+func (repo *Repo) builtInIgnore(info os.FileInfo) (ignored bool, err error) {
+	if info.IsDir() {
+		if ".git" == info.Name() {
+			return true, filepath.SkipDir
+		}
+		return true, nil
+	}
+	if !info.Mode().IsRegular() {
+		return true, nil
+	}
+	if 1024*1024*100 <= info.Size() {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (repo *Repo) ignoreMatcher() *ignore.GitIgnore {
