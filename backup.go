@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/88250/gulu"
@@ -175,7 +174,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadBytes += length
 
 	// 上传标签
-	length, err = repo.uploadObject(path.Join("refs", "tags", tag), cloudInfo, context)
+	length, err = repo.updateCloudRef("refs/tags/"+tag, cloudInfo, context)
 	uploadFileCount++
 	uploadBytes += length
 	return

@@ -369,7 +369,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 更新云端 latest
-	length, err = repo.updateCloudLatest("refs/latest", cloudInfo, context)
+	length, err = repo.updateCloudRef("refs/latest", cloudInfo, context)
 	if nil != err {
 		return
 	}
@@ -554,9 +554,23 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 	return
 }
 
-func (repo *Repo) updateCloudLatest(ref string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) updateCloudRef(ref string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
 	eventbus.Publish(EvtCloudBeforeUploadRef, context, ref)
-	return repo.uploadObject(ref, cloudInfo, context)
+
+	absFilePath := filepath.Join(repo.Path, ref)
+	info, err := os.Stat(absFilePath)
+	if nil != err {
+		return
+	}
+	length := info.Size()
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, ref)
+	uploadToken, err := repo.requestUploadToken(key, length, cloudInfo)
+	if nil != err {
+		return
+	}
+	uploadBytes = length
+	err = repo.uploadObject(ref, cloudInfo, uploadToken)
+	return
 }
 
 func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
@@ -564,30 +578,42 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, c
 		return
 	}
 
+	for _, index := range indexes {
+		absFilePath := filepath.Join(repo.Path, "indexes", index.ID)
+		info, statErr := os.Stat(absFilePath)
+		if nil != statErr {
+			return
+		}
+		length := info.Size()
+		uploadBytes += length
+	}
+
+	uploadToken, err := repo.requestScopeUploadToken(uploadBytes, cloudInfo)
+	if nil != err {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
-	var uploadErr error
 	poolSize := 4
 	if poolSize > len(indexes) {
 		poolSize = len(indexes)
 	}
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
-		if nil != uploadErr {
+		if nil != err {
 			return // 快速失败
 		}
 
 		indexID := arg.(string)
-		var length int64
 		eventbus.Publish(EvtCloudBeforeUploadIndex, context, indexID)
-		length, uploadErr = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, context)
-		if nil != uploadErr {
+		if err = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, uploadToken); nil != err {
 			return
 		}
-		uploadBytes += length
 	})
 	if nil != err {
 		return
 	}
+
 	for _, index := range indexes {
 		waitGroup.Add(1)
 		if err = p.Invoke(index.ID); nil != err {
@@ -596,10 +622,6 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, cloudInfo *CloudInfo, c
 	}
 	waitGroup.Wait()
 	p.Release()
-	if nil != uploadErr {
-		err = uploadErr
-		return
-	}
 	return
 }
 
@@ -608,8 +630,23 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 		return
 	}
 
+	for _, upsertFile := range upsertFiles {
+		absFilePath := filepath.Join(repo.Path, "objects", upsertFile.ID[:2], upsertFile.ID[2:])
+		info, statErr := os.Stat(absFilePath)
+		if nil != statErr {
+			return
+		}
+		length := info.Size()
+		uploadBytes += length
+	}
+
+	uploadToken, err := repo.requestScopeUploadToken(uploadBytes, cloudInfo)
+	if nil != err {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
-	poolSize := 4
+	poolSize := 8
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
 	}
@@ -621,13 +658,10 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, cloudInfo *CloudInfo, 
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		var length int64
 		eventbus.Publish(EvtCloudBeforeUploadFile, context, upsertFileID)
-		length, err = repo.uploadObject(filePath, cloudInfo, context)
-		if nil != err {
+		if err = repo.uploadObject(filePath, cloudInfo, uploadToken); nil != err {
 			return
 		}
-		uploadBytes += length
 	})
 	if nil != err {
 		return
@@ -650,8 +684,23 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 		return
 	}
 
+	for _, upsertChunkID := range upsertChunkIDs {
+		absFilePath := filepath.Join(repo.Path, "objects", upsertChunkID[:2], upsertChunkID[2:])
+		info, statErr := os.Stat(absFilePath)
+		if nil != statErr {
+			return
+		}
+		length := info.Size()
+		uploadBytes += length
+	}
+
+	uploadToken, err := repo.requestScopeUploadToken(uploadBytes, cloudInfo)
+	if nil != err {
+		return
+	}
+
 	waitGroup := &sync.WaitGroup{}
-	poolSize := 4
+	poolSize := 8
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
 	}
@@ -663,13 +712,10 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, cloudInfo *CloudInfo, co
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		var length int64
 		eventbus.Publish(EvtCloudBeforeUploadChunk, context, upsertChunkID)
-		length, err = repo.uploadObject(filePath, cloudInfo, context)
-		if nil != err {
+		if err = repo.uploadObject(filePath, cloudInfo, uploadToken); nil != err {
 			return
 		}
-		uploadBytes += length
 	})
 	if nil != err {
 		return
@@ -798,20 +844,9 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 	return
 }
 
-func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, ctx map[string]interface{}) (length int64, err error) {
-	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
-	uploadToken, err := repo.requestUploadToken(key, 40, cloudInfo)
-	if nil != err {
-		return
-	}
-
+func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToken string) (err error) {
 	absFilePath := filepath.Join(repo.Path, filePath)
-	info, err := os.Stat(absFilePath)
-	if nil != err {
-		return
-	}
-	length = info.Size()
-
+	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
@@ -826,8 +861,6 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, ctx map[st
 }
 
 func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudInfo) (ret string, err error) {
-	// 因为需要指定 key，所以每次上传文件都必须在云端生成 Token，否则有安全隐患
-
 	var result map[string]interface{}
 	req := httpclient.NewCloudRequest().
 		SetResult(&result)
@@ -837,6 +870,41 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 		"key":    key,
 		"length": length})
 	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoUploadToken?uid=" + cloudInfo.UserID)
+	if nil != err {
+		err = errors.New("request repo upload token failed: " + err.Error())
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("request repo upload token failed [%d]", resp.StatusCode))
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = errors.New("request repo upload token failed: " + result["msg"].(string))
+		return
+	}
+
+	resultData := result["data"].(map[string]interface{})
+	ret = resultData["token"].(string)
+	return
+}
+
+func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (ret string, err error) {
+	var result map[string]interface{}
+	req := httpclient.NewCloudRequest().
+		SetResult(&result)
+	req.SetBody(map[string]interface{}{
+		"token":     cloudInfo.Token,
+		"repo":      cloudInfo.Dir,
+		"keyPrefix": path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir),
+		"length":    length})
+	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoScopeUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
 		err = errors.New("request repo upload token failed: " + err.Error())
 		return
@@ -948,7 +1016,7 @@ func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []b
 }
 
 func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
-	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, index)
+	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, id)
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", id)
