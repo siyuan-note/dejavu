@@ -101,7 +101,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		}
 
 		// 索引时正常，但是上传时可能因为外部变更导致对象（文件或者分块）不存在，此时需要告知用户数据仓库已经损坏，需要重置数据仓库
-		err = fmt.Errorf("sync fatal error: %s", err.Error())
+		err = fmt.Errorf("repo fatal error: %s", err.Error())
 	}
 	return
 }

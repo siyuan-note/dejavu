@@ -19,7 +19,9 @@ package dejavu
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path"
+	"strings"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
@@ -84,6 +86,20 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
+	uploadFileCount, uploadChunkCount, uploadBytes, err = repo.uploadTagIndex(tag, id, cloudInfo, context)
+	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
+		p := e.Path
+		if !strings.Contains(p, "objects") {
+			return
+		}
+
+		// 索引时正常，但是上传时可能因为外部变更导致对象（文件或者分块）不存在，此时需要告知用户数据仓库已经损坏，需要重置数据仓库
+		err = fmt.Errorf("repo fatal error: %s", err.Error())
+	}
+	return
+}
+
+func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		return
