@@ -860,6 +860,7 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	return
 }
 
+// requestUploadToken 请求上传凭证，不支持相同 key 覆盖。
 func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudInfo) (ret string, err error) {
 	var result map[string]interface{}
 	req := httpclient.NewCloudRequest().
@@ -895,6 +896,7 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 	return
 }
 
+// requestUploadToken 请求上传凭证，支持仓库目录前缀覆盖。
 func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (ret string, err error) {
 	var result map[string]interface{}
 	req := httpclient.NewCloudRequest().
