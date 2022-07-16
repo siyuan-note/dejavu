@@ -93,6 +93,20 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	repo.lock.Lock()
 	defer repo.lock.Unlock()
 
+	latest, mergeResult, trafficStat, err = repo.sync(cloudInfo, context)
+	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
+		p := e.Path
+		if !strings.Contains(p, "objects") {
+			return
+		}
+
+		// 索引时正常，但是上传时可能因为外部变更导致对象（文件或者分块）不存在，此时需要告知用户数据仓库已经损坏，需要重置数据仓库
+		err = fmt.Errorf("sync fatal error: %s", err.Error())
+	}
+	return
+}
+
+func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	mergeResult = &MergeResult{}
 	trafficStat = &TrafficStat{}
 
