@@ -311,10 +311,8 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
 		latest.Memo = mergeMemo
 		_ = repo.store.PutIndex(latest)
-		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 
 		// 索引后的 upserts 需要上传到云端
-
 		upsertFiles, err = repo.localUpsertFiles(localIndexes, cloudLatest.Files)
 		if nil != err {
 			return
@@ -338,6 +336,9 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		}
 		trafficStat.UploadFileCount = len(upsertFiles)
 		trafficStat.UploadBytes += length
+
+		// 纳入待上传索引
+		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 	}
 
 	// 上传索引
