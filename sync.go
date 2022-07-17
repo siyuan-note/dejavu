@@ -923,7 +923,7 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 		"length": length})
 	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
-		err = errors.New("request repo upload token failed: " + err.Error())
+		err = fmt.Errorf("request repo upload token failed: %s", err)
 		return
 	}
 
@@ -932,13 +932,13 @@ func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudI
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("request repo upload token failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("request repo upload token failed [%d]", resp.StatusCode)
 		return
 	}
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New("request repo upload token failed: " + result["msg"].(string))
+		err = fmt.Errorf("request repo upload token failed: %s", result["msg"].(string))
 		return
 	}
 
@@ -959,7 +959,7 @@ func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (r
 		"length":    length})
 	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoScopeUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
-		err = errors.New("request repo upload token failed: " + err.Error())
+		err = fmt.Errorf("request repo upload token failed: %s", err)
 		return
 	}
 
@@ -968,13 +968,13 @@ func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (r
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("request repo upload token failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("request repo upload token failed [%d]", resp.StatusCode)
 		return
 	}
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New("request repo upload token failed: " + result["msg"].(string))
+		err = fmt.Errorf("request repo upload token failed: %s", result["msg"].(string))
 		return
 	}
 
@@ -1151,6 +1151,7 @@ func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepo")
 	if nil != err {
+		err = fmt.Errorf("remove cloud repo failed: %s", err)
 		return
 	}
 
@@ -1159,7 +1160,7 @@ func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("remove cloud repo failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("remove cloud repo failed [%d]", resp.StatusCode)
 		return
 	}
 	return
@@ -1173,6 +1174,7 @@ func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/createRepo")
 	if nil != err {
+		err = fmt.Errorf("create cloud repo failed: %s", err)
 		return
 	}
 
@@ -1181,13 +1183,13 @@ func CreateCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("create cloud repo failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("create cloud repo failed [%d]", resp.StatusCode)
 		return
 	}
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New(fmt.Sprintf("create cloud repo failed: %s", result["msg"]))
+		err = fmt.Errorf("create cloud repo failed: %s", result["msg"])
 		return
 	}
 	return
@@ -1201,6 +1203,7 @@ func GetCloudRepos(cloudInfo *CloudInfo) (repos []map[string]interface{}, size i
 		SetResult(&result).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepos?uid=" + cloudInfo.UserID)
 	if nil != err {
+		err = fmt.Errorf("get cloud repos failed: %s", err)
 		return
 	}
 
@@ -1209,13 +1212,13 @@ func GetCloudRepos(cloudInfo *CloudInfo) (repos []map[string]interface{}, size i
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("request cloud repo list failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("request cloud repo list failed [%d]", resp.StatusCode)
 		return
 	}
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = errors.New("request cloud repo list failed: " + result["msg"].(string))
+		err = fmt.Errorf("request cloud repo list failed: %s", result["msg"].(string))
 		return
 	}
 

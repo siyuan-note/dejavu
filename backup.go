@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -214,12 +213,12 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *C
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("get cloud repo refs chunks failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("get cloud repo refs chunks failed [%d]", resp.StatusCode)
 		return
 	}
 
 	if 0 != result.Code {
-		err = errors.New(fmt.Sprintf("get cloud repo refs chunks failed: %s", result.Msg))
+		err = fmt.Errorf("get cloud repo refs chunks failed: %s", result.Msg)
 		return
 	}
 
@@ -252,6 +251,7 @@ func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interfa
 		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoStat?uid=" + cloudInfo.UserID)
 	if nil != err {
+		err = fmt.Errorf("get cloud repo stat failed: %s", err)
 		return
 	}
 
@@ -260,12 +260,12 @@ func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interfa
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("get cloud repo stat failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("get cloud repo stat failed [%d]", resp.StatusCode)
 		return
 	}
 
 	if 0 != result.Code {
-		err = errors.New(fmt.Sprintf("get cloud repo stat failed: %s", result.Msg))
+		err = fmt.Errorf("get cloud repo stat failed: %s", result.Msg)
 		return
 	}
 
@@ -281,6 +281,7 @@ func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, e
 		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoRefsFiles?uid=" + cloudInfo.UserID)
 	if nil != err {
+		err = fmt.Errorf("get cloud repo refs files failed: %s", err)
 		return
 	}
 
@@ -289,12 +290,12 @@ func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, e
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("get cloud repo refs files failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("get cloud repo refs files failed [%d]", resp.StatusCode)
 		return
 	}
 
 	if 0 != result.Code {
-		err = errors.New(fmt.Sprintf("get cloud repo refs files failed: %s", result.Msg))
+		err = fmt.Errorf("get cloud repo refs files failed: %s", result.Msg)
 		return
 	}
 
@@ -314,6 +315,7 @@ func (repo *Repo) GetCloudRepoTags(cloudInfo *CloudInfo) (tags []map[string]inte
 		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoTags?uid=" + cloudInfo.UserID)
 	if nil != err {
+		err = fmt.Errorf("get cloud repo tags failed: %s", err)
 		return
 	}
 
@@ -322,12 +324,12 @@ func (repo *Repo) GetCloudRepoTags(cloudInfo *CloudInfo) (tags []map[string]inte
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("get cloud repo tags failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)
 		return
 	}
 
 	if 0 != result.Code {
-		err = errors.New(fmt.Sprintf("get cloud repo tags failed: %s", result.Msg))
+		err = fmt.Errorf("get cloud repo tags failed: %s", result.Msg)
 		return
 	}
 
