@@ -949,7 +949,7 @@ func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context ma
 	eventbus.Publish(EvtCloudBeforeDownloadChunk, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
-	data, err := repo.downloadCloudObject(key, cloudInfo)
+	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		return
 	}
@@ -962,7 +962,7 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	eventbus.Publish(EvtCloudBeforeDownloadFile, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
-	data, err := repo.downloadCloudObject(key, cloudInfo)
+	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		return
 	}
@@ -972,35 +972,8 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	return
 }
 
-func (repo *Repo) downloadCloudObject(key string, cloudInfo *CloudInfo) (ret []byte, err error) {
-	var result map[string]interface{}
-	resp, err := httpclient.NewCloudRequest().
-		SetResult(&result).
-		SetBody(map[string]interface{}{"token": cloudInfo.Token, "repo": cloudInfo.Dir, "key": key}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoObjectURL?uid=" + cloudInfo.UserID)
-	if nil != err {
-		err = errors.New("request object url failed: " + err.Error())
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
-			return
-		}
-		err = errors.New(fmt.Sprintf("request object url failed [%d]", resp.StatusCode))
-		return
-	}
-
-	code := result["code"].(float64)
-	if 0 != code {
-		err = errors.New("request object url failed: " + result["msg"].(string))
-		return
-	}
-
-	resultData := result["data"].(map[string]interface{})
-	downloadURL := resultData["url"].(string)
-	resp, err = httpclient.NewCloudFileRequest15s().Get(downloadURL)
+func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
+	resp, err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
 	if nil != err {
 		err = errors.New("download object failed")
 		return
@@ -1035,7 +1008,7 @@ func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context ma
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", id)
-	data, err := repo.downloadCloudObject(key, cloudInfo)
+	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		return
 	}
@@ -1052,14 +1025,14 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "latest")
 	eventbus.Publish(EvtCloudBeforeDownloadRef, context, "refs/latest")
-	data, err := repo.downloadCloudObject(key, cloudInfo)
+	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		return
 	}
 	latestID := string(data)
 	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", latestID)
 	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, latestID)
-	data, err = repo.downloadCloudObject(key, cloudInfo)
+	data, err = repo.downloadCloudObject(key)
 	if nil != err {
 		return
 	}
