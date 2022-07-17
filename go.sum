@@ -10,6 +10,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dustin/go-humanize v1.0.0 h1:VSnTsYCnlFHaM2/igO1h6X3HA71jcobQuxemgkq4zYo=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
+github.com/getsentry/sentry-go v0.13.0 h1:20dgTiUSfxRB/EhMPtxcL9ZEbM1ZdR+W/7f7NWD+xWo=
+github.com/getsentry/sentry-go v0.13.0/go.mod h1:EOsfu5ZdvKPfeHYV6pTVQnsjfp30+XA7//UooKNumH0=
 github.com/go-playground/assert/v2 v2.0.1/go.mod h1:VDjEfimB/XKnb+ZQfWdccd7VUvScMdVu0Titje2rxJ4=
 github.com/go-playground/locales v0.13.0/go.mod h1:taPMhCMXrRLJO55olJkUXHZBHCxTMfnGwq/HNwmWNS8=
 github.com/go-playground/locales v0.14.0/go.mod h1:sawfccIbzZTqEDETgFXqTho0QybSa7l++s0DH+LDiLs=
@@ -59,6 +61,8 @@ github.com/siyuan-note/filelock v0.0.0-20220704090116-54dfb035283f h1:IXZ4SWPjQL
 github.com/siyuan-note/filelock v0.0.0-20220704090116-54dfb035283f/go.mod h1:c4vwvWRrnfa75OXiO21K/76BFRJ4cFITKNoVs5lFdwc=
 github.com/siyuan-note/httpclient v0.0.0-20220709030145-2bfb50f28e73 h1:NAw9IJtD0/NU2lhraQjELAcU9Bf6mRLrhvx57Q3qmsw=
 github.com/siyuan-note/httpclient v0.0.0-20220709030145-2bfb50f28e73/go.mod h1:sCMZurEZaMFiwGbdppizHT3NPO/HUdd+1FqtAyfdEsE=
+github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520 h1:kscYjMt7jXYdd7Qj2OSUoBnoHc5B0U/E6OSx86VRLr4=
+github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520/go.mod h1:t1zRGxK13L/9ZFoGyTD39IbFCbee3CsypDj4b5dt4qM=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=

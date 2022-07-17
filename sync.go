@@ -36,6 +36,7 @@ import (
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/httpclient"
+	"github.com/siyuan-note/logging"
 )
 
 const (
@@ -427,7 +428,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 		return
 	}
 
-	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
+	go repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
@@ -483,7 +484,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 		return
 	}
 
-	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
+	go repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
@@ -949,12 +950,13 @@ func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (r
 	return
 }
 
-func (repo *Repo) addDownloadTraffic(size int64, cloudInfo *CloudInfo) (err error) {
+func (repo *Repo) addDownloadTraffic(size int64, cloudInfo *CloudInfo) {
 	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetBody(map[string]interface{}{"token": cloudInfo.Token, "size": size}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/addDownloadTraffic")
 	if nil != err {
+		logging.LogErrorf("add download traffic failed: %s", err)
 		return
 	}
 
@@ -963,7 +965,7 @@ func (repo *Repo) addDownloadTraffic(size int64, cloudInfo *CloudInfo) (err erro
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = errors.New(fmt.Sprintf("add download traffic failed [%d]", resp.StatusCode))
+		logging.LogErrorf("add download traffic failed: %d", resp.StatusCode)
 		return
 	}
 	return
@@ -1042,7 +1044,7 @@ func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context ma
 	}
 	downloadBytes += int64(len(data))
 
-	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
+	go repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
@@ -1068,7 +1070,7 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	}
 	downloadBytes += int64(len(data))
 
-	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
+	go repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
