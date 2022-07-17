@@ -1030,11 +1030,11 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	resp, err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
 	if nil != err {
-		err = errors.New("download object failed")
+		err = fmt.Errorf("download object failed: %s", err)
 		return
 	}
 	if 200 != resp.StatusCode {
-		err = errors.New(fmt.Sprintf("download object failed [%d]", resp.StatusCode))
+		err = fmt.Errorf("download object failed [%d]", resp.StatusCode)
 		if 404 == resp.StatusCode {
 			err = ErrCloudObjectNotFound
 		}
@@ -1043,7 +1043,7 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 
 	ret, err = resp.ToBytes()
 	if nil != err {
-		err = errors.New("download read data failed")
+		err = fmt.Errorf("download read data failed: %s", err)
 		return
 	}
 
