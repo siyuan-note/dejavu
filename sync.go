@@ -30,6 +30,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/panjf2000/ants/v2"
+	"github.com/qiniu/go-sdk/v7/client"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/eventbus"
@@ -851,6 +852,18 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
+		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
+			// file exists，使用支持覆盖的上传凭证
+			info, statErr := os.Stat(absFilePath)
+			if nil != statErr {
+				return
+			}
+			var tokenErr error
+			uploadToken, tokenErr = repo.requestUploadToken(key, info.Size(), cloudInfo)
+			if nil != tokenErr {
+				return
+			}
+		}
 		time.Sleep(3 * time.Second)
 		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 		if nil != err {
