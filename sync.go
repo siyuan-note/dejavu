@@ -114,11 +114,13 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	latest, err = repo.Latest()
 	if nil != err {
+		logging.LogErrorf("get latest failed: %s", err)
 		return
 	}
 
 	latestSync, err := repo.latestSync()
 	if nil != err {
+		logging.LogErrorf("get latest sync failed: %s", err)
 		return
 	}
 
@@ -128,6 +130,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	length, cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
 	if nil != err {
 		if !errors.Is(err, ErrCloudObjectNotFound) {
+			logging.LogErrorf("download cloud latest failed: %s", err)
 			return
 		}
 	}
@@ -147,6 +150,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)
 	if nil != err {
+		logging.LogErrorf("get local not found files failed: %s", err)
 		return
 	}
 
@@ -157,6 +161,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 从云端下载缺失文件并入库
 	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
 	trafficStat.DownloadBytes += length
@@ -168,6 +173,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 计算本地缺失的分块
 	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
+		logging.LogErrorf("get local not found chunks failed: %s", err)
 		return
 	}
 
@@ -178,12 +184,14 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 计算待上传云端的本地变更文件
 	upsertFiles, err := repo.localUpsertFiles(localIndexes, cloudLatest.Files)
 	if nil != err {
+		logging.LogErrorf("get local upsert files failed: %s", err)
 		return
 	}
 
 	// 计算待上传云端的分块
 	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
 	if nil != err {
+		logging.LogErrorf("get local upsert chunk ids failed: %s", err)
 		return
 	}
 
@@ -194,6 +202,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 上传分块
 	length, err = repo.uploadChunks(upsertChunkIDs, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("upload chunks failed: %s", err)
 		return
 	}
 	trafficStat.UploadChunkCount = len(upsertChunkIDs)
@@ -202,6 +211,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 上传文件
 	length, err = repo.uploadFiles(upsertFiles, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("upload files failed: %s", err)
 		return
 	}
 	trafficStat.UploadFileCount = len(upsertFiles)
@@ -210,6 +220,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 从云端下载缺失分块并入库
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("download cloud chunks put failed: %s", err)
 		return
 	}
 	trafficStat.DownloadBytes += length
@@ -218,6 +229,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
 	if nil != err {
+		logging.LogErrorf("get cloud latest files failed: %s", err)
 		return
 	}
 
@@ -228,10 +240,12 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	cloudChunkIDs = repo.getChunks(cloudLatestFiles)
 	fetchChunkIDs, err = repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
+		logging.LogErrorf("get local not found chunks failed: %s", err)
 		return
 	}
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("download cloud chunks put failed: %s", err)
 		return
 	}
 	trafficStat.DownloadBytes += length
@@ -240,10 +254,12 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
 	if nil != err {
+		logging.LogErrorf("get latest files failed: %s", err)
 		return
 	}
 	latestSyncFiles, err := repo.getFiles(latestSync.Files)
 	if nil != err {
+		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
 	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
@@ -282,17 +298,20 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
+				logging.LogErrorf("get file failed: %s", err)
 				return
 			}
 
 			err = repo.checkoutFile(checkoutTmp, temp, context)
 			if nil != err {
+				logging.LogErrorf("checkout file failed: %s", err)
 				return
 			}
 
 			absPath := filepath.Join(temp, checkoutTmp.Path)
 			err = repo.genSyncHistory(now, file.Path, absPath)
 			if nil != err {
+				logging.LogErrorf("generate sync history failed: %s", err)
 				err = ErrCloudGenerateConflictHistory
 				return
 			}
@@ -305,6 +324,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			// 迁出到工作区
 			err = repo.checkoutFiles(mergeResult.Upserts, context)
 			if nil != err {
+				logging.LogErrorf("checkout files failed: %s", err)
 				return
 			}
 		}
@@ -313,6 +333,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			// 删除工作区文件
 			err = repo.removeFiles(mergeResult.Removes, context)
 			if nil != err {
+				logging.LogErrorf("remove files failed: %s", err)
 				return
 			}
 		}
@@ -321,6 +342,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		mergeStart := time.Now()
 		latest, err = repo.index("[Sync] Cloud sync merge", context)
 		if nil != err {
+			logging.LogErrorf("merge index failed: %s", err)
 			return
 		}
 		mergeElapsed := time.Since(mergeStart)
@@ -331,16 +353,19 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		// 索引后的 upserts 需要上传到云端
 		upsertFiles, err = repo.localUpsertFiles(localIndexes, cloudLatest.Files)
 		if nil != err {
+			logging.LogErrorf("get local upsert files failed: %s", err)
 			return
 		}
 
 		upsertChunkIDs, err = repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
 		if nil != err {
+			logging.LogErrorf("get local upsert chunk ids failed: %s", err)
 			return
 		}
 
 		length, err = repo.uploadChunks(upsertChunkIDs, cloudInfo, context)
 		if nil != err {
+			logging.LogErrorf("upload chunks failed: %s", err)
 			return
 		}
 		trafficStat.UploadChunkCount = len(upsertChunkIDs)
@@ -348,6 +373,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 		length, err = repo.uploadFiles(upsertFiles, cloudInfo, context)
 		if nil != err {
+			logging.LogErrorf("upload files failed: %s", err)
 			return
 		}
 		trafficStat.UploadFileCount = len(upsertFiles)
@@ -360,6 +386,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 上传索引
 	length, err = repo.uploadIndexes(localIndexes, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("upload indexes failed: %s", err)
 		return
 	}
 	trafficStat.UploadBytes += length
@@ -367,17 +394,23 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
 	if nil != err {
+		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
 
 	// 更新云端 latest
 	length, err = repo.updateCloudRef("refs/latest", cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
 		return
 	}
 
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest.ID)
+	if nil != err {
+		logging.LogErrorf("update latest sync failed: %s", err)
+		return
+	}
 	return
 }
 
@@ -961,10 +994,6 @@ func (repo *Repo) addDownloadTraffic(size int64, cloudInfo *CloudInfo) {
 	}
 
 	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
-			return
-		}
 		logging.LogErrorf("add download traffic failed: %d", resp.StatusCode)
 		return
 	}

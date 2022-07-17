@@ -25,6 +25,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/httpclient"
+	"github.com/siyuan-note/logging"
 )
 
 func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
@@ -34,6 +35,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	// 从云端下载标签指向的索引
 	length, index, err := repo.downloadCloudIndex(id, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("download cloud index failed: %s", err)
 		return
 	}
 	downloadFileCount++
@@ -42,12 +44,14 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(index.Files)
 	if nil != err {
+		logging.LogErrorf("get local not found files failed: %s", err)
 		return
 	}
 
 	// 从云端下载缺失文件并入库
 	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
 	downloadBytes += length
@@ -59,6 +63,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	// 计算本地缺失的分块
 	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
 	if nil != err {
+		logging.LogErrorf("get local not found chunks failed: %s", err)
 		return
 	}
 
@@ -70,12 +75,14 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	// 更新本地索引
 	err = repo.store.PutIndex(index)
 	if nil != err {
+		logging.LogErrorf("put index failed: %s", err)
 		return
 	}
 
 	// 更新本地标签
 	err = repo.AddTag(id, tag)
 	if nil != err {
+		logging.LogErrorf("add tag failed: %s", err)
 		return
 	}
 	return
@@ -101,6 +108,7 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
+		logging.LogErrorf("get index failed: %s", err)
 		return
 	}
 
@@ -112,6 +120,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	// 获取云端数据仓库统计信息
 	cloudRepoSize, cloudBackupCount, err := repo.getCloudRepoStat(cloudInfo)
 	if nil != err {
+		logging.LogErrorf("get cloud repo stat failed: %s", err)
 		return
 	}
 	if 12 <= cloudBackupCount {
@@ -127,6 +136,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	// 从云端获取文件列表
 	cloudFileIDs, err := repo.getCloudRepoRefsFiles(cloudInfo)
 	if nil != err {
+		logging.LogErrorf("get cloud repo refs files failed: %s", err)
 		return
 	}
 
@@ -137,6 +147,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 			var uploadFile *entity.File
 			uploadFile, err = repo.store.GetFile(localFileID)
 			if nil != err {
+				logging.LogErrorf("get file failed: %s", err)
 				return
 			}
 			uploadFiles = append(uploadFiles, uploadFile)
@@ -149,12 +160,14 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	// 计算云端缺失的分块
 	uploadChunkIDs, err = repo.getCloudRepoUploadChunks(uploadChunkIDs, cloudInfo)
 	if nil != err {
+		logging.LogErrorf("get cloud repo upload chunks failed: %s", err)
 		return
 	}
 
 	// 上传分块
 	length, err := repo.uploadChunks(uploadChunkIDs, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("upload chunks failed: %s", err)
 		return
 	}
 	uploadChunkCount = len(uploadChunkIDs)
@@ -163,6 +176,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	// 上传文件
 	length, err = repo.uploadFiles(uploadFiles, cloudInfo, context)
 	if nil != err {
+		logging.LogErrorf("upload files failed: %s", err)
 		return
 	}
 	uploadFileCount = len(uploadFiles)
