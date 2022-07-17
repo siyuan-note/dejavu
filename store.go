@@ -78,68 +78,18 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 }
 
 func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
-	if gulu.File.IsDir(filepath.Join(store.Path, "indexes")) { // TODO: 未来版本会删除这里的兼容处理
-		// 新版本存储库
-		_, file := store.IndexAbsPath(id)
-		var data []byte
-		data, err = os.ReadFile(file)
-		if nil != err {
-			if os.IsNotExist(err) {
-				_, file = store.AbsPath(id)
-				data, err = os.ReadFile(file)
-				if nil != err {
-					return
-				}
-			} else {
-				return
-			}
-		}
-
-		// Index 没有加密，直接解压
-		data, err = store.compressDecoder.DecodeAll(data, nil)
-		if nil == err {
-			ret = &entity.Index{}
-			err = gulu.JSON.UnmarshalJSON(data, ret)
-		}
-		return
-	}
-
-	// 旧版本存储库兼容和迁移
-	// TODO: 未来版本会删除这里的兼容处理
-
-	_, file := store.AbsPath(id)
-	data, err := os.ReadFile(file)
+	_, file := store.IndexAbsPath(id)
+	var data []byte
+	data, err = os.ReadFile(file)
 	if nil != err {
 		return
 	}
 
-	originalData := data
 	// Index 没有加密，直接解压
 	data, err = store.compressDecoder.DecodeAll(data, nil)
 	if nil == err {
 		ret = &entity.Index{}
 		err = gulu.JSON.UnmarshalJSON(data, ret)
-		if nil != err {
-			return
-		}
-		// 重新入库
-		err = store.PutIndex(ret)
-		return
-	}
-
-	if zstd.ErrMagicMismatch == err {
-		// 之前的索引文件是加密的，这里解密兼容处理
-		if data, err = store.decodeData(originalData); nil != err {
-			return
-		}
-
-		ret = &entity.Index{}
-		err = gulu.JSON.UnmarshalJSON(data, ret)
-		if nil != err {
-			return
-		}
-		// 重新入库
-		err = store.PutIndex(ret)
 	}
 	return
 }
