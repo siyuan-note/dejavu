@@ -387,7 +387,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
-	poolSize := 4
+	poolSize := 8
 	if poolSize > len(chunkIDs) {
 		poolSize = len(chunkIDs)
 	}
@@ -426,6 +426,8 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 		err = downloadErr
 		return
 	}
+
+	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
@@ -437,7 +439,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 	lock := &sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
-	poolSize := 4
+	poolSize := 8
 	if poolSize > len(fileIDs) {
 		poolSize = len(fileIDs)
 	}
@@ -480,6 +482,8 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 		err = downloadErr
 		return
 	}
+
+	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
@@ -945,6 +949,26 @@ func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (r
 	return
 }
 
+func (repo *Repo) addDownloadTraffic(size int64, cloudInfo *CloudInfo) (err error) {
+	request := httpclient.NewCloudRequest()
+	resp, err := request.
+		SetBody(map[string]interface{}{"token": cloudInfo.Token, "size": size}).
+		Post(cloudInfo.Server + "/apis/siyuan/dejavu/addDownloadTraffic")
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = errors.New(fmt.Sprintf("add download traffic failed [%d]", resp.StatusCode))
+		return
+	}
+	return
+}
+
 func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
 	eventbus.Publish(EvtCloudBeforeDownloadChunk, context, id)
 
@@ -1017,6 +1041,8 @@ func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context ma
 		return
 	}
 	downloadBytes += int64(len(data))
+
+	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
@@ -1041,6 +1067,8 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 		return
 	}
 	downloadBytes += int64(len(data))
+
+	err = repo.addDownloadTraffic(downloadBytes, cloudInfo)
 	return
 }
 
