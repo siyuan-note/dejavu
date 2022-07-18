@@ -89,7 +89,9 @@ func (repo *Repo) PutIndex(index *entity.Index) (err error) {
 const (
 	EvtCheckoutBeforeWalkData    = "repo.checkout.beforeWalkData"
 	EvtCheckoutWalkData          = "repo.checkout.walkData"
+	EvtCheckoutUpsertFiles       = "repo.checkout.upsertFiles"
 	EvtCheckoutUpsertFile        = "repo.checkout.upsertFile"
+	EvtCheckoutRemoveFiles       = "repo.checkout.removeFiles"
 	EvtCheckoutRemoveFile        = "repo.checkout.removeFile"
 	EvtIndexBeforeWalkData       = "repo.index.beforeWalkData"
 	EvtIndexWalkData             = "repo.index.walkData"
@@ -203,6 +205,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
 	})
 
+	eventbus.Publish(EvtCheckoutUpsertFiles, context, upserts)
 	for _, f := range upserts {
 		waitGroup.Add(1)
 		err = p.Invoke(f)
@@ -214,6 +217,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	waitGroup.Wait()
 	p.Release()
 
+	eventbus.Publish(EvtCheckoutRemoveFiles, context, removes)
 	for _, f := range removes {
 		absPath := repo.absPath(f.Path)
 		if err = filelock.RemoveFile(absPath); nil != err {

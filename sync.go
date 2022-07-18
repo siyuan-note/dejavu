@@ -522,6 +522,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 }
 
 func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	eventbus.Publish(EvtCheckoutRemoveFiles, context, files)
 	for _, file := range files {
 		absPath := repo.absPath(file.Path)
 		if err = filelock.RemoveFile(absPath); nil != err {
@@ -533,6 +534,7 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 }
 
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	eventbus.Publish(EvtCheckoutUpsertFiles, context, files)
 	for _, file := range files {
 		err = repo.checkoutFile(file, repo.DataPath, context)
 		if nil != err {
