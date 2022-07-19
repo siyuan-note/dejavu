@@ -893,16 +893,9 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
 		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
-			// file exists，使用支持覆盖的上传凭证
-			info, statErr := os.Stat(absFilePath)
-			if nil != statErr {
-				return
-			}
-			var tokenErr error
-			uploadToken, tokenErr = repo.requestUploadToken(key, info.Size(), cloudInfo)
-			if nil != tokenErr {
-				return
-			}
+			// file exists
+			err = nil
+			return
 		}
 		time.Sleep(3 * time.Second)
 		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
@@ -913,7 +906,7 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	return
 }
 
-// requestUploadToken 请求上传凭证，不支持相同 key 覆盖。
+// requestUploadToken 请求上传凭证，不支持相同 key 覆盖。仅在更新 refs/latest 和 refs/tags 时使用。
 func (repo *Repo) requestUploadToken(key string, length int64, cloudInfo *CloudInfo) (ret string, err error) {
 	var result map[string]interface{}
 	req := httpclient.NewCloudRequest().
