@@ -581,6 +581,7 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context ma
 
 	updated := time.UnixMilli(file.Updated)
 	if err = os.Chtimes(absPath, updated, updated); nil != err {
+		logging.LogErrorf("change [%s] time failed: %s", absPath, err)
 		return
 	}
 	eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
@@ -918,7 +919,6 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 			return
 		}
 	}
-	logging.LogInfof("uploaded object [%s]", absFilePath)
 	return
 }
 
@@ -1070,7 +1070,6 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("downloaded object [key=%s, len=%d]", key, len(ret))
 	return
 }
 

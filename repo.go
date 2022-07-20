@@ -32,6 +32,7 @@ import (
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
+	"github.com/siyuan-note/logging"
 )
 
 var lock = sync.Mutex{} // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
@@ -199,6 +200,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 
 		updated := time.UnixMilli(file.Updated)
 		if chtErr := os.Chtimes(absPath, updated, updated); nil != chtErr {
+			logging.LogErrorf("change [%s] time failed: %s", absPath, chtErr)
 			errs = append(errs, chtErr)
 			return
 		}
@@ -401,6 +403,7 @@ func (repo *Repo) relPath(absPath string) string {
 func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashes []string, err error) {
 	info, statErr := os.Stat(absPath)
 	if nil != statErr {
+		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
 		err = statErr
 		return
 	}
@@ -408,6 +411,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	if chunker.MinSize > info.Size() {
 		data, readErr := filelock.NoLockFileRead(absPath)
 		if nil != readErr {
+			logging.LogErrorf("read file [%s] failed: %s", absPath, readErr)
 			err = readErr
 			return
 		}
@@ -419,9 +423,10 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 
 	reader, err := filelock.OpenFile(absPath)
 	if nil != err {
+		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
 		return
 	}
-	defer filelock.CloseFile(reader)
+
 	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
 	for {
 		buf := make([]byte, chunker.MaxSize)
@@ -431,12 +436,25 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		}
 		if nil != chnkErr {
 			err = chnkErr
-			return
+			break
 		}
 
 		chnkHash := util.Hash(chnk.Data)
 		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: chnk.Data})
 		chunkHashes = append(chunkHashes, chnkHash)
+	}
+
+	if nil != err {
+		logging.LogErrorf("chunk file [%s] failed: %s", absPath, err)
+		if closeErr := filelock.CloseFile(reader); nil != closeErr {
+			logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
+		}
+		return
+	}
+
+	if err = filelock.CloseFile(reader); nil != err {
+		logging.LogErrorf("close file [%s] failed: %s", absPath, err)
+		return
 	}
 	return
 }
