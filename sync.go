@@ -188,6 +188,9 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
+	// 过滤掉之前上传过的文件
+	upsertFiles = repo.filterUploaded(upsertFiles, latestSync)
+
 	// 计算待上传云端的分块
 	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
 	if nil != err {
@@ -356,6 +359,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			logging.LogErrorf("get local upsert files failed: %s", err)
 			return
 		}
+		upsertFiles = repo.filterUploaded(upsertFiles, latestSync)
 
 		upsertChunkIDs, err = repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
 		if nil != err {
@@ -410,6 +414,15 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	if nil != err {
 		logging.LogErrorf("update latest sync failed: %s", err)
 		return
+	}
+	return
+}
+
+func (repo *Repo) filterUploaded(upsertFiles []*entity.File, latestSync *entity.Index) (ret []*entity.File) {
+	for _, file := range upsertFiles {
+		if file.Updated > latestSync.Created {
+			ret = append(ret, file)
+		}
 	}
 	return
 }
