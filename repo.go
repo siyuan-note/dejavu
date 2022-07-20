@@ -34,6 +34,8 @@ import (
 	"github.com/siyuan-note/filelock"
 )
 
+var lock = sync.Mutex{} // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
+
 // Repo 描述了逮虾户数据仓库。
 type Repo struct {
 	DataPath    string   // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
@@ -44,7 +46,6 @@ type Repo struct {
 
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
-	lock     *sync.Mutex // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
 }
 
 // NewRepo 创建一个新的仓库。
@@ -55,7 +56,6 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ig
 		HistoryPath: filepath.Clean(historyPath),
 		TempPath:    filepath.Clean(tempPath),
 		chunkPol:    chunker.Pol(0x3DA3358B4DC173), // 固定分块多项式值
-		lock:        &sync.Mutex{},
 	}
 	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {
 		ret.DataPath += string(os.PathSeparator)
@@ -74,15 +74,15 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ig
 
 // GetIndex 从仓库根据 id 获取索引。
 func (repo *Repo) GetIndex(id string) (index *entity.Index, err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 	return repo.store.GetIndex(id)
 }
 
 // PutIndex 将索引 index 写入仓库。
 func (repo *Repo) PutIndex(index *entity.Index) (err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 	return repo.store.PutIndex(index)
 }
 
@@ -111,8 +111,8 @@ const (
 
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。context 参数用于发布事件时传递调用上下文。
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
@@ -230,8 +230,8 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 
 // Index 将 repo 数据文件夹中的文件索引到仓库中。context 参数用于发布事件时传递调用上下文。
 func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 
 	ret, err = repo.index(memo, context)
 	return

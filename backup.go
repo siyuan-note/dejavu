@@ -28,8 +28,8 @@ import (
 )
 
 func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 
 	// 从云端下载标签指向的索引
 	length, index, err := repo.downloadCloudIndex(id, cloudInfo, context)
@@ -88,8 +88,8 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 }
 
 func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 
 	uploadFileCount, uploadChunkCount, uploadBytes, err = repo.uploadTagIndex(tag, id, cloudInfo, context)
 	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {

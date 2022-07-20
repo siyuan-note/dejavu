@@ -92,8 +92,8 @@ type TrafficStat struct {
 }
 
 func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
-	repo.lock.Lock()
-	defer repo.lock.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 
 	latest, mergeResult, trafficStat, err = repo.sync(cloudInfo, context)
 	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
