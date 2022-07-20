@@ -894,15 +894,18 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	if nil != err {
 		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
 			// file exists
+			logging.LogWarnf("upload object [%s] exists: %s", absFilePath, err)
 			err = nil
 			return
 		}
 		time.Sleep(3 * time.Second)
 		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 		if nil != err {
+			logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
 			return
 		}
 	}
+	logging.LogInfof("uploaded object [%s]", absFilePath)
 	return
 }
 
@@ -1025,12 +1028,13 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	resp, err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
 	if nil != err {
-		err = fmt.Errorf("download object failed: %s", err)
+		err = fmt.Errorf("download object [%s] failed: %s", key, err)
 		return
 	}
 	if 200 != resp.StatusCode {
-		err = fmt.Errorf("download object failed [%d]", resp.StatusCode)
+		err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
 		if 404 == resp.StatusCode {
+			logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
 			err = ErrCloudObjectNotFound
 		}
 		return
@@ -1050,6 +1054,10 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	} else if strings.Contains(key, "indexes") {
 		ret, err = repo.store.compressDecoder.DecodeAll(ret, nil)
 	}
+	if nil != err {
+		return
+	}
+	logging.LogInfof("downloaded object [key=%s, len=%d]", key, len(ret))
 	return
 }
 
