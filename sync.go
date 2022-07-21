@@ -352,6 +352,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
 		latest.Memo = mergeMemo
 		_ = repo.store.PutIndex(latest)
+		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 
 		// 索引后的 upserts 需要上传到云端
 		upsertFiles, err = repo.localUpsertFiles(localIndexes, cloudLatest.Files)
@@ -382,9 +383,6 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		}
 		trafficStat.UploadFileCount = len(upsertFiles)
 		trafficStat.UploadBytes += length
-
-		// 纳入待上传索引
-		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 	}
 
 	// 上传索引
@@ -919,6 +917,7 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 			return
 		}
 	}
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -1045,11 +1044,14 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 		return
 	}
 	if 200 != resp.StatusCode {
-		err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
 		if 404 == resp.StatusCode {
-			logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
+			if !strings.HasSuffix(key, "/refs/latest") {
+				logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
+			}
 			err = ErrCloudObjectNotFound
+			return
 		}
+		err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
 		return
 	}
 
@@ -1070,6 +1072,7 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	if nil != err {
 		return
 	}
+	//logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -1099,6 +1102,10 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	eventbus.Publish(EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
+		if errors.Is(err, ErrCloudObjectNotFound) {
+			err = nil
+			return
+		}
 		return
 	}
 	latestID := string(data)
