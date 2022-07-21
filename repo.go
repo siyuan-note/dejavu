@@ -381,9 +381,6 @@ func (repo *Repo) builtInIgnore(info os.FileInfo) (ignored bool, err error) {
 	if !info.Mode().IsRegular() {
 		return true, nil
 	}
-	if 1024*1024*100 <= info.Size() {
-		return true, nil
-	}
 	return false, nil
 }
 
