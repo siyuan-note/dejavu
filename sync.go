@@ -32,6 +32,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/qiniu/go-sdk/v7/client"
 	"github.com/qiniu/go-sdk/v7/storage"
+	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
@@ -258,9 +259,15 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 	}
 
+	var cloudIgnore *entity.File
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
 	// 冲突的文件以本地 upsert 和 remove 为准
 	for _, cloudUpsert := range cloudUpserts {
+		if "/.siyuan/syncignore" == cloudUpsert.Path {
+			cloudIgnore = cloudUpsert
+			continue
+		}
+
 		if repo.existDataFile(localUpserts, cloudUpsert) {
 			mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
 			continue
@@ -277,6 +284,33 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			mergeResult.Removes = append(mergeResult.Removes, cloudRemove)
 		}
 	}
+
+	// 云端如果更新了忽略文件则使用其规则过滤 remove，避免后面误删本地文件 https://github.com/siyuan-note/siyuan/issues/5497
+	var ignoreLines []string
+	if nil != cloudIgnore {
+		if err = repo.checkoutFile(cloudIgnore, repo.DataPath, context); nil != err {
+			logging.LogErrorf("checkout ignore file failed: %s", err)
+			return
+		}
+		data, readErr := os.ReadFile(filepath.Join(repo.DataPath, cloudIgnore.Path))
+		if nil != readErr {
+			logging.LogErrorf("read ignore file failed: %s", readErr)
+			err = readErr
+			return
+		}
+		dataStr := string(data)
+		dataStr = strings.ReplaceAll(dataStr, "\r\n", "\n")
+		ignoreLines = strings.Split(dataStr, "\n")
+	}
+
+	ignoreMatcher := ignore.CompileIgnoreLines(ignoreLines...)
+	var tmp []*entity.File
+	for _, remove := range mergeResult.Removes {
+		if !ignoreMatcher.MatchesPath(remove.Path) {
+			tmp = append(tmp, remove)
+		}
+	}
+	mergeResult.Removes = tmp
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(mergeResult.Conflicts) {
