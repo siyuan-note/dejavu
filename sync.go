@@ -288,11 +288,12 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	// 云端如果更新了忽略文件则使用其规则过滤 remove，避免后面误删本地文件 https://github.com/siyuan-note/siyuan/issues/5497
 	var ignoreLines []string
 	if nil != cloudIgnore {
-		if err = repo.checkoutFile(cloudIgnore, repo.DataPath, context); nil != err {
+		temp := filepath.Join(repo.TempPath, "repo", "sync", "ignore")
+		if err = repo.checkoutFile(cloudIgnore, temp, context); nil != err {
 			logging.LogErrorf("checkout ignore file failed: %s", err)
 			return
 		}
-		data, readErr := os.ReadFile(filepath.Join(repo.DataPath, cloudIgnore.Path))
+		data, readErr := os.ReadFile(filepath.Join(temp, cloudIgnore.Path))
 		if nil != readErr {
 			logging.LogErrorf("read ignore file failed: %s", readErr)
 			err = readErr
