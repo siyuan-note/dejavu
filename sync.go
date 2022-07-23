@@ -259,13 +259,19 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 	}
 
-	var cloudIgnore *entity.File
+	var cloudUpsertIgnore, localUpsertIgnore *entity.File
+	for _, upsert := range localUpserts {
+		if "/.siyuan/syncignore" == upsert.Path {
+			localUpsertIgnore = upsert
+			break
+		}
+	}
+
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
 	// 冲突的文件以本地 upsert 和 remove 为准
 	for _, cloudUpsert := range cloudUpserts {
 		if "/.siyuan/syncignore" == cloudUpsert.Path {
-			cloudIgnore = cloudUpsert
-			continue
+			cloudUpsertIgnore = cloudUpsert
 		}
 
 		if repo.existDataFile(localUpserts, cloudUpsert) {
@@ -287,13 +293,17 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	// 云端如果更新了忽略文件则使用其规则过滤 remove，避免后面误删本地文件 https://github.com/siyuan-note/siyuan/issues/5497
 	var ignoreLines []string
-	if nil != cloudIgnore {
-		temp := filepath.Join(repo.TempPath, "repo", "sync", "ignore")
-		if err = repo.checkoutFile(cloudIgnore, temp, context); nil != err {
+	if nil != cloudUpsertIgnore {
+		coDir := filepath.Join(repo.DataPath)
+		if nil != localUpsertIgnore {
+			// 本地 syncignore 存在变更，则临时迁出
+			coDir = filepath.Join(repo.TempPath, "repo", "sync", "ignore")
+		}
+		if err = repo.checkoutFile(cloudUpsertIgnore, coDir, context); nil != err {
 			logging.LogErrorf("checkout ignore file failed: %s", err)
 			return
 		}
-		data, readErr := os.ReadFile(filepath.Join(temp, cloudIgnore.Path))
+		data, readErr := os.ReadFile(filepath.Join(coDir, cloudUpsertIgnore.Path))
 		if nil != readErr {
 			logging.LogErrorf("read ignore file failed: %s", readErr)
 			err = readErr
@@ -302,6 +312,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		dataStr := string(data)
 		dataStr = strings.ReplaceAll(dataStr, "\r\n", "\n")
 		ignoreLines = strings.Split(dataStr, "\n")
+		//logging.LogInfof("sync merge ignore rules: \n  %s", strings.Join(ignoreLines, "\n  "))
 	}
 
 	ignoreMatcher := ignore.CompileIgnoreLines(ignoreLines...)
@@ -309,7 +320,9 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	for _, remove := range mergeResult.Removes {
 		if !ignoreMatcher.MatchesPath(remove.Path) {
 			tmp = append(tmp, remove)
+			continue
 		}
+		// logging.LogInfof("sync merge ignore remove [%s]", remove.Path)
 	}
 	mergeResult.Removes = tmp
 
