@@ -947,9 +947,8 @@ func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (
 		SetResult(&result)
 	req.SetBody(map[string]interface{}{
 		"token":     cloudInfo.Token,
-		"repo":      cloudInfo.Dir,
 		"key":       key,
-		"keyPrefix": path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir),
+		"keyPrefix": path.Join("siyuan", cloudInfo.UserID),
 	})
 	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoScopeKeyUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
