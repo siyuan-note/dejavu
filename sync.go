@@ -938,7 +938,7 @@ var (
 
 func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (keyToken, scopeToken string, err error) {
 	now := time.Now().UnixMilli()
-	if 1000*60*60*24 > now-cachedUploadTokenTime && "" != cachedKeyUploadToken && "" != cachedScopeUploadToken {
+	if 1000*60*59*24 > now-cachedUploadTokenTime && "" != cachedKeyUploadToken && "" != cachedScopeUploadToken {
 		return cachedKeyUploadToken, cachedScopeUploadToken, nil
 	}
 
