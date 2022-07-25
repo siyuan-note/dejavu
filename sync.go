@@ -992,7 +992,7 @@ func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (r
 		"length":    length})
 	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoScopeUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
-		err = fmt.Errorf("request repo upload token failed: %s", err)
+		err = fmt.Errorf("request repo scope upload token failed: %s", err)
 		return
 	}
 
@@ -1001,13 +1001,13 @@ func (repo *Repo) requestScopeUploadToken(length int64, cloudInfo *CloudInfo) (r
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = fmt.Errorf("request repo upload token failed [%d]", resp.StatusCode)
+		err = fmt.Errorf("request repo scope upload token failed [%d]", resp.StatusCode)
 		return
 	}
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = fmt.Errorf("request repo upload token failed: %s", result["msg"].(string))
+		err = fmt.Errorf("request repo scope upload token failed: %s", result["msg"].(string))
 		return
 	}
 
