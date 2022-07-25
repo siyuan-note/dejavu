@@ -19,6 +19,7 @@ package dejavu
 import (
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/88250/gulu"
@@ -84,6 +85,9 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 		logging.LogErrorf("add tag failed: %s", err)
 		return
 	}
+
+	// 统计流量
+	go repo.addTraffic(0, downloadBytes, cloudInfo)
 	return
 }
 
@@ -163,8 +167,16 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 		return
 	}
 
+	// 获取上传凭证
+	latestKey := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs/tags/"+tag)
+	keyUploadToken, scopeUploadToken, err := repo.requestScopeKeyUploadToken(latestKey, cloudInfo)
+	if nil != err {
+		logging.LogErrorf("request upload token failed: %s", err)
+		return
+	}
+
 	// 上传分块
-	length, err := repo.uploadChunks(uploadChunkIDs, cloudInfo, context)
+	length, err := repo.uploadChunks(uploadChunkIDs, scopeUploadToken, cloudInfo, context)
 	if nil != err {
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
@@ -173,7 +185,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadBytes += length
 
 	// 上传文件
-	length, err = repo.uploadFiles(uploadFiles, cloudInfo, context)
+	length, err = repo.uploadFiles(uploadFiles, scopeUploadToken, cloudInfo, context)
 	if nil != err {
 		logging.LogErrorf("upload files failed: %s", err)
 		return
@@ -182,14 +194,17 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadBytes += length
 
 	// 上传索引
-	length, err = repo.uploadIndexes([]*entity.Index{index}, cloudInfo, context)
+	length, err = repo.uploadIndexes([]*entity.Index{index}, scopeUploadToken, cloudInfo, context)
 	uploadFileCount++
 	uploadBytes += length
 
 	// 上传标签
-	length, err = repo.updateCloudRef("refs/tags/"+tag, cloudInfo, context)
+	length, err = repo.updateCloudRef("refs/tags/"+tag, keyUploadToken, cloudInfo, context)
 	uploadFileCount++
 	uploadBytes += length
+
+	// 统计流量
+	go repo.addTraffic(uploadBytes, 0, cloudInfo)
 	return
 }
 
