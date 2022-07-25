@@ -931,7 +931,17 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	return
 }
 
+var (
+	cachedKeyUploadToken, cachedScopeUploadToken string
+	cachedUploadTokenTime                        int64
+)
+
 func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (keyToken, scopeToken string, err error) {
+	now := time.Now().UnixMilli()
+	if 1000*60*60*24 > now-cachedUploadTokenTime && "" != cachedKeyUploadToken && "" != cachedScopeUploadToken {
+		return cachedKeyUploadToken, cachedScopeUploadToken, nil
+	}
+
 	var result map[string]interface{}
 	req := httpclient.NewCloudRequest().
 		SetResult(&result)
@@ -965,6 +975,9 @@ func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (
 	resultData := result["data"].(map[string]interface{})
 	keyToken = resultData["keyToken"].(string)
 	scopeToken = resultData["scopeToken"].(string)
+	cachedUploadTokenTime = now
+	cachedKeyUploadToken = keyToken
+	cachedScopeUploadToken = scopeToken
 	return
 }
 
