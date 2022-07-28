@@ -931,19 +931,14 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	return
 }
 
-type KeyUploadToken struct {
-	key, token string
-	expired    int64
-}
-
-type ScopeKeyUploadToken struct {
+type UploadToken struct {
 	key, token string
 	expired    int64
 }
 
 var (
-	keyUploadTokenMap   = map[string]*KeyUploadToken{}
-	scopeUploadTokenMap = map[string]*ScopeKeyUploadToken{}
+	keyUploadTokenMap   = map[string]*UploadToken{}
+	scopeUploadTokenMap = map[string]*UploadToken{}
 	uploadTokenMapLock  = &sync.Mutex{}
 )
 
@@ -956,7 +951,10 @@ func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (
 	cachedScopeToken := scopeUploadTokenMap[keyPrefix]
 	if nil != cachedScopeToken && nil != cachedKeyToken {
 		if now < cachedKeyToken.expired && now < cachedScopeToken.expired {
-			return cachedKeyToken.token, cachedScopeToken.token, nil
+			keyToken = cachedKeyToken.token
+			scopeToken = cachedScopeToken.token
+			uploadTokenMapLock.Unlock()
+			return
 		}
 		delete(keyUploadTokenMap, key)
 		delete(scopeUploadTokenMap, keyPrefix)
@@ -996,12 +994,12 @@ func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (
 	scopeToken = resultData["scopeToken"].(string)
 	expired := now + 1000*60*60*24 - 60*1000
 	uploadTokenMapLock.Lock()
-	keyUploadTokenMap[key] = &KeyUploadToken{
+	keyUploadTokenMap[key] = &UploadToken{
 		key:     key,
 		token:   keyToken,
 		expired: expired,
 	}
-	scopeUploadTokenMap[keyPrefix] = &ScopeKeyUploadToken{
+	scopeUploadTokenMap[keyPrefix] = &UploadToken{
 		key:     keyPrefix,
 		token:   scopeToken,
 		expired: expired,
