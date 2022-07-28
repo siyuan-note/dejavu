@@ -931,24 +931,44 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	return
 }
 
+type KeyUploadToken struct {
+	key, token string
+	expired    int64
+}
+
+type ScopeKeyUploadToken struct {
+	key, token string
+	expired    int64
+}
+
 var (
-	cachedKeyUploadToken, cachedScopeUploadToken string
-	cachedUploadTokenTime                        int64
+	keyUploadTokenMap   = map[string]*KeyUploadToken{}
+	scopeUploadTokenMap = map[string]*ScopeKeyUploadToken{}
+	uploadTokenMapLock  = &sync.Mutex{}
 )
 
 func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (keyToken, scopeToken string, err error) {
 	now := time.Now().UnixMilli()
-	if 1000*60*59*24 > now-cachedUploadTokenTime && "" != cachedKeyUploadToken && "" != cachedScopeUploadToken {
-		return cachedKeyUploadToken, cachedScopeUploadToken, nil
+	keyPrefix := path.Join("siyuan", cloudInfo.UserID)
+
+	uploadTokenMapLock.Lock()
+	cachedKeyToken := keyUploadTokenMap[key]
+	cachedScopeToken := scopeUploadTokenMap[keyPrefix]
+	if nil != cachedScopeToken && nil != cachedKeyToken {
+		if now < cachedKeyToken.expired && now < cachedScopeToken.expired {
+			return cachedKeyToken.token, cachedScopeToken.token, nil
+		}
+		delete(keyUploadTokenMap, key)
+		delete(scopeUploadTokenMap, keyPrefix)
 	}
+	uploadTokenMapLock.Unlock()
 
 	var result map[string]interface{}
-	req := httpclient.NewCloudRequest().
-		SetResult(&result)
+	req := httpclient.NewCloudRequest().SetResult(&result)
 	req.SetBody(map[string]interface{}{
 		"token":     cloudInfo.Token,
 		"key":       key,
-		"keyPrefix": path.Join("siyuan", cloudInfo.UserID),
+		"keyPrefix": keyPrefix,
 	})
 	resp, err := req.Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoScopeKeyUploadToken?uid=" + cloudInfo.UserID)
 	if nil != err {
@@ -974,9 +994,19 @@ func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (
 	resultData := result["data"].(map[string]interface{})
 	keyToken = resultData["keyToken"].(string)
 	scopeToken = resultData["scopeToken"].(string)
-	cachedUploadTokenTime = now
-	cachedKeyUploadToken = keyToken
-	cachedScopeUploadToken = scopeToken
+	expired := now + 1000*60*60*24 - 60*1000
+	uploadTokenMapLock.Lock()
+	keyUploadTokenMap[key] = &KeyUploadToken{
+		key:     key,
+		token:   keyToken,
+		expired: expired,
+	}
+	scopeUploadTokenMap[keyPrefix] = &ScopeKeyUploadToken{
+		key:     keyPrefix,
+		token:   scopeToken,
+		expired: expired,
+	}
+	uploadTokenMapLock.Unlock()
 	return
 }
 
