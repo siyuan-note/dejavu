@@ -1031,6 +1031,7 @@ func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context ma
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
+		logging.LogErrorf("download cloud chunk [%s] failed: %s", id, err)
 		return
 	}
 	length = int64(len(data))
@@ -1044,6 +1045,7 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
+		logging.LogErrorf("download cloud file [%s] failed: %s", id, err)
 		return
 	}
 	length = int64(len(data))
@@ -1079,12 +1081,14 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	if strings.Contains(key, "objects") {
 		ret, err = repo.store.decodeData(ret)
 		if nil != err {
+			logging.LogErrorf("decode downloaded data [%s] failed: %s", key, err)
 			return
 		}
 	} else if strings.Contains(key, "indexes") {
 		ret, err = repo.store.compressDecoder.DecodeAll(ret, nil)
 	}
 	if nil != err {
+		logging.LogErrorf("decode downloaded data [%s] failed: %s", key, err)
 		return
 	}
 	//logging.LogInfof("downloaded object [%s]", key)
