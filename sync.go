@@ -64,11 +64,12 @@ var (
 )
 
 type CloudInfo struct {
-	Dir       string // 仓库目录名
-	UserID    string // 用户 ID
-	Token     string // 用户身份鉴权令牌
-	LimitSize int64  // 存储空间限制
-	Server    string // 云端接口端点
+	Dir       string        // 仓库目录名
+	UserID    string        // 用户 ID
+	Token     string        // 用户身份鉴权令牌
+	LimitSize int64         // 存储空间限制
+	Server    string        // 云端接口端点
+	Zone      *storage.Zone // 云端存储空间区域
 }
 
 type MergeResult struct {
@@ -910,7 +911,7 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToken string) (err error) {
 	absFilePath := filepath.Join(repo.Path, filePath)
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
-	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true, Zone: cloudInfo.Zone})
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
