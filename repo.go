@@ -130,7 +130,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		if nil != err {
 			return io.EOF
 		}
-		if ignored, ignoreResult := repo.builtInIgnore(info); ignored || nil != ignoreResult {
+		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
 			return ignoreResult
 		}
 
@@ -247,7 +247,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		if nil != err {
 			return io.EOF
 		}
-		if ignored, ignoreResult := repo.builtInIgnore(info); ignored || nil != ignoreResult {
+		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
 			return ignoreResult
 		}
 
@@ -371,13 +371,23 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	return
 }
 
-func (repo *Repo) builtInIgnore(info os.FileInfo) (ignored bool, err error) {
+func (repo *Repo) builtInIgnore(info os.FileInfo, path string) (ignored bool, err error) {
 	if info.IsDir() {
-		if ".git" == info.Name() {
+		if strings.HasPrefix(info.Name(), ".") {
+			if ".siyuan" == info.Name() {
+				return true, nil
+			}
 			return true, filepath.SkipDir
 		}
 		return true, nil
+	} else if strings.HasPrefix(info.Name(), ".") {
+		return true, nil
 	}
+
+	if gulu.File.IsHidden(path) {
+		return true, nil
+	}
+
 	if !info.Mode().IsRegular() {
 		return true, nil
 	}
