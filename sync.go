@@ -883,31 +883,28 @@ func (repo *Repo) UpdateLatestSync(id string) (err error) {
 }
 
 func (repo *Repo) latestSync() (ret *entity.Index) {
+	ret = &entity.Index{} // 构造一个空的索引表示没有同步点
+
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
 	if !gulu.File.IsExist(latestSync) {
-		ret = &entity.Index{} // 构造一个空的索引表示没有同步点
 		return
 	}
 
 	data, err := os.ReadFile(latestSync)
 	if nil != err {
 		logging.LogWarnf("read latest sync index failed: %s", err)
-		ret = &entity.Index{}
 		return
 	}
 	hash := string(data)
 	hash = strings.TrimSpace(hash)
 	if "" == hash {
 		logging.LogWarnf("read latest sync index hash is empty")
-		// 改进意外情况下同步点损坏导致无法同步的问题 https://github.com/siyuan-note/siyuan/issues/5603
-		ret = &entity.Index{}
 		return
 	}
 
 	ret, err = repo.store.GetIndex(hash)
 	if nil != err {
 		logging.LogWarnf("get latest sync index failed: %s", err)
-		ret = &entity.Index{}
 		return
 	}
 	return
