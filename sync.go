@@ -120,12 +120,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		return
 	}
 
-	latestSync, err := repo.latestSync()
-	if nil != err {
-		logging.LogErrorf("get latest sync failed: %s", err)
-		return
-	}
-
+	latestSync := repo.latestSync()
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 从云端获取最新索引
@@ -887,7 +882,7 @@ func (repo *Repo) UpdateLatestSync(id string) (err error) {
 	return
 }
 
-func (repo *Repo) latestSync() (ret *entity.Index, err error) {
+func (repo *Repo) latestSync() (ret *entity.Index) {
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
 	if !gulu.File.IsExist(latestSync) {
 		ret = &entity.Index{} // 构造一个空的索引表示没有同步点
@@ -896,11 +891,14 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 
 	data, err := os.ReadFile(latestSync)
 	if nil != err {
+		logging.LogWarnf("read latest sync index failed: %s", err)
+		ret = &entity.Index{}
 		return
 	}
 	hash := string(data)
 	hash = strings.TrimSpace(hash)
 	if "" == hash {
+		logging.LogWarnf("read latest sync index hash is empty")
 		// 改进意外情况下同步点损坏导致无法同步的问题 https://github.com/siyuan-note/siyuan/issues/5603
 		ret = &entity.Index{}
 		return
@@ -908,7 +906,7 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 
 	ret, err = repo.store.GetIndex(hash)
 	if os.IsNotExist(err) {
-		err = nil
+		logging.LogWarnf("get latest sync index failed: %s", err)
 		ret = &entity.Index{}
 		return
 	}
