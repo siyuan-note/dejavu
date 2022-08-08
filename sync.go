@@ -899,6 +899,13 @@ func (repo *Repo) latestSync() (ret *entity.Index, err error) {
 		return
 	}
 	hash := string(data)
+	hash = strings.TrimSpace(hash)
+	if "" == hash {
+		// 改进意外情况下同步点损坏导致无法同步的问题 https://github.com/siyuan-note/siyuan/issues/5603
+		ret = &entity.Index{}
+		return
+	}
+
 	ret, err = repo.store.GetIndex(hash)
 	if os.IsNotExist(err) {
 		err = nil
