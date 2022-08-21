@@ -261,9 +261,11 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	var cloudUpserts, tmpCloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
 		tmpCloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
-		if 0 < len(fetchFileIDs) {
-			// 发生实际下载文件的情况下才能认为云端有更新的 upserts
-			cloudUpserts = tmpCloudUpserts
+		// 发生实际下载文件的情况下才能认为云端有更新的 upserts
+		for _, cloudUpsert := range tmpCloudUpserts {
+			if gulu.Str.Contains(cloudUpsert.ID, fetchFileIDs) {
+				cloudUpserts = append(cloudUpserts, cloudUpsert)
+			}
 		}
 	}
 
