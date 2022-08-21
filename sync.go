@@ -258,9 +258,13 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
-	var cloudUpserts, cloudRemoves []*entity.File
+	var cloudUpserts, tmpCloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
-		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
+		tmpCloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
+		if 0 < len(fetchFileIDs) {
+			// 发生实际下载文件的情况下才能认为云端有更新的 upserts
+			cloudUpserts = tmpCloudUpserts
+		}
 	}
 
 	var cloudUpsertIgnore, localUpsertIgnore *entity.File
@@ -332,8 +336,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(mergeResult.Conflicts) {
-		now := time.Now().Format("2006-01-02-150405")
-		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
+		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts")
 		for _, file := range mergeResult.Conflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
@@ -349,7 +352,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			}
 
 			absPath := filepath.Join(temp, checkoutTmp.Path)
-			err = repo.genSyncHistory(now, file.Path, absPath)
+			err = repo.genSyncHistory(time.Now().Format("2006-01-02-150405"), file.Path, absPath)
 			if nil != err {
 				logging.LogErrorf("generate sync history failed: %s", err)
 				err = ErrCloudGenerateConflictHistory
