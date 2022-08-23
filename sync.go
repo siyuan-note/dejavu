@@ -924,7 +924,7 @@ func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToke
 	if nil != err {
 		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
 			// file exists
-			logging.LogWarnf("upload object [%s] exists: %s", absFilePath, err)
+			//logging.LogWarnf("upload object [%s] exists: %s", absFilePath, err)
 			err = nil
 			return
 		}
