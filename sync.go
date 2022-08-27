@@ -340,7 +340,8 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(tmpMergeConflicts) {
-		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts")
+		now := time.Now().Format("2006-01-02-150405")
+		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
 		for _, file := range tmpMergeConflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
@@ -356,7 +357,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			}
 
 			absPath := filepath.Join(temp, checkoutTmp.Path)
-			err = repo.genSyncHistory(time.Now().Format("2006-01-02-150405"), file.Path, absPath)
+			err = repo.genSyncHistory(now, file.Path, absPath)
 			if nil != err {
 				logging.LogErrorf("generate sync history failed: %s", err)
 				err = ErrCloudGenerateConflictHistory
