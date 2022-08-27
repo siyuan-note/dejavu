@@ -273,14 +273,19 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
 	// 冲突的文件以本地 upsert 和 remove 为准
+	var tmpMergeConflicts []*entity.File
 	for _, cloudUpsert := range cloudUpserts {
 		if "/.siyuan/syncignore" == cloudUpsert.Path {
 			cloudUpsertIgnore = cloudUpsert
 		}
 
 		if repo.existDataFile(localUpserts, cloudUpsert) {
+			// 无论是否发生实际下载文件，都需要生成本地历史，以确保任何情况下都能够通过数据历史恢复文件
+			tmpMergeConflicts = append(tmpMergeConflicts, cloudUpsert)
+
 			if gulu.Str.Contains(cloudUpsert.ID, fetchFileIDs) {
 				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
+				// 冲突列表在外部单独处理生成副本
 				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
 			}
 			continue
@@ -334,9 +339,9 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	mergeResult.Removes = tmp
 
 	// 冲突文件复制到数据历史文件夹
-	if 0 < len(mergeResult.Conflicts) {
+	if 0 < len(tmpMergeConflicts) {
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts")
-		for _, file := range mergeResult.Conflicts {
+		for _, file := range tmpMergeConflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
