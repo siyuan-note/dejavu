@@ -258,15 +258,9 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
-	var cloudUpserts, tmpCloudUpserts, cloudRemoves []*entity.File
+	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
-		tmpCloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
-		// 发生实际下载文件的情况下才能认为云端有更新的 upserts
-		for _, cloudUpsert := range tmpCloudUpserts {
-			if gulu.Str.Contains(cloudUpsert.ID, fetchFileIDs) {
-				cloudUpserts = append(cloudUpserts, cloudUpsert)
-			}
-		}
+		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 	}
 
 	var cloudUpsertIgnore, localUpsertIgnore *entity.File
@@ -285,7 +279,9 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		}
 
 		if repo.existDataFile(localUpserts, cloudUpsert) {
-			mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
+			if gulu.Str.Contains(cloudUpsert.ID, fetchFileIDs) {
+				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
+			}
 			continue
 		}
 

@@ -16,32 +16,9 @@
 
 package dejavu
 
-import "github.com/siyuan-note/dejavu/entity"
-
-// DiffUpsert 比较 left 多于/变动 right 的文件。
-func (repo *Repo) DiffUpsert(left, right []*entity.File) (ret []*entity.File) {
-	l := map[string]*entity.File{}
-	r := map[string]*entity.File{}
-	for _, f := range left {
-		l[f.Path] = f
-	}
-	for _, f := range right {
-		r[f.Path] = f
-	}
-
-	for lPath, lFile := range l {
-		rFile := r[lPath]
-		if nil == rFile {
-			ret = append(ret, l[lPath])
-			continue
-		}
-		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
-			ret = append(ret, l[lPath])
-			continue
-		}
-	}
-	return
-}
+import (
+	"github.com/siyuan-note/dejavu/entity"
+)
 
 // DiffUpsertRemove 比较 left 多于/变动 right 的文件以及 left 少于 right 的文件。
 func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes []*entity.File) {
