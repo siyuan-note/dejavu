@@ -280,6 +280,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 		if repo.existDataFile(localUpserts, cloudUpsert) {
 			if gulu.Str.Contains(cloudUpsert.ID, fetchFileIDs) {
+				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
 				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
 			}
 			continue
