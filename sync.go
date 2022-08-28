@@ -73,6 +73,7 @@ type CloudInfo struct {
 }
 
 type MergeResult struct {
+	Time                        time.Time
 	Upserts, Removes, Conflicts []*entity.File
 }
 
@@ -111,7 +112,7 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 }
 
 func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
-	mergeResult = &MergeResult{}
+	mergeResult = &MergeResult{Time: time.Now()}
 	trafficStat = &TrafficStat{}
 
 	latest, err = repo.Latest()
@@ -340,7 +341,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(tmpMergeConflicts) {
-		now := time.Now().Format("2006-01-02-150405")
+		now := mergeResult.Time.Format("2006-01-02-150405")
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
 		for _, file := range tmpMergeConflicts {
 			var checkoutTmp *entity.File
