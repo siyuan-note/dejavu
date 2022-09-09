@@ -9,8 +9,8 @@ dmitri.shuralyov.com/state v0.0.0-20180228185332-28bcc343414c/go.mod h1:0PRwlb0D
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 github.com/88250/flock v0.8.2 h1:LLbRJw3hoYfjD4g7DiYsYcTCCFTxm8icn/WepLlxIg0=
 github.com/88250/flock v0.8.2/go.mod h1:k+PZxETAUe4vLZx3R39ykvQCIlwHhc7AI2P2NUQV6zw=
-github.com/88250/gulu v1.2.3-0.20220720144315-065ef35ec583 h1:FhA/zJemLrbOYJpdMIMBezO5rGigQSdPR1kv+aztHfA=
-github.com/88250/gulu v1.2.3-0.20220720144315-065ef35ec583/go.mod h1:I1qBzsksFL2ciGSuqDE7R3XW4BUMrfDgOvSXEk7FsAI=
+github.com/88250/gulu v1.2.3-0.20220909041418-fdfa4d7380bf h1:q+iiBuKjdvUKj5dQQHCRs+g9oChTWkZmm7r1FMvtkfI=
+github.com/88250/gulu v1.2.3-0.20220909041418-fdfa4d7380bf/go.mod h1:I1qBzsksFL2ciGSuqDE7R3XW4BUMrfDgOvSXEk7FsAI=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=
 github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef h1:2JGTg6JapxP9/R33ZaagQtAM4EkkSYnIAlOG5EI8gkM=

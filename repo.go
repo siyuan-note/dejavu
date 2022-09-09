@@ -147,7 +147,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	defer util.RemoveEmptyDirs(repo.DataPath)
+	defer gulu.File.RemoveEmptyDirs(repo.DataPath)
 
 	var latestFiles []*entity.File
 	for _, f := range index.Files {
