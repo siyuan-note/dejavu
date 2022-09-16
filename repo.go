@@ -87,29 +87,6 @@ func (repo *Repo) PutIndex(index *entity.Index) (err error) {
 	return repo.store.PutIndex(index)
 }
 
-const (
-	EvtCheckoutBeforeWalkData    = "repo.checkout.beforeWalkData"
-	EvtCheckoutWalkData          = "repo.checkout.walkData"
-	EvtCheckoutUpsertFiles       = "repo.checkout.upsertFiles"
-	EvtCheckoutUpsertFile        = "repo.checkout.upsertFile"
-	EvtCheckoutRemoveFiles       = "repo.checkout.removeFiles"
-	EvtCheckoutRemoveFile        = "repo.checkout.removeFile"
-	EvtIndexBeforeWalkData       = "repo.index.beforeWalkData"
-	EvtIndexWalkData             = "repo.index.walkData"
-	EvtIndexBeforeGetLatestFiles = "repo.index.beforeGetLatestFiles"
-	EvtIndexGetLatestFile        = "repo.index.getLatestFile"
-	EvtIndexUpsertFiles          = "repo.index.upsertFiles"
-	EvtIndexUpsertFile           = "repo.index.upsertFile"
-)
-
-const (
-	CtxPushMsg = "pushMsg"
-
-	CtxPushMsgToProgress = iota
-	CtxPushMsgToStatusBar
-	CtxPushMsgToStatusBarAndProgress
-)
-
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。context 参数用于发布事件时传递调用上下文。
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
 	lock.Lock()
@@ -125,7 +102,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	}
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
-	eventbus.Publish(EvtCheckoutBeforeWalkData, context, repo.DataPath)
+	eventbus.Publish(eventbus.EvtCheckoutBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -140,7 +117,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		}
 
 		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
-		eventbus.Publish(EvtCheckoutWalkData, context, p)
+		eventbus.Publish(eventbus.EvtCheckoutWalkData, context, p)
 		return nil
 	})
 	if nil != err {
@@ -204,10 +181,10 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 			errs = append(errs, chtErr)
 			return
 		}
-		eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
+		eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
 	})
 
-	eventbus.Publish(EvtCheckoutUpsertFiles, context, upserts)
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, upserts)
 	for _, f := range upserts {
 		waitGroup.Add(1)
 		err = p.Invoke(f)
@@ -219,13 +196,13 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	waitGroup.Wait()
 	p.Release()
 
-	eventbus.Publish(EvtCheckoutRemoveFiles, context, removes)
+	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, removes)
 	for _, f := range removes {
 		absPath := repo.absPath(f.Path)
 		if err = filelock.RemoveFile(absPath); nil != err {
 			return
 		}
-		eventbus.Publish(EvtCheckoutRemoveFile, context, f.Path)
+		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, f.Path)
 	}
 	return
 }
@@ -242,7 +219,7 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
-	eventbus.Publish(EvtIndexBeforeWalkData, context, repo.DataPath)
+	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			return io.EOF
@@ -257,7 +234,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 
 		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
-		eventbus.Publish(EvtIndexWalkData, context, p)
+		eventbus.Publish(eventbus.EvtIndexWalkData, context, p)
 		return nil
 	})
 	if nil != err {
@@ -277,9 +254,9 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	}
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
-		eventbus.Publish(EvtIndexBeforeGetLatestFiles, context, latest.Files)
+		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, latest.Files)
 		for _, f := range latest.Files {
-			eventbus.Publish(EvtIndexGetLatestFile, context, f)
+			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, f)
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
 			if nil != err {
@@ -303,7 +280,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		case *entity.Chunk:
 			putErr = repo.store.PutChunk(obj)
 		case *entity.File:
-			eventbus.Publish(EvtIndexUpsertFile, context, obj.Path)
+			eventbus.Publish(eventbus.EvtIndexUpsertFile, context, obj.Path)
 			putErr = repo.store.PutFile(obj)
 		case *entity.Index:
 			putErr = repo.store.PutIndex(obj)
@@ -325,7 +302,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 	}
 
-	eventbus.Publish(EvtIndexUpsertFiles, context, upserts)
+	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, upserts)
 	for _, file := range upserts {
 		absPath := repo.absPath(file.Path)
 		chunks, hashes, chunkErr := repo.fileChunks(absPath)

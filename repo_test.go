@@ -79,36 +79,36 @@ func clearTestdata(t *testing.T) {
 }
 
 func subscribeEvents(t *testing.T) {
-	eventbus.Subscribe(EvtIndexBeforeWalkData, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtIndexBeforeWalkData, path)
+	eventbus.Subscribe(eventbus.EvtIndexBeforeWalkData, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtIndexBeforeWalkData, path)
 	})
-	eventbus.Subscribe(EvtIndexWalkData, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtIndexWalkData, path)
+	eventbus.Subscribe(eventbus.EvtIndexWalkData, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtIndexWalkData, path)
 	})
-	eventbus.Subscribe(EvtIndexBeforeGetLatestFiles, func(context map[string]interface{}, path []string) {
-		t.Logf("[%s]: [%v]", EvtIndexBeforeGetLatestFiles, path)
+	eventbus.Subscribe(eventbus.EvtIndexBeforeGetLatestFiles, func(context map[string]interface{}, path []string) {
+		t.Logf("[%s]: [%v]", eventbus.EvtIndexBeforeGetLatestFiles, path)
 	})
-	eventbus.Subscribe(EvtIndexGetLatestFile, func(context map[string]interface{}, id string) {
-		t.Logf("[%s]: [%s]", EvtIndexGetLatestFile, id)
+	eventbus.Subscribe(eventbus.EvtIndexGetLatestFile, func(context map[string]interface{}, id string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtIndexGetLatestFile, id)
 	})
-	eventbus.Subscribe(EvtIndexUpsertFiles, func(context map[string]interface{}, files []*entity.File) {
-		t.Logf("[%s]: [%v]", EvtIndexUpsertFiles, files)
+	eventbus.Subscribe(eventbus.EvtIndexUpsertFiles, func(context map[string]interface{}, files []*entity.File) {
+		t.Logf("[%s]: [%v]", eventbus.EvtIndexUpsertFiles, files)
 	})
-	eventbus.Subscribe(EvtIndexUpsertFile, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtIndexUpsertFile, path)
+	eventbus.Subscribe(eventbus.EvtIndexUpsertFile, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtIndexUpsertFile, path)
 	})
 
-	eventbus.Subscribe(EvtCheckoutBeforeWalkData, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtCheckoutBeforeWalkData, path)
+	eventbus.Subscribe(eventbus.EvtCheckoutBeforeWalkData, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutBeforeWalkData, path)
 	})
-	eventbus.Subscribe(EvtCheckoutWalkData, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtCheckoutWalkData, path)
+	eventbus.Subscribe(eventbus.EvtCheckoutWalkData, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutWalkData, path)
 	})
-	eventbus.Subscribe(EvtCheckoutUpsertFile, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtCheckoutUpsertFile, path)
+	eventbus.Subscribe(eventbus.EvtCheckoutUpsertFile, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutUpsertFile, path)
 	})
-	eventbus.Subscribe(EvtCheckoutRemoveFile, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", EvtCheckoutRemoveFile, path)
+	eventbus.Subscribe(eventbus.EvtCheckoutRemoveFile, func(context map[string]interface{}, path string) {
+		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutRemoveFile, path)
 	})
 }
 

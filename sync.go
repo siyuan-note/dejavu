@@ -40,21 +40,6 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
-const (
-	EvtCloudBeforeUploadIndex    = "repo.cloudBeforeUploadIndex"
-	EvtCloudBeforeUploadFiles    = "repo.cloudBeforeUploadFiles"
-	EvtCloudBeforeUploadFile     = "repo.cloudBeforeUploadFile"
-	EvtCloudBeforeUploadChunks   = "repo.cloudBeforeUploadChunks"
-	EvtCloudBeforeUploadChunk    = "repo.cloudBeforeUploadChunk"
-	EvtCloudBeforeDownloadIndex  = "repo.cloudBeforeDownloadIndex"
-	EvtCloudBeforeDownloadFiles  = "repo.cloudBeforeDownloadFiles"
-	EvtCloudBeforeDownloadFile   = "repo.cloudBeforeDownloadFile"
-	EvtCloudBeforeDownloadChunks = "repo.cloudBeforeDownloadChunks"
-	EvtCloudBeforeDownloadChunk  = "repo.cloudBeforeDownloadChunk"
-	EvtCloudBeforeDownloadRef    = "repo.cloudBeforeDownloadRef"
-	EvtCloudBeforeUploadRef      = "repo.cloudBeforeUploadRef"
-)
-
 var (
 	ErrCloudStorageSizeExceeded     = errors.New("cloud storage limit size exceeded")
 	ErrCloudBackupCountExceeded     = errors.New("cloud backup count exceeded")
@@ -505,7 +490,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 		return
 	}
 
-	eventbus.Publish(EvtCloudBeforeDownloadChunks, context, chunkIDs)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunks, context, chunkIDs)
 	for _, chunkID := range chunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(chunkID); nil != err {
@@ -559,7 +544,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 		return
 	}
 
-	eventbus.Publish(EvtCloudBeforeDownloadFiles, context, fileIDs)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFiles, context, fileIDs)
 	for _, fileID := range fileIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(fileID); nil != err {
@@ -576,19 +561,19 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 }
 
 func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	eventbus.Publish(EvtCheckoutRemoveFiles, context, files)
+	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, files)
 	for _, file := range files {
 		absPath := repo.absPath(file.Path)
 		if err = filelock.RemoveFile(absPath); nil != err {
 			return
 		}
-		eventbus.Publish(EvtCheckoutRemoveFile, context, file.Path)
+		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, file.Path)
 	}
 	return
 }
 
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	eventbus.Publish(EvtCheckoutUpsertFiles, context, files)
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, files)
 	for _, file := range files {
 		err = repo.checkoutFile(file, repo.DataPath, context)
 		if nil != err {
@@ -625,7 +610,7 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context ma
 		logging.LogErrorf("change [%s] time failed: %s", absPath, err)
 		return
 	}
-	eventbus.Publish(EvtCheckoutUpsertFile, context, file.Path)
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
 	return
 }
 
@@ -651,7 +636,7 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 }
 
 func (repo *Repo) updateCloudRef(ref, keyUploadToken string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadBytes int64, err error) {
-	eventbus.Publish(EvtCloudBeforeUploadRef, context, ref)
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, ref)
 
 	absFilePath := filepath.Join(repo.Path, ref)
 	info, err := os.Stat(absFilePath)
@@ -690,7 +675,7 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, scopeUploadToken string
 		}
 
 		indexID := arg.(string)
-		eventbus.Publish(EvtCloudBeforeUploadIndex, context, indexID)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, indexID)
 		if err = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, scopeUploadToken); nil != err {
 			return
 		}
@@ -738,7 +723,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken strin
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		eventbus.Publish(EvtCloudBeforeUploadFile, context, upsertFileID)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID)
 		if err = repo.uploadObject(filePath, cloudInfo, scopeUploadToken); nil != err {
 			return
 		}
@@ -747,7 +732,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken strin
 		return
 	}
 
-	eventbus.Publish(EvtCloudBeforeUploadFiles, context, upsertFiles)
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadFiles, context, upsertFiles)
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertFile.ID); nil != err {
@@ -787,7 +772,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, scopeUploadToken string,
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		eventbus.Publish(EvtCloudBeforeUploadChunk, context, upsertChunkID)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID)
 		if err = repo.uploadObject(filePath, cloudInfo, scopeUploadToken); nil != err {
 			return
 		}
@@ -796,7 +781,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, scopeUploadToken string,
 		return
 	}
 
-	eventbus.Publish(EvtCloudBeforeUploadChunks, context, upsertChunkIDs)
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadChunks, context, upsertChunkIDs)
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertChunkID); nil != err {
@@ -1045,7 +1030,7 @@ func (repo *Repo) addTraffic(uploadBytes, downloadBytes int64, cloudInfo *CloudI
 }
 
 func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
-	eventbus.Publish(EvtCloudBeforeDownloadChunk, context, id)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
@@ -1059,7 +1044,7 @@ func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context ma
 }
 
 func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map[string]interface{}) (length int64, ret *entity.File, err error) {
-	eventbus.Publish(EvtCloudBeforeDownloadFile, context, id)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
@@ -1115,7 +1100,7 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 }
 
 func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
-	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, id)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, id)
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", id)
@@ -1135,7 +1120,7 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "latest")
-	eventbus.Publish(EvtCloudBeforeDownloadRef, context, "refs/latest")
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		if errors.Is(err, ErrCloudObjectNotFound) {
@@ -1146,7 +1131,7 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	}
 	latestID := string(data)
 	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", latestID)
-	eventbus.Publish(EvtCloudBeforeDownloadIndex, context, latestID)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, latestID)
 	data, err = repo.downloadCloudObject(key)
 	if nil != err {
 		return
