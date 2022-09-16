@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/logging"
 )
 
 func Hash(data []byte) string {
@@ -32,6 +33,7 @@ func RandHash() string {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
 	if nil != err {
+		logging.LogErrorf("read rand failed: %s", err)
 		return Hash([]byte(gulu.Rand.String(512)))
 	}
 	return Hash(b)
