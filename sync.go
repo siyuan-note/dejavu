@@ -564,7 +564,7 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, files)
 	for _, file := range files {
 		absPath := repo.absPath(file.Path)
-		if err = filelock.RemoveFile(absPath); nil != err {
+		if err = filelock.Remove(absPath); nil != err {
 			return
 		}
 		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, file.Path)
@@ -601,7 +601,7 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context ma
 		return
 	}
 
-	if err = filelock.NoLockFileWrite(absPath, data); nil != err {
+	if err = filelock.WriteFile(absPath, data); nil != err {
 		return
 	}
 

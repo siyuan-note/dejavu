@@ -170,7 +170,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 			return
 		}
 
-		if writeErr := filelock.NoLockFileWrite(absPath, data); nil != writeErr {
+		if writeErr := filelock.WriteFile(absPath, data); nil != writeErr {
 			errs = append(errs, writeErr)
 			return
 		}
@@ -199,7 +199,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, removes)
 	for _, f := range removes {
 		absPath := repo.absPath(f.Path)
-		if err = filelock.RemoveFile(absPath); nil != err {
+		if err = filelock.Remove(absPath); nil != err {
 			return
 		}
 		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, f.Path)
@@ -393,7 +393,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	}
 
 	if chunker.MinSize > info.Size() {
-		data, readErr := filelock.NoLockFileRead(absPath)
+		data, readErr := filelock.ReadFile(absPath)
 		if nil != readErr {
 			logging.LogErrorf("read file [%s] failed: %s", absPath, readErr)
 			err = readErr
@@ -405,7 +405,7 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		return
 	}
 
-	reader, err := filelock.OpenFile(absPath)
+	reader, err := os.OpenFile(absPath, os.O_RDWR, 0644)
 	if nil != err {
 		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
 		return
@@ -430,15 +430,20 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 
 	if nil != err {
 		logging.LogErrorf("chunk file [%s] failed: %s", absPath, err)
-		if closeErr := filelock.CloseFile(reader); nil != closeErr {
+		if closeErr := reader.Sync(); nil != closeErr {
+			logging.LogErrorf("sync file [%s] failed: %s", absPath, closeErr)
+		}
+		if closeErr := reader.Close(); nil != closeErr {
 			logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 		}
 		return
 	}
 
-	if err = filelock.CloseFile(reader); nil != err {
-		logging.LogErrorf("close file [%s] failed: %s", absPath, err)
-		return
+	if closeErr := reader.Sync(); nil != closeErr {
+		logging.LogErrorf("sync file [%s] failed: %s", absPath, closeErr)
+	}
+	if closeErr := reader.Close(); nil != closeErr {
+		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 	}
 	return
 }
