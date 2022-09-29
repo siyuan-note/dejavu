@@ -12,7 +12,7 @@ require (
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20220916025349-3ac6e75522da
-	github.com/siyuan-note/filelock v0.0.0-20220929123625-f55570ae4b0f
+	github.com/siyuan-note/filelock v0.0.0-20220929134814-c00908c4f281
 	github.com/siyuan-note/httpclient v0.0.0-20220906125021-bb9ddffaea0e
 	github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520
 )
