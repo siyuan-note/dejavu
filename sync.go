@@ -1187,7 +1187,7 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, cloudInfo *CloudI
 // 以下是仓库管理接口
 
 func RemoveCloudRepo(name string, cloudInfo *CloudInfo) (err error) {
-	request := httpclient.NewCloudRequest()
+	request := httpclient.NewCloudFileRequest15s()
 	resp, err := request.
 		SetBody(map[string]string{"name": name, "token": cloudInfo.Token}).
 		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepo")
