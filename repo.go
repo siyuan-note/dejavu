@@ -260,6 +260,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
 			if nil != err {
+				logging.LogErrorf("get file [%s] failed: %s", f, err)
+				err = ErrNotFoundObject
 				return
 			}
 			latestFiles = append(latestFiles, file)

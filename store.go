@@ -27,6 +27,8 @@ import (
 	"github.com/siyuan-note/encryption"
 )
 
+var ErrNotFoundObject = errors.New("not found object")
+
 // TODO: 增加缓存
 
 // Store 描述了存储库。
