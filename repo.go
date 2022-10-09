@@ -17,11 +17,9 @@
 package dejavu
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -262,15 +260,6 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
 			if nil != err {
-				if os.IsNotExist(err) {
-					// 修复 https://github.com/siyuan-note/siyuan/issues/6106
-					reindexErr := repo.reindexWithSizeCompare(f)
-					if nil != reindexErr {
-						logging.LogErrorf("reindex with size compare failed: %s", reindexErr)
-						return
-					}
-					file, err = repo.store.GetFile(f)
-				}
 				if nil != err {
 					logging.LogErrorf("get file [%s] failed: %s", f, err)
 					err = ErrNotFoundObject
@@ -459,67 +448,6 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	}
 	if closeErr := reader.Close(); nil != closeErr {
 		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
-	}
-	return
-}
-
-// reindexWithSizeCompare 仅用于修复 https://github.com/siyuan-note/siyuan/issues/6106
-func (repo *Repo) reindexWithSizeCompare(notFoundFilePath string) (err error) {
-	var upserts []*entity.File
-	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
-		if nil != err {
-			return io.EOF
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		p := repo.relPath(path)
-		buf := bytes.Buffer{}
-		buf.WriteString(p)
-		buf.WriteString(strconv.FormatInt(info.Size(), 10))
-		buf.WriteString(strconv.FormatInt(info.ModTime().UnixMilli(), 10))
-		id := util.Hash(buf.Bytes())
-		if id == notFoundFilePath {
-			upserts = append(upserts, entity.NewFileWithSizeCompare(p, info.Size(), info.ModTime().UnixMilli()))
-			return io.EOF
-
-		}
-		return nil
-	})
-	if io.EOF == err {
-		err = nil
-	}
-	if nil != err {
-		return
-	}
-
-	if 1 > len(upserts) {
-		return
-	}
-
-	for _, file := range upserts {
-		absPath := repo.absPath(file.Path)
-		chunks, hashes, chunkErr := repo.fileChunks(absPath)
-		if nil != chunkErr {
-			err = chunkErr
-			return
-		}
-		file.Chunks = hashes
-
-		for _, chunk := range chunks {
-			err = repo.store.PutChunk(chunk)
-			if nil != err {
-				return
-			}
-		}
-
-		err = repo.store.PutFile(file)
-		if nil != err {
-			return
-		}
-		logging.LogInfof("reindexed file [id=%s, path=%s]", file.ID, file.Path)
 	}
 	return
 }

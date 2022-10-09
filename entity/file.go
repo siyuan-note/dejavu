@@ -43,17 +43,3 @@ func NewFile(path string, size int64, updated int64) (ret *File) {
 	ret.ID = util.Hash(buf.Bytes())
 	return
 }
-
-func NewFileWithSizeCompare(path string, size int64, updated int64) (ret *File) {
-	ret = &File{
-		Path:    path,
-		Size:    size,
-		Updated: updated,
-	}
-	buf := bytes.Buffer{}
-	buf.WriteString(ret.Path)
-	buf.WriteString(strconv.FormatInt(ret.Size, 10))
-	buf.WriteString(strconv.FormatInt(ret.Updated, 10))
-	ret.ID = util.Hash(buf.Bytes())
-	return
-}
