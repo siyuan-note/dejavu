@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,6 +35,8 @@ import (
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 )
+
+var ErrRepoFatalErr = errors.New("repo fatal error")
 
 var lock = sync.Mutex{} // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
 
