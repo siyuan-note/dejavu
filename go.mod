@@ -3,16 +3,16 @@ module github.com/siyuan-note/dejavu
 go 1.18
 
 require (
-	github.com/88250/gulu v1.2.3-0.20220929123404-da1dc91c9343
+	github.com/88250/gulu v1.2.3-0.20221007162906-ded80d955178
 	github.com/dustin/go-humanize v1.0.0
-	github.com/klauspost/compress v1.15.9
+	github.com/klauspost/compress v1.15.11
 	github.com/panjf2000/ants/v2 v2.5.0
 	github.com/qiniu/go-sdk/v7 v7.13.0
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20220916025349-3ac6e75522da
-	github.com/siyuan-note/filelock v0.0.0-20220929134814-c00908c4f281
+	github.com/siyuan-note/filelock v0.0.0-20221007163134-7e64809023ef
 	github.com/siyuan-note/httpclient v0.0.0-20221019094331-c904ac9be571
 	github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520
 )
@@ -20,7 +20,7 @@ require (
 require (
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/getsentry/sentry-go v0.13.0 // indirect
+	github.com/getsentry/sentry-go v0.14.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -40,7 +40,7 @@ require (
 	golang.org/x/exp v0.0.0-20221018221608-02f3b879a704 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20221019024206-cb67ada4b0ad // indirect
-	golang.org/x/sync v0.0.0-20220907140024-f12130a52804 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
