@@ -145,12 +145,15 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
+	errLock := &sync.Mutex{}
 	p, _ := ants.NewPoolWithFunc(2, func(arg interface{}) {
 		defer waitGroup.Done()
 		file := arg.(*entity.File)
 		file, getErr := repo.store.GetFile(file.ID)
 		if nil != getErr {
+			errLock.Lock()
 			errs = append(errs, getErr)
+			errLock.Unlock()
 			return
 		}
 
@@ -159,7 +162,9 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 			var chunk *entity.Chunk
 			chunk, getErr = repo.store.GetChunk(c)
 			if nil != getErr {
+				errLock.Lock()
 				errs = append(errs, getErr)
+				errLock.Unlock()
 				return
 			}
 			data = append(data, chunk.Data...)
@@ -169,19 +174,25 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		dir := filepath.Dir(absPath)
 
 		if mkErr := os.MkdirAll(dir, 0755); nil != mkErr {
+			errLock.Lock()
 			errs = append(errs, mkErr)
+			errLock.Unlock()
 			return
 		}
 
 		if writeErr := filelock.WriteFile(absPath, data); nil != writeErr {
+			errLock.Lock()
 			errs = append(errs, writeErr)
+			errLock.Unlock()
 			return
 		}
 
 		updated := time.UnixMilli(file.Updated)
 		if chtErr := os.Chtimes(absPath, updated, updated); nil != chtErr {
 			logging.LogErrorf("change [%s] time failed: %s", absPath, chtErr)
+			errLock.Lock()
 			errs = append(errs, chtErr)
+			errLock.Unlock()
 			return
 		}
 		eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
@@ -194,10 +205,19 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		if nil != err {
 			return
 		}
+		if 0 < len(errs) {
+			err = errs[0]
+			return
+		}
 	}
 
 	waitGroup.Wait()
 	p.Release()
+
+	if 0 < len(errs) {
+		err = errs[0]
+		return
+	}
 
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, removes)
 	for _, f := range removes {
@@ -280,6 +300,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 	waitGroup := &sync.WaitGroup{}
 	var errs []error
+	errLock := sync.Mutex{}
 	p, _ := ants.NewPoolWithFunc(2, func(arg interface{}) {
 		defer waitGroup.Done()
 		var putErr error
@@ -294,7 +315,9 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 
 		if nil != putErr {
+			errLock.Lock()
 			errs = append(errs, putErr)
+			errLock.Unlock()
 		}
 	})
 
@@ -332,10 +355,19 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		if nil != err {
 			return
 		}
+		if 0 < len(errs) {
+			err = errs[0]
+			return
+		}
 	}
 
 	waitGroup.Wait()
 	p.Release()
+
+	if 0 < len(errs) {
+		err = errs[0]
+		return
+	}
 
 	for _, file := range files {
 		ret.Files = append(ret.Files, file.ID)
@@ -346,9 +378,6 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	err = repo.store.PutIndex(ret)
 	if nil != err {
 		return
-	}
-	if 0 < len(errs) {
-		return nil, errs[0]
 	}
 
 	err = repo.UpdateLatest(ret.ID)

@@ -476,13 +476,13 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 		}
 
 		chunkID := arg.(string)
-		var length int64
-		var chunk *entity.Chunk
-		length, chunk, downloadErr = repo.downloadCloudChunk(chunkID, cloudInfo, context)
-		if nil != downloadErr {
+		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, cloudInfo, context)
+		if nil != dccErr {
+			downloadErr = dccErr
 			return
 		}
-		if err = repo.store.PutChunk(chunk); nil != err {
+		if pcErr := repo.store.PutChunk(chunk); nil != pcErr {
+			downloadErr = pcErr
 			return
 		}
 		downloadBytes += length
@@ -495,6 +495,10 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, cloudInfo *CloudInfo
 	for _, chunkID := range chunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(chunkID); nil != err {
+			return
+		}
+		if nil != downloadErr {
+			err = downloadErr
 			return
 		}
 	}
@@ -526,13 +530,13 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 		}
 
 		fileID := arg.(string)
-		var length int64
-		var file *entity.File
-		length, file, downloadErr = repo.downloadCloudFile(fileID, cloudInfo, context)
-		if nil != downloadErr {
+		length, file, dcfErr := repo.downloadCloudFile(fileID, cloudInfo, context)
+		if nil != dcfErr {
+			downloadErr = dcfErr
 			return
 		}
-		if err = repo.store.PutFile(file); nil != err {
+		if pfErr := repo.store.PutFile(file); nil != pfErr {
+			downloadErr = pfErr
 			return
 		}
 		downloadBytes += length
@@ -549,6 +553,10 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, cloudInfo *CloudInfo, 
 	for _, fileID := range fileIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(fileID); nil != err {
+			return
+		}
+		if nil != downloadErr {
+			err = downloadErr
 			return
 		}
 	}
@@ -665,19 +673,21 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, scopeUploadToken string
 	}
 
 	waitGroup := &sync.WaitGroup{}
+	var uploadErr error
 	poolSize := 4
 	if poolSize > len(indexes) {
 		poolSize = len(indexes)
 	}
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
-		if nil != err {
+		if nil != uploadErr {
 			return // 快速失败
 		}
 
 		indexID := arg.(string)
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, indexID)
-		if err = repo.uploadObject(path.Join("indexes", indexID), cloudInfo, scopeUploadToken); nil != err {
+		if uoErr := repo.uploadObject(path.Join("indexes", indexID), cloudInfo, scopeUploadToken); nil != uoErr {
+			uploadErr = uoErr
 			return
 		}
 	})
@@ -688,6 +698,10 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, scopeUploadToken string
 	for _, index := range indexes {
 		waitGroup.Add(1)
 		if err = p.Invoke(index.ID); nil != err {
+			return
+		}
+		if nil != uploadErr {
+			err = uploadErr
 			return
 		}
 	}
@@ -712,20 +726,22 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken strin
 	}
 
 	waitGroup := &sync.WaitGroup{}
+	var uploadErr error
 	poolSize := 8
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
 	}
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
-		if nil != err {
+		if nil != uploadErr {
 			return // 快速失败
 		}
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID)
-		if err = repo.uploadObject(filePath, cloudInfo, scopeUploadToken); nil != err {
+		if uoErr := repo.uploadObject(filePath, cloudInfo, scopeUploadToken); nil != uoErr {
+			uploadErr = uoErr
 			return
 		}
 	})
@@ -737,6 +753,10 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken strin
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertFile.ID); nil != err {
+			return
+		}
+		if nil != uploadErr {
+			err = uploadErr
 			return
 		}
 	}
@@ -761,20 +781,22 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, scopeUploadToken string,
 	}
 
 	waitGroup := &sync.WaitGroup{}
+	var uploadErr error
 	poolSize := 8
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
 	}
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
-		if nil != err {
+		if nil != uploadErr {
 			return // 快速失败
 		}
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID)
-		if err = repo.uploadObject(filePath, cloudInfo, scopeUploadToken); nil != err {
+		if uoErr := repo.uploadObject(filePath, cloudInfo, scopeUploadToken); nil != uoErr {
+			uploadErr = uoErr
 			return
 		}
 	})
@@ -786,6 +808,10 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, scopeUploadToken string,
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertChunkID); nil != err {
+			return
+		}
+		if nil != uploadErr {
+			err = uploadErr
 			return
 		}
 	}
