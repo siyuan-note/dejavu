@@ -3,7 +3,7 @@ module github.com/siyuan-note/dejavu
 go 1.18
 
 require (
-	github.com/88250/gulu v1.2.3-0.20221007162906-ded80d955178
+	github.com/88250/gulu v1.2.3-0.20221021091528-70e533d91a88
 	github.com/dustin/go-humanize v1.0.0
 	github.com/klauspost/compress v1.15.11
 	github.com/panjf2000/ants/v2 v2.5.0
