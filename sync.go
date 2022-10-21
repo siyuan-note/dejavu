@@ -450,7 +450,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	go repo.addTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes, cloudInfo)
 
 	// 移除空目录
-	err = gulu.File.RemoveEmptyDirs(repo.DataPath)
+	err = gulu.File.RemoveEmptyDirs(repo.DataPath, workspaceDataDirs...)
 	if nil != err {
 		logging.LogErrorf("remove empty dirs failed: %s", err)
 		return

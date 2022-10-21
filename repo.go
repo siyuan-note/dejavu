@@ -90,6 +90,8 @@ func (repo *Repo) PutIndex(index *entity.Index) (err error) {
 	return repo.store.PutIndex(index)
 }
 
+var workspaceDataDirs = []string{"assets", "emojis", "snippets", "templates", "widgets"}
+
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。context 参数用于发布事件时传递调用上下文。
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
 	lock.Lock()
@@ -127,7 +129,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	defer gulu.File.RemoveEmptyDirs(repo.DataPath)
+	defer gulu.File.RemoveEmptyDirs(repo.DataPath, workspaceDataDirs...)
 
 	var latestFiles []*entity.File
 	for _, f := range index.Files {
