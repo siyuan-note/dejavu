@@ -37,12 +37,11 @@ func TestSync(t *testing.T) {
 		Token:     token,
 		Server:    "http://127.0.0.1:64388",
 	}
-	latest, mergeResult, trafficStat, err := repo.Sync(cloudInfo, nil)
+	mergeResult, trafficStat, err := repo.Sync(cloudInfo, nil)
 	if nil != err {
 		t.Fatalf("sync failed: %s", err)
 		return
 	}
-	_ = latest
 	_ = mergeResult
 	_ = trafficStat
 }

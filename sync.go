@@ -79,6 +79,14 @@ type TrafficStat struct {
 	UploadTrafficStat
 }
 
+func (repo *Repo) GetSyncCloudFiles(cloudInfo *CloudInfo, context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	fetchedFiles, err = repo.getSyncCloudFiles(cloudInfo, context)
+	return
+}
+
 func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -98,7 +106,6 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (me
 }
 
 func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
-
 	mergeResult = &MergeResult{Time: time.Now()}
 	trafficStat = &TrafficStat{}
 
@@ -474,6 +481,56 @@ func (repo *Repo) sync0(cloudInfo *CloudInfo, context map[string]interface{},
 		logging.LogErrorf("remove empty dirs failed: %s", err)
 		return
 	}
+	return
+}
+
+func (repo *Repo) getSyncCloudFiles(cloudInfo *CloudInfo, context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
+	latest, err := repo.Latest()
+	if nil != err {
+		logging.LogErrorf("get latest failed: %s", err)
+		return
+	}
+
+	// 从云端获取最新索引
+	length, cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
+	if nil != err {
+		if !errors.Is(err, ErrCloudObjectNotFound) {
+			logging.LogErrorf("download cloud latest failed: %s", err)
+			return
+		}
+	}
+	trafficStat := &TrafficStat{}
+	trafficStat.DownloadFileCount++
+	trafficStat.DownloadBytes += length
+
+	if cloudLatest.ID == latest.ID {
+		// 数据一致，直接返回
+		return
+	}
+
+	if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
+		err = ErrCloudStorageSizeExceeded
+		return
+	}
+
+	// 计算本地缺失的文件
+	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)
+	if nil != err {
+		logging.LogErrorf("get local not found files failed: %s", err)
+		return
+	}
+
+	// 从云端下载缺失文件并入库
+	length, fetchedFiles, err = repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
+	if nil != err {
+		logging.LogErrorf("download cloud files put failed: %s", err)
+		return
+	}
+	trafficStat.DownloadBytes += length
+	trafficStat.DownloadFileCount = len(fetchFileIDs)
+
+	// 统计流量
+	go repo.addTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes, cloudInfo)
 	return
 }
 
