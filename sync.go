@@ -79,11 +79,11 @@ type TrafficStat struct {
 	UploadTrafficStat
 }
 
-func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
+func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	latest, mergeResult, trafficStat, err = repo.sync(cloudInfo, context)
+	mergeResult, trafficStat, err = repo.sync(cloudInfo, context)
 	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
 		p := e.Path
 		if !strings.Contains(p, "objects") {
@@ -97,18 +97,16 @@ func (repo *Repo) Sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	return
 }
 
-func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
+func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
+
 	mergeResult = &MergeResult{Time: time.Now()}
 	trafficStat = &TrafficStat{}
 
-	latest, err = repo.Latest()
+	latest, err := repo.Latest()
 	if nil != err {
 		logging.LogErrorf("get latest failed: %s", err)
 		return
 	}
-
-	latestSync := repo.latestSync()
-	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 从云端获取最新索引
 	length, cloudLatest, err := repo.downloadCloudLatest(cloudInfo, context)
@@ -147,6 +145,22 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	trafficStat.DownloadBytes += length
 	trafficStat.DownloadFileCount = len(fetchFileIDs)
 
+	// 执行数据同步
+	err = repo.sync0(cloudInfo, context, fetchedFiles, cloudLatest, latest, mergeResult, trafficStat)
+	return
+}
+
+func (repo *Repo) sync0(cloudInfo *CloudInfo, context map[string]interface{},
+	fetchedFiles []*entity.File, // 已从云端下载的文件
+	cloudLatest *entity.Index, // 云端索引
+	latest *entity.Index, // 本地索引
+	mergeResult *MergeResult, // 待返回的同步合并结果
+	trafficStat *TrafficStat, // 待返回的流量统计
+) (err error) {
+	// 获取本地同步点到最新索引之间的索引列表
+	latestSync := repo.latestSync()
+	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
+
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(fetchedFiles)
 
@@ -180,7 +194,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 	}
 
 	// 上传分块
-	length, err = repo.uploadChunks(upsertChunkIDs, scopeUploadToken, cloudInfo, context)
+	length, err := repo.uploadChunks(upsertChunkIDs, scopeUploadToken, cloudInfo, context)
 	if nil != err {
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
@@ -258,6 +272,11 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 		}
 	}
 
+	var fetchedFileIDs []string
+	for _, fetchedFile := range fetchedFiles {
+		fetchedFileIDs = append(fetchedFileIDs, fetchedFile.ID)
+	}
+
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
 	// 冲突的文件以本地 upsert 和 remove 为准
 	var tmpMergeConflicts []*entity.File
@@ -270,7 +289,7 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (la
 			// 无论是否发生实际下载文件，都需要生成本地历史，以确保任何情况下都能够通过数据历史恢复文件
 			tmpMergeConflicts = append(tmpMergeConflicts, cloudUpsert)
 
-			if gulu.Str.Contains(cloudUpsert.ID, fetchFileIDs) {
+			if gulu.Str.Contains(cloudUpsert.ID, fetchedFileIDs) {
 				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
 				// 冲突列表在外部单独处理生成副本
 				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
