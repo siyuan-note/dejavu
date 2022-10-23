@@ -22,14 +22,13 @@ import (
 	"path/filepath"
 
 	"github.com/88250/gulu"
+	"github.com/dgraph-io/ristretto"
 	"github.com/klauspost/compress/zstd"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 )
 
 var ErrNotFoundObject = errors.New("not found object")
-
-// TODO: 增加缓存
 
 // Store 描述了存储库。
 type Store struct {
@@ -120,10 +119,18 @@ func (store *Store) PutFile(file *entity.File) (err error) {
 	if nil != err {
 		return errors.New("put file failed: " + err.Error())
 	}
+
+	fileCache.Set(file.ID, file, int64(len(data)))
 	return
 }
 
 func (store *Store) GetFile(id string) (ret *entity.File, err error) {
+	cached, _ := fileCache.Get(id)
+	if nil != cached {
+		ret = cached.(*entity.File)
+		return
+	}
+
 	_, file := store.AbsPath(id)
 	data, err := os.ReadFile(file)
 	if nil != err {
@@ -134,6 +141,11 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 	}
 	ret = &entity.File{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
+	if nil != err {
+		return
+	}
+
+	fileCache.Set(id, ret, int64(len(data)))
 	return
 }
 
@@ -213,3 +225,9 @@ func (store *Store) decodeData(data []byte) (ret []byte, err error) {
 	ret, err = store.compressDecoder.DecodeAll(ret, nil)
 	return
 }
+
+var fileCache, _ = ristretto.NewCache(&ristretto.Config{
+	NumCounters: 200000,
+	MaxCost:     1000 * 1000 * 32, // 1 个文件按 300 字节计算，32MB 大概可以缓存 10W 个文件实例
+	BufferItems: 64,
+})
