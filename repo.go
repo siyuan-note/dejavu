@@ -387,15 +387,16 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 }
 
 func (repo *Repo) builtInIgnore(info os.FileInfo, path string) (ignored bool, err error) {
+	name := info.Name()
 	if info.IsDir() {
-		if strings.HasPrefix(info.Name(), ".") {
-			if ".siyuan" == info.Name() {
+		if strings.HasPrefix(name, ".") {
+			if ".siyuan" == name {
 				return true, nil
 			}
 			return true, filepath.SkipDir
 		}
 		return true, nil
-	} else if strings.HasPrefix(info.Name(), ".") {
+	} else if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".tmp") {
 		return true, nil
 	}
 
