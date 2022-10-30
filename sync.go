@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -29,6 +30,12 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/panjf2000/ants/v2"
 	"github.com/qiniu/go-sdk/v7/client"
 	"github.com/qiniu/go-sdk/v7/storage"
@@ -49,12 +56,18 @@ var (
 )
 
 type CloudInfo struct {
-	Dir       string        // 仓库目录名
-	UserID    string        // 用户 ID
-	Token     string        // 用户身份鉴权令牌
-	LimitSize int64         // 存储空间限制
-	Server    string        // 云端接口端点
-	Zone      *storage.Zone // 云端存储空间区域
+	Dir        string        // 仓库目录名
+	UserID     string        // 用户 ID
+	Token      string        // 用户身份鉴权令牌
+	LimitSize  int64         // 存储空间限制
+	Server     string        // 云端接口端点
+	Zone       *storage.Zone // 云端存储空间区域
+	CustomSync bool          // 是否使用自定义同步
+	AccessKey  string        // Access Key
+	SecretKey  string        // Secret Key
+	Endpoint   string        // Endpoint
+	Region     string        // Region
+	Bucket     string        // Bucket
 }
 
 type MergeResult struct {
@@ -131,10 +144,10 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (me
 		return
 	}
 
-	if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
-		err = ErrCloudStorageSizeExceeded
-		return
-	}
+	// if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
+	// 	err = ErrCloudStorageSizeExceeded
+	// 	return
+	// }
 
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)
@@ -194,10 +207,16 @@ func (repo *Repo) sync0(cloudInfo *CloudInfo, context map[string]interface{},
 
 	// 获取上传凭证
 	latestKey := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs/latest")
-	keyUploadToken, scopeUploadToken, err := repo.requestScopeKeyUploadToken(latestKey, cloudInfo)
-	if nil != err {
-		logging.LogErrorf("request upload token failed: %s", err)
-		return
+
+	keyUploadToken := ""
+	scopeUploadToken := ""
+
+	if !cloudInfo.CustomSync {
+		keyUploadToken, scopeUploadToken, err = repo.requestScopeKeyUploadToken(latestKey, cloudInfo)
+		if nil != err {
+			logging.LogErrorf("request upload token failed: %s", err)
+			return
+		}
 	}
 
 	// 上传分块
@@ -508,10 +527,10 @@ func (repo *Repo) getSyncCloudFiles(cloudInfo *CloudInfo, context map[string]int
 		return
 	}
 
-	if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
-		err = ErrCloudStorageSizeExceeded
-		return
-	}
+	// if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
+	// 	err = ErrCloudStorageSizeExceeded
+	// 	return
+	// }
 
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)
@@ -1015,6 +1034,46 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 }
 
 func (repo *Repo) uploadObject(filePath string, cloudInfo *CloudInfo, uploadToken string) (err error) {
+	if cloudInfo.CustomSync {
+		absFilePath := filepath.Join(repo.Path, filePath)
+		content, _ := os.ReadFile(absFilePath)
+		logging.LogInfof("uploadObject: %s", absFilePath)
+		endpoint := cloudInfo.Endpoint
+		region := cloudInfo.Region
+		key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
+		s3accessKeyId := cloudInfo.AccessKey
+		s3SecretKeyId := cloudInfo.SecretKey
+		bucket := cloudInfo.Bucket
+		sess := session.Must(session.NewSession(&aws.Config{
+			Credentials: credentials.NewStaticCredentials(s3accessKeyId, s3SecretKeyId, ""),
+			Endpoint:    aws.String(endpoint),
+			Region:      aws.String(region),
+		}))
+		svc := s3.New(sess)
+		ctx := context.Background()
+		var cancelFn func()
+		ctx, cancelFn = context.WithTimeout(ctx, 30*time.Second)
+		if cancelFn != nil {
+			defer cancelFn()
+		}
+		_, err = svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+			Body:   strings.NewReader(string(content)),
+		})
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok && aerr.Code() == request.CanceledErrorCode {
+				logging.LogErrorf("upload canceled due to timeout, %v\n", err)
+			} else {
+				logging.LogErrorf("failed to upload object, %v\n", err)
+			}
+			os.Exit(1)
+		}
+
+		logging.LogInfof("successfully uploaded file to %s/%s\n", bucket, key)
+		return
+	}
+
 	absFilePath := filepath.Join(repo.Path, filePath)
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, filePath)
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true, Zone: cloudInfo.Zone})
@@ -1050,6 +1109,12 @@ var (
 )
 
 func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (keyToken, scopeToken string, err error) {
+	if cloudInfo.CustomSync {
+		keyToken = ""
+		scopeToken = ""
+		err = nil
+		return
+	}
 	now := time.Now().UnixMilli()
 	keyPrefix := path.Join("siyuan", cloudInfo.UserID)
 
@@ -1116,6 +1181,10 @@ func (repo *Repo) requestScopeKeyUploadToken(key string, cloudInfo *CloudInfo) (
 }
 
 func (repo *Repo) addTraffic(uploadBytes, downloadBytes int64, cloudInfo *CloudInfo) {
+	logging.LogInfof("customSync: %t", cloudInfo.CustomSync)
+	if cloudInfo.CustomSync {
+		return
+	}
 	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetBody(map[string]interface{}{"token": cloudInfo.Token, "uploadBytes": uploadBytes, "downloadBytes": downloadBytes}).
@@ -1136,7 +1205,7 @@ func (repo *Repo) downloadCloudChunk(id string, cloudInfo *CloudInfo, context ma
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
-	data, err := repo.downloadCloudObject(key)
+	data, err := repo.downloadCloudObject(cloudInfo, key)
 	if nil != err {
 		logging.LogErrorf("download cloud chunk [%s] failed: %s", id, err)
 		return
@@ -1150,7 +1219,7 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id)
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "objects", id[:2], id[2:])
-	data, err := repo.downloadCloudObject(key)
+	data, err := repo.downloadCloudObject(cloudInfo, key)
 	if nil != err {
 		logging.LogErrorf("download cloud file [%s] failed: %s", id, err)
 		return
@@ -1161,25 +1230,62 @@ func (repo *Repo) downloadCloudFile(id string, cloudInfo *CloudInfo, context map
 	return
 }
 
-func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
-	resp, err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
-	if nil != err {
-		err = fmt.Errorf("download object [%s] failed: %s", key, err)
-		return
-	}
-	if 200 != resp.StatusCode {
-		if 404 == resp.StatusCode {
-			if !strings.HasSuffix(key, "/refs/latest") {
-				logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
+func (repo *Repo) downloadCloudObject(cloudInfo *CloudInfo, key string) (ret []byte, err error) {
+	if cloudInfo.CustomSync {
+		endpoint := cloudInfo.Endpoint
+		region := cloudInfo.Region
+		s3accessKeyId := cloudInfo.AccessKey
+		s3SecretKeyId := cloudInfo.SecretKey
+		bucket := cloudInfo.Bucket
+		sess := session.Must(session.NewSession(&aws.Config{
+			Credentials: credentials.NewStaticCredentials(s3accessKeyId, s3SecretKeyId, ""),
+			Endpoint:    aws.String(endpoint),
+			Region:      aws.String(region),
+		}))
+		svc := s3.New(sess)
+		input := &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		}
+
+		resp, _err := svc.GetObject(input)
+		err = _err
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok {
+				switch aerr.Code() {
+				case s3.ErrCodeNoSuchKey:
+					logging.LogInfof("%t %t", s3.ErrCodeNoSuchKey, aerr.Error())
+					err = ErrCloudObjectNotFound
+					return
+				case s3.ErrCodeInvalidObjectState:
+					logging.LogInfof("%t %t", s3.ErrCodeInvalidObjectState, aerr.Error())
+				default:
+					logging.LogInfof("%t", aerr.Error())
+				}
+			} else {
+				logging.LogInfof("%t", err.Error())
 			}
-			err = ErrCloudObjectNotFound
+		}
+		ret, err = io.ReadAll(resp.Body)
+	} else {
+		resp, _err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
+		err = _err
+		if nil != err {
+			err = fmt.Errorf("download object [%s] failed: %s", key, err)
 			return
 		}
-		err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
-		return
+		if 200 != resp.StatusCode {
+			if 404 == resp.StatusCode {
+				if !strings.HasSuffix(key, "/refs/latest") {
+					logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
+				}
+				err = ErrCloudObjectNotFound
+				return
+			}
+			err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
+			ret, err = resp.ToBytes()
+		}
 	}
-
-	ret, err = resp.ToBytes()
 	if nil != err {
 		err = fmt.Errorf("download read data failed: %s", err)
 		return
@@ -1207,7 +1313,7 @@ func (repo *Repo) downloadCloudIndex(id string, cloudInfo *CloudInfo, context ma
 	index = &entity.Index{}
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", id)
-	data, err := repo.downloadCloudObject(key)
+	data, err := repo.downloadCloudObject(cloudInfo, key)
 	if nil != err {
 		return
 	}
@@ -1224,7 +1330,7 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 
 	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "latest")
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
-	data, err := repo.downloadCloudObject(key)
+	data, err := repo.downloadCloudObject(cloudInfo, key)
 	if nil != err {
 		if errors.Is(err, ErrCloudObjectNotFound) {
 			err = nil
@@ -1235,7 +1341,7 @@ func (repo *Repo) downloadCloudLatest(cloudInfo *CloudInfo, context map[string]i
 	latestID := string(data)
 	key = path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "indexes", latestID)
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, latestID)
-	data, err = repo.downloadCloudObject(key)
+	data, err = repo.downloadCloudObject(cloudInfo, key)
 	if nil != err {
 		return
 	}
