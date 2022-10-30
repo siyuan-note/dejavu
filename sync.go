@@ -144,10 +144,11 @@ func (repo *Repo) sync(cloudInfo *CloudInfo, context map[string]interface{}) (me
 		return
 	}
 
-	// if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
-	// 	err = ErrCloudStorageSizeExceeded
-	// 	return
-	// }
+	if !cloudInfo.CustomSync &&
+		(cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size) {
+		err = ErrCloudStorageSizeExceeded
+		return
+	}
 
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)
@@ -527,10 +528,11 @@ func (repo *Repo) getSyncCloudFiles(cloudInfo *CloudInfo, context map[string]int
 		return
 	}
 
-	// if cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size {
-	// 	err = ErrCloudStorageSizeExceeded
-	// 	return
-	// }
+	if !cloudInfo.CustomSync &&
+		(cloudInfo.LimitSize <= cloudLatest.Size || cloudInfo.LimitSize <= latest.Size) {
+		err = ErrCloudStorageSizeExceeded
+		return
+	}
 
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(cloudLatest.Files)

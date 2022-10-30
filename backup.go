@@ -116,7 +116,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 		return
 	}
 
-	if cloudInfo.LimitSize <= index.Size {
+	if !cloudInfo.CustomSync && cloudInfo.LimitSize <= index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
@@ -132,7 +132,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 		return
 	}
 
-	if cloudInfo.LimitSize <= cloudRepoSize+index.Size {
+	if !cloudInfo.CustomSync && cloudInfo.LimitSize <= cloudRepoSize+index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
