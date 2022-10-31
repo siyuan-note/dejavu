@@ -19,11 +19,11 @@ package dejavu
 import (
 	"fmt"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/transport"
 	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
 )
@@ -169,19 +169,8 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 		return
 	}
 
-	dir := repo.transport.GetConf().Dir
-	userId := repo.transport.GetConf().UserID
-
-	// 获取上传凭证
-	latestKey := path.Join("siyuan", userId, "repo", dir, "refs/tags/"+tag)
-	keyUploadToken, scopeUploadToken, err := repo.requestScopeKeyUploadToken(latestKey)
-	if nil != err {
-		logging.LogErrorf("request upload token failed: %s", err)
-		return
-	}
-
 	// 上传分块
-	length, err := repo.uploadChunks(uploadChunkIDs, scopeUploadToken, context)
+	length, err := repo.uploadChunks(uploadChunkIDs, context)
 	if nil != err {
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
@@ -190,7 +179,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	uploadBytes += length
 
 	// 上传文件
-	length, err = repo.uploadFiles(uploadFiles, scopeUploadToken, context)
+	length, err = repo.uploadFiles(uploadFiles, context)
 	if nil != err {
 		logging.LogErrorf("upload files failed: %s", err)
 		return
@@ -199,12 +188,12 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	uploadBytes += length
 
 	// 上传索引
-	length, err = repo.uploadIndexes([]*entity.Index{index}, scopeUploadToken, context)
+	length, err = repo.uploadIndexes([]*entity.Index{index}, context)
 	uploadFileCount++
 	uploadBytes += length
 
 	// 上传标签
-	length, err = repo.updateCloudRef("refs/tags/"+tag, keyUploadToken, context)
+	length, err = repo.updateCloudRef("refs/tags/"+tag, context)
 	uploadFileCount++
 	uploadBytes += length
 
@@ -235,7 +224,7 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string) (chunks []st
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo refs chunks failed [%d]", resp.StatusCode)
@@ -287,7 +276,7 @@ func (repo *Repo) GetCloudRepoStat() (ret map[string]interface{}, err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo stat failed [%d]", resp.StatusCode)
@@ -322,7 +311,7 @@ func (repo *Repo) getCloudRepoRefsFiles() (files []string, err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo refs files failed [%d]", resp.StatusCode)
@@ -361,7 +350,7 @@ func (repo *Repo) GetCloudRepoTags() (tags []map[string]interface{}, err error) 
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)

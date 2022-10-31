@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -30,8 +29,6 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/panjf2000/ants/v2"
-	"github.com/qiniu/go-sdk/v7/client"
-	"github.com/qiniu/go-sdk/v7/storage"
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/transport"
@@ -46,7 +43,6 @@ var (
 	ErrCloudBackupCountExceeded = errors.New("cloud backup count exceeded")
 
 	ErrCloudGenerateConflictHistory = errors.New("generate conflict history failed")
-	ErrCloudAuthFailed              = errors.New("cloud account auth failed")
 )
 
 type MergeResult struct {
@@ -187,19 +183,8 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
-
-	// 获取上传凭证
-	latestKey := path.Join("siyuan", userId, "repo", dir, "refs/latest")
-	keyUploadToken, scopeUploadToken, err := repo.requestScopeKeyUploadToken(latestKey)
-	if nil != err {
-		logging.LogErrorf("request upload token failed: %s", err)
-		return
-	}
-
 	// 上传分块
-	length, err := repo.uploadChunks(upsertChunkIDs, scopeUploadToken, context)
+	length, err := repo.uploadChunks(upsertChunkIDs, context)
 	if nil != err {
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
@@ -208,7 +193,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	trafficStat.UploadBytes += length
 
 	// 上传文件
-	length, err = repo.uploadFiles(upsertFiles, scopeUploadToken, context)
+	length, err = repo.uploadFiles(upsertFiles, context)
 	if nil != err {
 		logging.LogErrorf("upload files failed: %s", err)
 		return
@@ -423,7 +408,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			return
 		}
 
-		length, err = repo.uploadChunks(upsertChunkIDs, scopeUploadToken, context)
+		length, err = repo.uploadChunks(upsertChunkIDs, context)
 		if nil != err {
 			logging.LogErrorf("upload chunks failed: %s", err)
 			return
@@ -431,7 +416,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		trafficStat.UploadChunkCount = len(upsertChunkIDs)
 		trafficStat.UploadBytes += length
 
-		length, err = repo.uploadFiles(upsertFiles, scopeUploadToken, context)
+		length, err = repo.uploadFiles(upsertFiles, context)
 		if nil != err {
 			logging.LogErrorf("upload files failed: %s", err)
 			return
@@ -441,7 +426,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	// 上传索引
-	length, err = repo.uploadIndexes(localIndexes, scopeUploadToken, context)
+	length, err = repo.uploadIndexes(localIndexes, context)
 	if nil != err {
 		logging.LogErrorf("upload indexes failed: %s", err)
 		return
@@ -456,7 +441,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	// 更新云端 latest
-	length, err = repo.updateCloudRef("refs/latest", keyUploadToken, context)
+	length, err = repo.updateCloudRef("refs/latest", context)
 	if nil != err {
 		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
 		return
@@ -719,7 +704,7 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 	return
 }
 
-func (repo *Repo) updateCloudRef(ref, keyUploadToken string, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, ref)
 
 	absFilePath := filepath.Join(repo.Path, ref)
@@ -728,11 +713,11 @@ func (repo *Repo) updateCloudRef(ref, keyUploadToken string, context map[string]
 		return
 	}
 	uploadBytes = info.Size()
-	err = repo.uploadObject(ref, keyUploadToken)
+	err = repo.transport.UploadObject(ref, true)
 	return
 }
 
-func (repo *Repo) uploadIndexes(indexes []*entity.Index, scopeUploadToken string, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) uploadIndexes(indexes []*entity.Index, context map[string]interface{}) (uploadBytes int64, err error) {
 	if 1 > len(indexes) {
 		return
 	}
@@ -761,7 +746,7 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, scopeUploadToken string
 
 		indexID := arg.(string)
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, indexID)
-		if uoErr := repo.uploadObject(path.Join("indexes", indexID), scopeUploadToken); nil != uoErr {
+		if uoErr := repo.transport.UploadObject(path.Join("indexes", indexID), false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
@@ -785,7 +770,7 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, scopeUploadToken string
 	return
 }
 
-func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken string, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]interface{}) (uploadBytes int64, err error) {
 	if 1 > len(upsertFiles) {
 		return
 	}
@@ -815,7 +800,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken strin
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID)
-		if uoErr := repo.uploadObject(filePath, scopeUploadToken); nil != uoErr {
+		if uoErr := repo.transport.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
@@ -840,7 +825,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, scopeUploadToken strin
 	return
 }
 
-func (repo *Repo) uploadChunks(upsertChunkIDs []string, scopeUploadToken string, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]interface{}) (uploadBytes int64, err error) {
 	if 1 > len(upsertChunkIDs) {
 		return
 	}
@@ -870,7 +855,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, scopeUploadToken string,
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID)
-		if uoErr := repo.uploadObject(filePath, scopeUploadToken); nil != uoErr {
+		if uoErr := repo.transport.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
@@ -1010,114 +995,6 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 		logging.LogWarnf("get latest sync index failed: %s", err)
 		return
 	}
-	return
-}
-
-func (repo *Repo) uploadObject(filePath string, uploadToken string) (err error) {
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
-
-	absFilePath := filepath.Join(repo.Path, filePath)
-	key := path.Join("siyuan", userId, "repo", dir, filePath)
-	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
-	ret := storage.PutRet{}
-	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
-	if nil != err {
-		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
-			// file exists
-			//logging.LogWarnf("upload object [%s] exists: %s", absFilePath, err)
-			err = nil
-			return
-		}
-		time.Sleep(3 * time.Second)
-		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
-		if nil != err {
-			logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
-			return
-		}
-	}
-	//logging.LogInfof("uploaded object [%s]", key)
-	return
-}
-
-type UploadToken struct {
-	key, token string
-	expired    int64
-}
-
-var (
-	keyUploadTokenMap   = map[string]*UploadToken{}
-	scopeUploadTokenMap = map[string]*UploadToken{}
-	uploadTokenMapLock  = &sync.Mutex{}
-)
-
-func (repo *Repo) requestScopeKeyUploadToken(key string) (keyToken, scopeToken string, err error) {
-	userId := repo.transport.GetConf().UserID
-	token := repo.transport.GetConf().Token
-	server := repo.transport.GetConf().Server
-
-	now := time.Now().UnixMilli()
-	keyPrefix := path.Join("siyuan", userId)
-
-	uploadTokenMapLock.Lock()
-	cachedKeyToken := keyUploadTokenMap[key]
-	cachedScopeToken := scopeUploadTokenMap[keyPrefix]
-	if nil != cachedScopeToken && nil != cachedKeyToken {
-		if now < cachedKeyToken.expired && now < cachedScopeToken.expired {
-			keyToken = cachedKeyToken.token
-			scopeToken = cachedScopeToken.token
-			uploadTokenMapLock.Unlock()
-			return
-		}
-		delete(keyUploadTokenMap, key)
-		delete(scopeUploadTokenMap, keyPrefix)
-	}
-	uploadTokenMapLock.Unlock()
-
-	var result map[string]interface{}
-	req := httpclient.NewCloudRequest().SetResult(&result)
-	req.SetBody(map[string]interface{}{
-		"token":     token,
-		"key":       key,
-		"keyPrefix": keyPrefix,
-	})
-	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoScopeKeyUploadToken?uid=" + userId)
-	if nil != err {
-		err = fmt.Errorf("request repo upload token failed: %s", err)
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
-			return
-		}
-		err = fmt.Errorf("request repo upload token failed [%d]", resp.StatusCode)
-		return
-	}
-
-	code := result["code"].(float64)
-	if 0 != code {
-		err = fmt.Errorf("request repo upload token failed: %s", result["msg"].(string))
-		return
-	}
-
-	resultData := result["data"].(map[string]interface{})
-	keyToken = resultData["keyToken"].(string)
-	scopeToken = resultData["scopeToken"].(string)
-	expired := now + 1000*60*60*24 - 60*1000
-	uploadTokenMapLock.Lock()
-	keyUploadTokenMap[key] = &UploadToken{
-		key:     key,
-		token:   keyToken,
-		expired: expired,
-	}
-	scopeUploadTokenMap[keyPrefix] = &UploadToken{
-		key:     keyPrefix,
-		token:   scopeToken,
-		expired: expired,
-	}
-	uploadTokenMapLock.Unlock()
 	return
 }
 
@@ -1330,7 +1207,7 @@ func (repo *Repo) RemoveCloudRepo(name string) (err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("remove cloud repo failed [%d]", resp.StatusCode)
@@ -1356,7 +1233,7 @@ func (repo *Repo) CreateCloudRepo(name string) (err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("create cloud repo failed [%d]", resp.StatusCode)
@@ -1389,7 +1266,7 @@ func (repo *Repo) GetCloudRepos() (repos []map[string]interface{}, size int64, e
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = ErrCloudAuthFailed
+			err = transport.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("request cloud repo list failed [%d]", resp.StatusCode)

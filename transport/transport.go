@@ -44,12 +44,16 @@ type Transport interface {
 	// GetConf 用于获取配置信息。
 	GetConf() *Conf
 
-	// UploadObject 用于上传对象。
-	UploadObject(filePath string) (err error)
+	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
+	UploadObject(filePath string, overwrite bool) (err error)
 
 	// DownloadObject 用于下载对象。
 	DownloadObject(key string) (data []byte, err error)
 }
 
-// ErrCloudObjectNotFound 描述了云端存储服务中的对象不存在的错误。
-var ErrCloudObjectNotFound = errors.New("cloud object not found")
+var (
+	// ErrCloudObjectNotFound 描述了云端存储服务中的对象不存在的错误。
+	ErrCloudObjectNotFound = errors.New("cloud object not found")
+	// ErrCloudAuthFailed 描述了云端存储服务鉴权失败的错误。
+	ErrCloudAuthFailed = errors.New("cloud account auth failed")
+)
