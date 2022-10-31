@@ -20,9 +20,9 @@ import "errors"
 
 // Conf 用于描述云端存储服务配置信息。
 type Conf struct {
-	Endpoint  string // 云端存储服务接口端点
-	AccessKey string // AccessKey
-	SecretKey string // SecretKey
+	Endpoint  string // 服务端点
+	AccessKey string // Access Key
+	SecretKey string // Secret Key
 	Regin     string // 存储区域
 	Bucket    string // 存储空间
 
