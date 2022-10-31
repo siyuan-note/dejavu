@@ -44,6 +44,18 @@ type Transport interface {
 	// GetConf 用于获取配置信息。
 	GetConf() *Conf
 
+	// CreateCloudRepo 用于创建云端仓库。
+	CreateCloudRepo(name string) (err error)
+
+	// RemoveCloudRepo 用于删除云端仓库。
+	RemoveCloudRepo(name string) (err error)
+
+	// GetCloudRepos 用于获取云端仓库列表。
+	GetCloudRepos() (repos []map[string]interface{}, size int64, err error)
+
+	// GetCloudLimitSize 用于获取云端存储空间限制。
+	GetCloudLimitSize() (ret int64)
+
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
 	UploadObject(filePath string, overwrite bool) (err error)
 

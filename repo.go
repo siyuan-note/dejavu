@@ -52,7 +52,9 @@ type Repo struct {
 
 // NewRepo 创建一个新的仓库。
 func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ignoreLines []string, transport transport.Transport) (ret *Repo, err error) {
-	transport.GetConf().RepoPath = repoPath
+	if nil != transport {
+		transport.GetConf().RepoPath = repoPath
+	}
 	ret = &Repo{
 		DataPath:    filepath.Clean(dataPath),
 		Path:        filepath.Clean(repoPath),

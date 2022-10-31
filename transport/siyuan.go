@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -115,6 +116,111 @@ func (siyuan *SiYuan) AddTraffic(uploadBytes, downloadBytes int64) {
 	if 200 != resp.StatusCode {
 		logging.LogErrorf("add traffic failed: %d", resp.StatusCode)
 		return
+	}
+	return
+}
+
+func (siyuan *SiYuan) RemoveCloudRepo(name string) (err error) {
+	token := siyuan.Conf.Token
+	server := siyuan.Conf.Server
+
+	request := httpclient.NewCloudFileRequest15s()
+	resp, err := request.
+		SetBody(map[string]string{"name": name, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/removeRepo")
+	if nil != err {
+		err = fmt.Errorf("remove cloud repo failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("remove cloud repo failed [%d]", resp.StatusCode)
+		return
+	}
+	return
+}
+
+func (siyuan *SiYuan) CreateCloudRepo(name string) (err error) {
+	token := siyuan.Conf.Token
+	server := siyuan.Conf.Server
+
+	result := map[string]interface{}{}
+	request := httpclient.NewCloudRequest()
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"name": name, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/createRepo")
+	if nil != err {
+		err = fmt.Errorf("create cloud repo failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("create cloud repo failed [%d]", resp.StatusCode)
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = fmt.Errorf("create cloud repo failed: %s", result["msg"])
+		return
+	}
+	return
+}
+
+func (siyuan *SiYuan) GetCloudRepos() (repos []map[string]interface{}, size int64, err error) {
+	token := siyuan.Conf.Token
+	server := siyuan.Conf.Server
+	userId := siyuan.Conf.UserID
+
+	result := map[string]interface{}{}
+	request := httpclient.NewCloudRequest()
+	resp, err := request.
+		SetBody(map[string]interface{}{"token": token}).
+		SetResult(&result).
+		Post(server + "/apis/siyuan/dejavu/getRepos?uid=" + userId)
+	if nil != err {
+		err = fmt.Errorf("get cloud repos failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("request cloud repo list failed [%d]", resp.StatusCode)
+		return
+	}
+
+	code := result["code"].(float64)
+	if 0 != code {
+		err = fmt.Errorf("request cloud repo list failed: %s", result["msg"].(string))
+		return
+	}
+
+	data := result["data"].(map[string]interface{})
+	retRepos := data["repos"].([]interface{})
+	for _, d := range retRepos {
+		repos = append(repos, d.(map[string]interface{}))
+	}
+	sort.Slice(repos, func(i, j int) bool { return repos[i]["name"].(string) < repos[j]["name"].(string) })
+	size = int64(data["size"].(float64))
+	return
+}
+
+func (siyuan *SiYuan) GetCloudLimitSize() (ret int64) {
+	ret = siyuan.Conf.LimitSize
+	if 1 > ret {
+		ret = 1024 * 1024 * 1024 * 1024 // 1T
 	}
 	return
 }
