@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"os"
 	"testing"
 
 	"github.com/siyuan-note/dejavu/transport"
@@ -26,14 +25,10 @@ import (
 func TestSync(t *testing.T) {
 	repo, _ := initIndex(t)
 
-	userId := os.Getenv("dejavu_sync_user")
-	if "" == userId {
-		userId = "userId"
-	}
-	token := os.Getenv("dejavu_sync_token")
-	if "" == token {
-		token = "token"
-	}
+	userId := "0"
+	token := ""
+
+	return
 
 	repo.transport = &transport.SiYuan{Conf: &transport.Conf{
 		Dir:       "test",

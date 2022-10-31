@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20221021091528-70e533d91a88
+	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/klauspost/compress v1.15.11
 	github.com/panjf2000/ants/v2 v2.5.0
@@ -14,13 +15,12 @@ require (
 	github.com/siyuan-note/eventbus v0.0.0-20220916025349-3ac6e75522da
 	github.com/siyuan-note/filelock v0.0.0-20221007163134-7e64809023ef
 	github.com/siyuan-note/httpclient v0.0.0-20221019094331-c904ac9be571
-	github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520
+	github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a
 )
 
 require (
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
-	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/getsentry/sentry-go v0.14.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect

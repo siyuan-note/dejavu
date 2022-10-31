@@ -28,6 +28,7 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgraph-io/ristretto v0.1.1 h1:6CWw5tJNgpegArSHpNHJKldNeq03FQCwYvfMVWajOK8=
 github.com/dgraph-io/ristretto v0.1.1/go.mod h1:S1GPSBCYCIhmVNfcth17y2zZtQT6wzkzgwUve0VDWWA=
+github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2 h1:tdlZCpZ/P9DhczCTSixgIKmwPv6+wP5DGjqLYw5SUiA=
 github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
 github.com/dustin/go-humanize v1.0.0 h1:VSnTsYCnlFHaM2/igO1h6X3HA71jcobQuxemgkq4zYo=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
@@ -206,8 +207,8 @@ github.com/siyuan-note/filelock v0.0.0-20221007163134-7e64809023ef h1:mbDOxW0N2O
 github.com/siyuan-note/filelock v0.0.0-20221007163134-7e64809023ef/go.mod h1:NmpSIVtIGy8eNWapjDIiiCw5+5r5wxC76k40oG+WRXQ=
 github.com/siyuan-note/httpclient v0.0.0-20221019094331-c904ac9be571 h1:AclwUOWgJQt1F8AXc2s6l/J+Edp/GYIgbI2/RoNlKU0=
 github.com/siyuan-note/httpclient v0.0.0-20221019094331-c904ac9be571/go.mod h1:FTPEFG3q0LAn33zON47HeRbLOWNk7HM+OPafmQgq4hU=
-github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520 h1:kscYjMt7jXYdd7Qj2OSUoBnoHc5B0U/E6OSx86VRLr4=
-github.com/siyuan-note/logging v0.0.0-20220717040626-f796b05ee520/go.mod h1:t1zRGxK13L/9ZFoGyTD39IbFCbee3CsypDj4b5dt4qM=
+github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a h1:b9VJCE8IccYjsadwNBI11he+Wn25hI9lCma4uYoIYEM=
+github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a/go.mod h1:t1zRGxK13L/9ZFoGyTD39IbFCbee3CsypDj4b5dt4qM=
 github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d/go.mod h1:UdhH50NIW0fCiwBSr0co2m7BnFLdv4fQTgdqdJTHFeE=
 github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e/go.mod h1:HuIsMU8RRBOtsCgI77wP899iHVBQpCmg4ErYMZB+2IA=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
