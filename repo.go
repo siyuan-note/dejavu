@@ -29,8 +29,8 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
+	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/dejavu/transport"
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
@@ -45,22 +45,22 @@ type Repo struct {
 	TempPath    string   // 临时文件夹的绝对路径，如：F:\\SiYuan\\temp\\
 	IgnoreLines []string // 忽略配置文件内容行，是用 .gitignore 语法
 
-	transport transport.Transport // 数据同步传输器
-	store     *Store              // 仓库的存储
-	chunkPol  chunker.Pol         // 文件分块多项式值
+	store    *Store      // 仓库的存储
+	chunkPol chunker.Pol // 文件分块多项式值
+	cloud    cloud.Cloud // 云端存储服务
 }
 
 // NewRepo 创建一个新的仓库。
-func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ignoreLines []string, transport transport.Transport) (ret *Repo, err error) {
-	if nil != transport {
-		transport.GetConf().RepoPath = repoPath
+func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ignoreLines []string, cloud cloud.Cloud) (ret *Repo, err error) {
+	if nil != cloud {
+		cloud.GetConf().RepoPath = repoPath
 	}
 	ret = &Repo{
 		DataPath:    filepath.Clean(dataPath),
 		Path:        filepath.Clean(repoPath),
 		HistoryPath: filepath.Clean(historyPath),
 		TempPath:    filepath.Clean(tempPath),
-		transport:   transport,
+		cloud:       cloud,
 		chunkPol:    chunker.Pol(0x3DA3358B4DC173), // 固定分块多项式值
 	}
 	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {

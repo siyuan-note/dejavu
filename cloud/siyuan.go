@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package transport
+package cloud
 
 import (
 	"context"
@@ -35,7 +35,7 @@ import (
 // SiYuan 描述了思源笔记官方云端存储实现。
 type SiYuan struct {
 	*Conf
-	Transport
+	Cloud
 }
 
 func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) {
@@ -120,7 +120,7 @@ func (siyuan *SiYuan) AddTraffic(uploadBytes, downloadBytes int64) {
 	return
 }
 
-func (siyuan *SiYuan) RemoveCloudRepo(name string) (err error) {
+func (siyuan *SiYuan) RemoveRepo(name string) (err error) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
@@ -144,7 +144,7 @@ func (siyuan *SiYuan) RemoveCloudRepo(name string) (err error) {
 	return
 }
 
-func (siyuan *SiYuan) CreateCloudRepo(name string) (err error) {
+func (siyuan *SiYuan) CreateRepo(name string) (err error) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
@@ -176,7 +176,7 @@ func (siyuan *SiYuan) CreateCloudRepo(name string) (err error) {
 	return
 }
 
-func (siyuan *SiYuan) GetCloudRepos() (repos []map[string]interface{}, size int64, err error) {
+func (siyuan *SiYuan) GetRepos() (repos []map[string]interface{}, size int64, err error) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 	userId := siyuan.Conf.UserID
@@ -217,7 +217,7 @@ func (siyuan *SiYuan) GetCloudRepos() (repos []map[string]interface{}, size int6
 	return
 }
 
-func (siyuan *SiYuan) GetCloudLimitSize() (ret int64) {
+func (siyuan *SiYuan) GetLimitSize() (ret int64) {
 	ret = siyuan.Conf.LimitSize
 	if 1 > ret {
 		ret = 1024 * 1024 * 1024 * 1024 // 1T

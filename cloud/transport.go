@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package transport
+package cloud
 
 import "errors"
 
@@ -38,23 +38,23 @@ type Conf struct {
 	Server    string // 云端接口端点
 }
 
-// Transport 描述了传输数据的方法，接入云端存储服务时必须实现该接口。
-type Transport interface {
+// Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。
+type Cloud interface {
 
 	// GetConf 用于获取配置信息。
 	GetConf() *Conf
 
-	// CreateCloudRepo 用于创建云端仓库。
-	CreateCloudRepo(name string) (err error)
+	// CreateRepo 用于创建云端仓库。
+	CreateRepo(name string) (err error)
 
-	// RemoveCloudRepo 用于删除云端仓库。
-	RemoveCloudRepo(name string) (err error)
+	// RemoveRepo 用于删除云端仓库。
+	RemoveRepo(name string) (err error)
 
-	// GetCloudRepos 用于获取云端仓库列表。
-	GetCloudRepos() (repos []map[string]interface{}, size int64, err error)
+	// GetRepos 用于获取云端仓库列表。
+	GetRepos() (repos []map[string]interface{}, size int64, err error)
 
-	// GetCloudLimitSize 用于获取云端存储空间限制。
-	GetCloudLimitSize() (ret int64)
+	// GetLimitSize 用于获取云端存储空间限制。
+	GetLimitSize() (ret int64)
 
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
 	UploadObject(filePath string, overwrite bool) (err error)

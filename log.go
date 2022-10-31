@@ -28,8 +28,8 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/dustin/go-humanize"
+	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/dejavu/transport"
 	"github.com/siyuan-note/httpclient"
 )
 
@@ -56,10 +56,10 @@ func (log *Log) String() string {
 }
 
 func (repo *Repo) RemoveCloudRepoTag(tag string, context map[string]interface{}) (err error) {
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
-	token := repo.transport.GetConf().Token
-	server := repo.transport.GetConf().Server
+	userId := repo.cloud.GetConf().UserID
+	dir := repo.cloud.GetConf().Dir
+	token := repo.cloud.GetConf().Token
+	server := repo.cloud.GetConf().Server
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest()
@@ -74,7 +74,7 @@ func (repo *Repo) RemoveCloudRepoTag(tag string, context map[string]interface{})
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = transport.ErrCloudAuthFailed
+			err = cloud.ErrCloudAuthFailed
 			return
 		}
 		err = errors.New(fmt.Sprintf("remove cloud repo tag failed [%d]", resp.StatusCode))

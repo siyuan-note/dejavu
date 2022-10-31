@@ -19,7 +19,7 @@ package dejavu
 import (
 	"testing"
 
-	"github.com/siyuan-note/dejavu/transport"
+	"github.com/siyuan-note/dejavu/cloud"
 )
 
 func TestSync(t *testing.T) {
@@ -30,7 +30,7 @@ func TestSync(t *testing.T) {
 
 	return
 
-	repo.transport = &transport.SiYuan{Conf: &transport.Conf{
+	repo.cloud = &cloud.SiYuan{Conf: &cloud.Conf{
 		Dir:       "test",
 		UserID:    userId,
 		LimitSize: 1024 * 1024 * 1024 * 8,

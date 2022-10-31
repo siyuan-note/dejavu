@@ -22,8 +22,8 @@ import (
 	"strings"
 
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/dejavu/transport"
 	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
 )
@@ -87,7 +87,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	}
 
 	// 统计流量
-	go repo.transport.AddTraffic(0, downloadBytes)
+	go repo.cloud.AddTraffic(0, downloadBytes)
 	return
 }
 
@@ -116,7 +116,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 		return
 	}
 
-	limitSize := repo.transport.GetCloudLimitSize()
+	limitSize := repo.cloud.GetLimitSize()
 	if limitSize <= index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
@@ -198,7 +198,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	uploadBytes += length
 
 	// 统计流量
-	go repo.transport.AddTraffic(uploadBytes, 0)
+	go repo.cloud.AddTraffic(uploadBytes, 0)
 	return
 }
 
@@ -207,10 +207,10 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string) (chunks []st
 		return
 	}
 
-	token := repo.transport.GetConf().Token
-	dir := repo.transport.GetConf().Dir
-	userId := repo.transport.GetConf().UserID
-	server := repo.transport.GetConf().Server
+	token := repo.cloud.GetConf().Token
+	dir := repo.cloud.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	server := repo.cloud.GetConf().Server
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest2m()
@@ -224,7 +224,7 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string) (chunks []st
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = transport.ErrCloudAuthFailed
+			err = cloud.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo refs chunks failed [%d]", resp.StatusCode)
@@ -258,10 +258,10 @@ func (repo *Repo) getCloudRepoStat() (repoSize int64, backupCount int, err error
 }
 
 func (repo *Repo) GetCloudRepoStat() (ret map[string]interface{}, err error) {
-	token := repo.transport.GetConf().Token
-	dir := repo.transport.GetConf().Dir
-	userId := repo.transport.GetConf().UserID
-	server := repo.transport.GetConf().Server
+	token := repo.cloud.GetConf().Token
+	dir := repo.cloud.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	server := repo.cloud.GetConf().Server
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest15s()
@@ -276,7 +276,7 @@ func (repo *Repo) GetCloudRepoStat() (ret map[string]interface{}, err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = transport.ErrCloudAuthFailed
+			err = cloud.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo stat failed [%d]", resp.StatusCode)
@@ -293,10 +293,10 @@ func (repo *Repo) GetCloudRepoStat() (ret map[string]interface{}, err error) {
 }
 
 func (repo *Repo) getCloudRepoRefsFiles() (files []string, err error) {
-	token := repo.transport.GetConf().Token
-	dir := repo.transport.GetConf().Dir
-	userId := repo.transport.GetConf().UserID
-	server := repo.transport.GetConf().Server
+	token := repo.cloud.GetConf().Token
+	dir := repo.cloud.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	server := repo.cloud.GetConf().Server
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest15s()
@@ -311,7 +311,7 @@ func (repo *Repo) getCloudRepoRefsFiles() (files []string, err error) {
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = transport.ErrCloudAuthFailed
+			err = cloud.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo refs files failed [%d]", resp.StatusCode)
@@ -332,10 +332,10 @@ func (repo *Repo) getCloudRepoRefsFiles() (files []string, err error) {
 }
 
 func (repo *Repo) GetCloudRepoTags() (tags []map[string]interface{}, err error) {
-	token := repo.transport.GetConf().Token
-	dir := repo.transport.GetConf().Dir
-	userId := repo.transport.GetConf().UserID
-	server := repo.transport.GetConf().Server
+	token := repo.cloud.GetConf().Token
+	dir := repo.cloud.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	server := repo.cloud.GetConf().Server
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest()
@@ -350,7 +350,7 @@ func (repo *Repo) GetCloudRepoTags() (tags []map[string]interface{}, err error) 
 
 	if 200 != resp.StatusCode {
 		if 401 == resp.StatusCode {
-			err = transport.ErrCloudAuthFailed
+			err = cloud.ErrCloudAuthFailed
 			return
 		}
 		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)

@@ -29,8 +29,8 @@ import (
 	"github.com/88250/gulu"
 	"github.com/panjf2000/ants/v2"
 	ignore "github.com/sabhiram/go-gitignore"
+	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/dejavu/transport"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/httpclient"
@@ -105,7 +105,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	// 从云端获取最新索引
 	length, cloudLatest, err := repo.downloadCloudLatest(context)
 	if nil != err {
-		if !errors.Is(err, transport.ErrCloudObjectNotFound) {
+		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			logging.LogErrorf("download cloud latest failed: %s", err)
 			return
 		}
@@ -118,7 +118,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 		return
 	}
 
-	limitSize := repo.transport.GetCloudLimitSize()
+	limitSize := repo.cloud.GetLimitSize()
 	if limitSize <= cloudLatest.Size || limitSize <= latest.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
@@ -455,7 +455,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	// 统计流量
-	go repo.transport.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
+	go repo.cloud.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
 
 	// 移除空目录
 	err = gulu.File.RemoveEmptyDirs(repo.DataPath, workspaceDataDirs...)
@@ -476,7 +476,7 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 	// 从云端获取最新索引
 	length, cloudLatest, err := repo.downloadCloudLatest(context)
 	if nil != err {
-		if !errors.Is(err, transport.ErrCloudObjectNotFound) {
+		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			logging.LogErrorf("download cloud latest failed: %s", err)
 			return
 		}
@@ -490,7 +490,7 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 		return
 	}
 
-	limitSize := repo.transport.GetCloudLimitSize()
+	limitSize := repo.cloud.GetLimitSize()
 	if limitSize <= cloudLatest.Size || limitSize <= latest.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
@@ -513,7 +513,7 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 	trafficStat.DownloadFileCount = len(fetchFileIDs)
 
 	// 统计流量
-	go repo.transport.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
+	go repo.cloud.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
 	return
 }
 
@@ -712,7 +712,7 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 		return
 	}
 	uploadBytes = info.Size()
-	err = repo.transport.UploadObject(ref, true)
+	err = repo.cloud.UploadObject(ref, true)
 	return
 }
 
@@ -745,7 +745,7 @@ func (repo *Repo) uploadIndexes(indexes []*entity.Index, context map[string]inte
 
 		indexID := arg.(string)
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, indexID)
-		if uoErr := repo.transport.UploadObject(path.Join("indexes", indexID), false); nil != uoErr {
+		if uoErr := repo.cloud.UploadObject(path.Join("indexes", indexID), false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
@@ -799,7 +799,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID)
-		if uoErr := repo.transport.UploadObject(filePath, false); nil != uoErr {
+		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
@@ -854,7 +854,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID)
-		if uoErr := repo.transport.UploadObject(filePath, false); nil != uoErr {
+		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
@@ -1000,8 +1000,8 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 func (repo *Repo) downloadCloudChunk(id string, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id)
 
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	dir := repo.cloud.GetConf().Dir
 	key := path.Join("siyuan", userId, "repo", dir, "objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
@@ -1016,8 +1016,8 @@ func (repo *Repo) downloadCloudChunk(id string, context map[string]interface{}) 
 func (repo *Repo) downloadCloudFile(id string, context map[string]interface{}) (length int64, ret *entity.File, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id)
 
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	dir := repo.cloud.GetConf().Dir
 	key := path.Join("siyuan", userId, "repo", dir, "objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
@@ -1039,9 +1039,9 @@ func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
 	if 200 != resp.StatusCode {
 		if 404 == resp.StatusCode {
 			if !strings.HasSuffix(key, "/refs/latest") {
-				logging.LogErrorf("download object [%s] failed: %s", key, transport.ErrCloudObjectNotFound)
+				logging.LogErrorf("download object [%s] failed: %s", key, cloud.ErrCloudObjectNotFound)
 			}
-			err = transport.ErrCloudObjectNotFound
+			err = cloud.ErrCloudObjectNotFound
 			return
 		}
 		err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
@@ -1084,8 +1084,8 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, id)
 	index = &entity.Index{}
 
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	dir := repo.cloud.GetConf().Dir
 	key := path.Join("siyuan", userId, "repo", dir, "indexes", id)
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
@@ -1102,13 +1102,13 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
 	index = &entity.Index{}
 
-	userId := repo.transport.GetConf().UserID
-	dir := repo.transport.GetConf().Dir
+	userId := repo.cloud.GetConf().UserID
+	dir := repo.cloud.GetConf().Dir
 	key := path.Join("siyuan", userId, "repo", dir, "refs", "latest")
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
-		if errors.Is(err, transport.ErrCloudObjectNotFound) {
+		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			err = nil
 			return
 		}
@@ -1168,17 +1168,17 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, context map[strin
 }
 
 func (repo *Repo) RemoveCloudRepo(name string) (err error) {
-	return repo.transport.RemoveCloudRepo(name)
+	return repo.cloud.RemoveRepo(name)
 }
 
 func (repo *Repo) CreateCloudRepo(name string) (err error) {
-	return repo.transport.CreateCloudRepo(name)
+	return repo.cloud.CreateRepo(name)
 }
 
 func (repo *Repo) GetCloudRepos() (repos []map[string]interface{}, size int64, err error) {
-	return repo.transport.GetCloudRepos()
+	return repo.cloud.GetRepos()
 }
 
 func (repo *Repo) GetCloudLimitSize() (ret int64) {
-	return repo.transport.GetCloudLimitSize()
+	return repo.cloud.GetLimitSize()
 }
