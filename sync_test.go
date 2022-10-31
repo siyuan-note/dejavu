@@ -19,25 +19,31 @@ package dejavu
 import (
 	"os"
 	"testing"
+
+	"github.com/siyuan-note/dejavu/transport"
 )
 
 func TestSync(t *testing.T) {
 	repo, _ := initIndex(t)
 
 	userId := os.Getenv("dejavu_sync_user")
+	if "" == userId {
+		userId = "userId"
+	}
 	token := os.Getenv("dejavu_sync_token")
-	if "" == token || "" == userId {
-		return
+	if "" == token {
+		token = "token"
 	}
 
-	cloudInfo := &CloudInfo{
+	repo.transport = &transport.SiYuan{Conf: &transport.Conf{
 		Dir:       "test",
 		UserID:    userId,
 		LimitSize: 1024 * 1024 * 1024 * 8,
 		Token:     token,
 		Server:    "http://127.0.0.1:64388",
-	}
-	mergeResult, trafficStat, err := repo.Sync(cloudInfo, nil)
+	}}
+
+	mergeResult, trafficStat, err := repo.Sync(nil)
 	if nil != err {
 		t.Fatalf("sync failed: %s", err)
 		return

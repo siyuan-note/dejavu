@@ -54,14 +54,19 @@ func (log *Log) String() string {
 	return string(data)
 }
 
-func (repo *Repo) RemoveCloudRepoTag(tag string, cloudInfo *CloudInfo, context map[string]interface{}) (err error) {
+func (repo *Repo) RemoveCloudRepoTag(tag string, context map[string]interface{}) (err error) {
+	userId := repo.transport.GetConf().UserID
+	dir := repo.transport.GetConf().Dir
+	token := repo.transport.GetConf().Token
+	server := repo.transport.GetConf().Server
+
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest()
-	key := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs", "tags", tag)
+	key := path.Join("siyuan", userId, "repo", dir, "refs", "tags", tag)
 	resp, err := request.
 		SetResult(&result).
-		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token, "key": key}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/removeRepoObject?uid=" + cloudInfo.UserID)
+		SetBody(map[string]string{"repo": dir, "token": token, "key": key}).
+		Post(server + "/apis/siyuan/dejavu/removeRepoObject?uid=" + userId)
 	if nil != err {
 		return
 	}
@@ -82,8 +87,8 @@ func (repo *Repo) RemoveCloudRepoTag(tag string, cloudInfo *CloudInfo, context m
 	return
 }
 
-func (repo *Repo) GetCloudRepoTagLogs(cloudInfo *CloudInfo, context map[string]interface{}) (ret []*Log, err error) {
-	cloudTags, err := repo.GetCloudRepoTags(cloudInfo)
+func (repo *Repo) GetCloudRepoTagLogs(context map[string]interface{}) (ret []*Log, err error) {
+	cloudTags, err := repo.GetCloudRepoTags()
 	if nil != err {
 		return
 	}
@@ -92,7 +97,7 @@ func (repo *Repo) GetCloudRepoTagLogs(cloudInfo *CloudInfo, context map[string]i
 
 		index, _ := repo.store.GetIndex(id)
 		if nil == index {
-			_, index, err = repo.downloadCloudIndex(id, cloudInfo, context)
+			_, index, err = repo.downloadCloudIndex(id, context)
 			if nil != err {
 				return
 			}

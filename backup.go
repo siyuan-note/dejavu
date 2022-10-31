@@ -28,12 +28,12 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
-func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
+func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
 	// 从云端下载标签指向的索引
-	length, index, err := repo.downloadCloudIndex(id, cloudInfo, context)
+	length, index, err := repo.downloadCloudIndex(id, context)
 	if nil != err {
 		logging.LogErrorf("download cloud index failed: %s", err)
 		return
@@ -49,7 +49,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	}
 
 	// 从云端下载缺失文件并入库
-	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, cloudInfo, context)
+	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
@@ -68,7 +68,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	}
 
 	// 从云端获取分块并入库
-	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, cloudInfo, context)
+	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	downloadBytes += length
 	downloadChunkCount = len(fetchChunkIDs)
 
@@ -87,15 +87,15 @@ func (repo *Repo) DownloadTagIndex(tag, id string, cloudInfo *CloudInfo, context
 	}
 
 	// 统计流量
-	go repo.addTraffic(0, downloadBytes, cloudInfo)
+	go repo.addTraffic(0, downloadBytes)
 	return
 }
 
-func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
+func (repo *Repo) UploadTagIndex(tag, id string, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	uploadFileCount, uploadChunkCount, uploadBytes, err = repo.uploadTagIndex(tag, id, cloudInfo, context)
+	uploadFileCount, uploadChunkCount, uploadBytes, err = repo.uploadTagIndex(tag, id, context)
 	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
 		p := e.Path
 		if !strings.Contains(p, "objects") {
@@ -109,20 +109,21 @@ func (repo *Repo) UploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	return
 }
 
-func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
+func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		logging.LogErrorf("get index failed: %s", err)
 		return
 	}
 
-	if cloudInfo.LimitSize <= index.Size {
+	limitSize := repo.GetCloudLimitSize()
+	if limitSize <= index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
 
 	// 获取云端数据仓库统计信息
-	cloudRepoSize, cloudBackupCount, err := repo.getCloudRepoStat(cloudInfo)
+	cloudRepoSize, cloudBackupCount, err := repo.getCloudRepoStat()
 	if nil != err {
 		logging.LogErrorf("get cloud repo stat failed: %s", err)
 		return
@@ -132,13 +133,13 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 		return
 	}
 
-	if cloudInfo.LimitSize <= cloudRepoSize+index.Size {
+	if limitSize <= cloudRepoSize+index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
 
 	// 从云端获取文件列表
-	cloudFileIDs, err := repo.getCloudRepoRefsFiles(cloudInfo)
+	cloudFileIDs, err := repo.getCloudRepoRefsFiles()
 	if nil != err {
 		logging.LogErrorf("get cloud repo refs files failed: %s", err)
 		return
@@ -162,22 +163,25 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadChunkIDs := repo.getChunks(uploadFiles)
 
 	// 计算云端缺失的分块
-	uploadChunkIDs, err = repo.getCloudRepoUploadChunks(uploadChunkIDs, cloudInfo)
+	uploadChunkIDs, err = repo.getCloudRepoUploadChunks(uploadChunkIDs)
 	if nil != err {
 		logging.LogErrorf("get cloud repo upload chunks failed: %s", err)
 		return
 	}
 
+	dir := repo.transport.GetConf().Dir
+	userId := repo.transport.GetConf().UserID
+
 	// 获取上传凭证
-	latestKey := path.Join("siyuan", cloudInfo.UserID, "repo", cloudInfo.Dir, "refs/tags/"+tag)
-	keyUploadToken, scopeUploadToken, err := repo.requestScopeKeyUploadToken(latestKey, cloudInfo)
+	latestKey := path.Join("siyuan", userId, "repo", dir, "refs/tags/"+tag)
+	keyUploadToken, scopeUploadToken, err := repo.requestScopeKeyUploadToken(latestKey)
 	if nil != err {
 		logging.LogErrorf("request upload token failed: %s", err)
 		return
 	}
 
 	// 上传分块
-	length, err := repo.uploadChunks(uploadChunkIDs, scopeUploadToken, cloudInfo, context)
+	length, err := repo.uploadChunks(uploadChunkIDs, scopeUploadToken, context)
 	if nil != err {
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
@@ -186,7 +190,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadBytes += length
 
 	// 上传文件
-	length, err = repo.uploadFiles(uploadFiles, scopeUploadToken, cloudInfo, context)
+	length, err = repo.uploadFiles(uploadFiles, scopeUploadToken, context)
 	if nil != err {
 		logging.LogErrorf("upload files failed: %s", err)
 		return
@@ -195,31 +199,36 @@ func (repo *Repo) uploadTagIndex(tag, id string, cloudInfo *CloudInfo, context m
 	uploadBytes += length
 
 	// 上传索引
-	length, err = repo.uploadIndexes([]*entity.Index{index}, scopeUploadToken, cloudInfo, context)
+	length, err = repo.uploadIndexes([]*entity.Index{index}, scopeUploadToken, context)
 	uploadFileCount++
 	uploadBytes += length
 
 	// 上传标签
-	length, err = repo.updateCloudRef("refs/tags/"+tag, keyUploadToken, cloudInfo, context)
+	length, err = repo.updateCloudRef("refs/tags/"+tag, keyUploadToken, context)
 	uploadFileCount++
 	uploadBytes += length
 
 	// 统计流量
-	go repo.addTraffic(uploadBytes, 0, cloudInfo)
+	go repo.addTraffic(uploadBytes, 0)
 	return
 }
 
-func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *CloudInfo) (chunks []string, err error) {
+func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string) (chunks []string, err error) {
 	if 1 > len(uploadChunkIDs) {
 		return
 	}
+
+	token := repo.transport.GetConf().Token
+	dir := repo.transport.GetConf().Dir
+	userId := repo.transport.GetConf().UserID
+	server := repo.transport.GetConf().Server
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest2m()
 	resp, err := request.
 		SetResult(&result).
-		SetBody(map[string]interface{}{"repo": cloudInfo.Dir, "token": cloudInfo.Token, "chunks": uploadChunkIDs}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoUploadChunks?uid=" + cloudInfo.UserID)
+		SetBody(map[string]interface{}{"repo": dir, "token": token, "chunks": uploadChunkIDs}).
+		Post(server + "/apis/siyuan/dejavu/getRepoUploadChunks?uid=" + userId)
 	if nil != err {
 		return
 	}
@@ -246,8 +255,8 @@ func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string, cloudInfo *C
 	return
 }
 
-func (repo *Repo) getCloudRepoStat(cloudInfo *CloudInfo) (repoSize int64, backupCount int, err error) {
-	repoStat, err := repo.GetCloudRepoStat(cloudInfo)
+func (repo *Repo) getCloudRepoStat() (repoSize int64, backupCount int, err error) {
+	repoStat, err := repo.GetCloudRepoStat()
 	if nil != err {
 		return
 	}
@@ -259,13 +268,18 @@ func (repo *Repo) getCloudRepoStat(cloudInfo *CloudInfo) (repoSize int64, backup
 	return
 }
 
-func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interface{}, err error) {
+func (repo *Repo) GetCloudRepoStat() (ret map[string]interface{}, err error) {
+	token := repo.transport.GetConf().Token
+	dir := repo.transport.GetConf().Dir
+	userId := repo.transport.GetConf().UserID
+	server := repo.transport.GetConf().Server
+
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest15s()
 	resp, err := request.
 		SetResult(&result).
-		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoStat?uid=" + cloudInfo.UserID)
+		SetBody(map[string]string{"repo": dir, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/getRepoStat?uid=" + userId)
 	if nil != err {
 		err = fmt.Errorf("get cloud repo stat failed: %s", err)
 		return
@@ -289,13 +303,18 @@ func (repo *Repo) GetCloudRepoStat(cloudInfo *CloudInfo) (ret map[string]interfa
 	return
 }
 
-func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, err error) {
+func (repo *Repo) getCloudRepoRefsFiles() (files []string, err error) {
+	token := repo.transport.GetConf().Token
+	dir := repo.transport.GetConf().Dir
+	userId := repo.transport.GetConf().UserID
+	server := repo.transport.GetConf().Server
+
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest15s()
 	resp, err := request.
 		SetResult(&result).
-		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoRefsFiles?uid=" + cloudInfo.UserID)
+		SetBody(map[string]string{"repo": dir, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/getRepoRefsFiles?uid=" + userId)
 	if nil != err {
 		err = fmt.Errorf("get cloud repo refs files failed: %s", err)
 		return
@@ -323,13 +342,18 @@ func (repo *Repo) getCloudRepoRefsFiles(cloudInfo *CloudInfo) (files []string, e
 	return
 }
 
-func (repo *Repo) GetCloudRepoTags(cloudInfo *CloudInfo) (tags []map[string]interface{}, err error) {
+func (repo *Repo) GetCloudRepoTags() (tags []map[string]interface{}, err error) {
+	token := repo.transport.GetConf().Token
+	dir := repo.transport.GetConf().Dir
+	userId := repo.transport.GetConf().UserID
+	server := repo.transport.GetConf().Server
+
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest()
 	resp, err := request.
 		SetResult(&result).
-		SetBody(map[string]string{"repo": cloudInfo.Dir, "token": cloudInfo.Token}).
-		Post(cloudInfo.Server + "/apis/siyuan/dejavu/getRepoTags?uid=" + cloudInfo.UserID)
+		SetBody(map[string]string{"repo": dir, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/getRepoTags?uid=" + userId)
 	if nil != err {
 		err = fmt.Errorf("get cloud repo tags failed: %s", err)
 		return

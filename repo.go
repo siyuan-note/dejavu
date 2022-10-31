@@ -30,15 +30,12 @@ import (
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/transport"
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 )
-
-var ErrRepoFatalErr = errors.New("repo fatal error")
-
-var lock = sync.Mutex{} // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
 
 // Repo 描述了逮虾户数据仓库。
 type Repo struct {
@@ -48,17 +45,19 @@ type Repo struct {
 	TempPath    string   // 临时文件夹的绝对路径，如：F:\\SiYuan\\temp\\
 	IgnoreLines []string // 忽略配置文件内容行，是用 .gitignore 语法
 
-	store    *Store      // 仓库的存储
-	chunkPol chunker.Pol // 文件分块多项式值
+	transport transport.Transport // 数据同步传输器
+	store     *Store              // 仓库的存储
+	chunkPol  chunker.Pol         // 文件分块多项式值
 }
 
 // NewRepo 创建一个新的仓库。
-func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ignoreLines []string) (ret *Repo, err error) {
+func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ignoreLines []string, transport transport.Transport) (ret *Repo, err error) {
 	ret = &Repo{
 		DataPath:    filepath.Clean(dataPath),
 		Path:        filepath.Clean(repoPath),
 		HistoryPath: filepath.Clean(historyPath),
 		TempPath:    filepath.Clean(tempPath),
+		transport:   transport,
 		chunkPol:    chunker.Pol(0x3DA3358B4DC173), // 固定分块多项式值
 	}
 	if !strings.HasSuffix(ret.DataPath, string(os.PathSeparator)) {
@@ -75,6 +74,10 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath string, aesKey []byte, ig
 	ret.store, err = NewStore(ret.Path, aesKey)
 	return
 }
+
+var ErrRepoFatalErr = errors.New("repo fatal error")
+
+var lock = sync.Mutex{} // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
 
 // GetIndex 从仓库根据 id 获取索引。
 func (repo *Repo) GetIndex(id string) (index *entity.Index, err error) {
