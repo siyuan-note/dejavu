@@ -20,17 +20,17 @@ import "errors"
 
 // Conf 用于描述云端存储服务配置信息。
 type Conf struct {
+	Dir      string                 // 存储目录
+	UserID   string                 // 用户 ID，没有的话请传入一个定值比如 "0"
+	RepoPath string                 // 本地仓库的绝对路径，如：F:\\SiYuan\\repo\\
+	Extras   map[string]interface{} // 一些可能需要的附加信息
+
+	// S3 协议所需配置
 	Endpoint  string // 服务端点
 	AccessKey string // Access Key
 	SecretKey string // Secret Key
 	Regin     string // 存储区域
 	Bucket    string // 存储空间
-
-	Dir      string // 存储目录
-	UserID   string // 用户 ID，没有的话请传入一个定值比如 "0"
-	RepoPath string // 本地仓库的绝对路径，如：F:\\SiYuan\\repo\\
-
-	Extras map[string]interface{} // 一些可能需要的附加信息
 
 	// 以下值非官方存储服务不必传入
 	Token     string // 云端接口鉴权令牌
