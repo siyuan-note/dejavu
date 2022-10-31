@@ -49,6 +49,9 @@ type Transport interface {
 
 	// DownloadObject 用于下载对象。
 	DownloadObject(key string) (data []byte, err error)
+
+	// AddTraffic 用于统计流量。
+	AddTraffic(uploadBytes, downloadBytes int64)
 }
 
 var (

@@ -456,7 +456,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	// 统计流量
-	go repo.addTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
+	go repo.transport.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
 
 	// 移除空目录
 	err = gulu.File.RemoveEmptyDirs(repo.DataPath, workspaceDataDirs...)
@@ -514,7 +514,7 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 	trafficStat.DownloadFileCount = len(fetchFileIDs)
 
 	// 统计流量
-	go repo.addTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
+	go repo.transport.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
 	return
 }
 
@@ -993,26 +993,6 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 	ret, err = repo.store.GetIndex(hash)
 	if nil != err {
 		logging.LogWarnf("get latest sync index failed: %s", err)
-		return
-	}
-	return
-}
-
-func (repo *Repo) addTraffic(uploadBytes, downloadBytes int64) {
-	token := repo.transport.GetConf().Token
-	server := repo.transport.GetConf().Server
-
-	request := httpclient.NewCloudRequest()
-	resp, err := request.
-		SetBody(map[string]interface{}{"token": token, "uploadBytes": uploadBytes, "downloadBytes": downloadBytes}).
-		Post(server + "/apis/siyuan/dejavu/addTraffic")
-	if nil != err {
-		logging.LogErrorf("add traffic failed: %s", err)
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		logging.LogErrorf("add traffic failed: %d", resp.StatusCode)
 		return
 	}
 	return

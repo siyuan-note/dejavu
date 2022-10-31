@@ -87,7 +87,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	}
 
 	// 统计流量
-	go repo.addTraffic(0, downloadBytes)
+	go repo.transport.AddTraffic(0, downloadBytes)
 	return
 }
 
@@ -198,7 +198,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	uploadBytes += length
 
 	// 统计流量
-	go repo.addTraffic(uploadBytes, 0)
+	go repo.transport.AddTraffic(uploadBytes, 0)
 	return
 }
 
