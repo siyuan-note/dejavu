@@ -62,8 +62,49 @@ type Cloud interface {
 	// DownloadObject 用于下载对象。
 	DownloadObject(key string) (data []byte, err error)
 
+	// RemoveObject 用于删除对象。
+	RemoveObject(key string) (err error)
+
+	// GetTags 用于获取快照标记列表。
+	GetTags() (tags *Ref, err error)
+
+	// GetFiles 用于获取文件列表。
+	GetFiles(excludeFilesIDs []string) (fileIDs []string, err error)
+
+	// GetChunks 用于获取分块列表。
+	GetChunks(excludeChunkIDs []string) (chunkIDs []string, err error)
+
+	// GetStat 用于获取统计信息。
+	GetStat() (stat *Stat, err error)
+
 	// AddTraffic 用于统计流量。
 	AddTraffic(uploadBytes, downloadBytes int64)
+}
+
+type StatSync struct {
+	Size      int64  `json:"size"`      // 总大小字节数
+	FileCount int64  `json:"fileCount"` // 总文件数
+	Updated   string `json:"updated"`   // 最后更新时间
+}
+
+type StatBackup struct {
+	Count     int    `json:"count"`     // 已标记的快照数量
+	Size      int64  `json:"size"`      // 总大小字节数
+	FileCount int64  `json:"fileCount"` // 总文件数
+	Updated   string `json:"updated"`   // 最后更新时间
+}
+
+type Stat struct {
+	Sync      *StatSync   `json:"sync"`      // 同步统计
+	Backup    *StatBackup `json:"backup"`    // 备份统计
+	AssetSize int64       `json:"assetSize"` // 资源文件大小字节数
+	RepoCount int         `json:"repoCount"` // 仓库数量
+}
+
+type Ref struct {
+	Name    string `json:"name"`
+	ID      string `json:"id"`
+	Updated string `json:"updated"`
 }
 
 type BaseCloud struct {
