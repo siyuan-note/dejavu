@@ -108,7 +108,6 @@ func (siyuan *SiYuan) RemoveObject(key string) (err error) {
 
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest()
-	// TODO: key := path.Join("siyuan", userId, "repo", dir, "refs", "tags", tag)
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token, "key": key}).

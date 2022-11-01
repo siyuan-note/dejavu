@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"os"
+	"path"
 	"strings"
 
 	"github.com/88250/gulu"
@@ -208,4 +209,11 @@ func (repo *Repo) getCloudRepoStat() (repoSize int64, backupCount int, err error
 	repoSize = repoStat.Sync.Size + repoStat.Backup.Size
 	backupCount = repoStat.Backup.Count
 	return
+}
+
+func (repo *Repo) RemoveCloudRepoTag(tag string) (err error) {
+	userId := repo.cloud.GetConf().UserID
+	dir := repo.cloud.GetConf().Dir
+	key := path.Join("siyuan", userId, "repo", dir, "refs", "tags", tag)
+	return repo.cloud.RemoveObject(key)
 }
