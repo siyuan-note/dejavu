@@ -30,13 +30,13 @@ func TestSync(t *testing.T) {
 
 	return
 
-	repo.cloud = &cloud.SiYuan{Conf: &cloud.Conf{
+	repo.cloud = &cloud.SiYuan{BaseCloud: &cloud.BaseCloud{Conf: &cloud.Conf{
 		Dir:       "test",
 		UserID:    userId,
 		LimitSize: 1024 * 1024 * 1024 * 8,
 		Token:     token,
 		Server:    "http://127.0.0.1:64388",
-	}}
+	}}}
 
 	mergeResult, trafficStat, err := repo.Sync(nil)
 	if nil != err {

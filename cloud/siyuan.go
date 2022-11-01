@@ -34,8 +34,7 @@ import (
 
 // SiYuan 描述了思源笔记官方云端存储实现。
 type SiYuan struct {
-	*Conf
-	Cloud
+	*BaseCloud
 }
 
 func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) {
@@ -215,18 +214,6 @@ func (siyuan *SiYuan) GetRepos() (repos []map[string]interface{}, size int64, er
 	sort.Slice(repos, func(i, j int) bool { return repos[i]["name"].(string) < repos[j]["name"].(string) })
 	size = int64(data["size"].(float64))
 	return
-}
-
-func (siyuan *SiYuan) GetLimitSize() (ret int64) {
-	ret = siyuan.Conf.LimitSize
-	if 1 > ret {
-		ret = 1024 * 1024 * 1024 * 1024 // 1T
-	}
-	return
-}
-
-func (siyuan *SiYuan) GetConf() *Conf {
-	return siyuan.Conf
 }
 
 type UploadToken struct {

@@ -66,6 +66,19 @@ type Cloud interface {
 	AddTraffic(uploadBytes, downloadBytes int64)
 }
 
+type BaseCloud struct {
+	*Conf
+	Cloud
+}
+
+func (siyuan *SiYuan) GetLimitSize() (ret int64) {
+	return siyuan.Conf.LimitSize
+}
+
+func (siyuan *SiYuan) GetConf() *Conf {
+	return siyuan.Conf
+}
+
 var (
 	// ErrCloudObjectNotFound 描述了云端存储服务中的对象不存在的错误。
 	ErrCloudObjectNotFound = errors.New("cloud object not found")
