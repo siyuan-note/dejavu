@@ -17,14 +17,11 @@
 package dejavu
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/88250/gulu"
-	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
 )
 
@@ -139,7 +136,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	}
 
 	// 从云端获取文件列表
-	cloudFileIDs, err := repo.getCloudRepoRefsFiles()
+	cloudFileIDs, err := repo.cloud.GetFiles(nil)
 	if nil != err {
 		logging.LogErrorf("get cloud repo refs files failed: %s", err)
 		return
@@ -163,7 +160,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	uploadChunkIDs := repo.getChunks(uploadFiles)
 
 	// 计算云端缺失的分块
-	uploadChunkIDs, err = repo.getCloudRepoUploadChunks(uploadChunkIDs)
+	uploadChunkIDs, err = repo.cloud.GetChunks(uploadChunkIDs)
 	if nil != err {
 		logging.LogErrorf("get cloud repo upload chunks failed: %s", err)
 		return
@@ -202,170 +199,13 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	return
 }
 
-func (repo *Repo) getCloudRepoUploadChunks(uploadChunkIDs []string) (chunks []string, err error) {
-	if 1 > len(uploadChunkIDs) {
-		return
-	}
-
-	token := repo.cloud.GetConf().Token
-	dir := repo.cloud.GetConf().Dir
-	userId := repo.cloud.GetConf().UserID
-	server := repo.cloud.GetConf().Server
-
-	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudFileRequest2m()
-	resp, err := request.
-		SetResult(&result).
-		SetBody(map[string]interface{}{"repo": dir, "token": token, "chunks": uploadChunkIDs}).
-		Post(server + "/apis/siyuan/dejavu/getRepoUploadChunks?uid=" + userId)
-	if nil != err {
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = cloud.ErrCloudAuthFailed
-			return
-		}
-		err = fmt.Errorf("get cloud repo refs chunks failed [%d]", resp.StatusCode)
-		return
-	}
-
-	if 0 != result.Code {
-		err = fmt.Errorf("get cloud repo refs chunks failed: %s", result.Msg)
-		return
-	}
-
-	retData := result.Data.(map[string]interface{})
-	retChunks := retData["chunks"].([]interface{})
-	for _, retChunk := range retChunks {
-		chunks = append(chunks, retChunk.(string))
-	}
-	return
-}
-
 func (repo *Repo) getCloudRepoStat() (repoSize int64, backupCount int, err error) {
-	repoStat, err := repo.GetCloudRepoStat()
+	repoStat, err := repo.cloud.GetStat()
 	if nil != err {
 		return
 	}
 
-	syncSize := int64(repoStat["sync"].(map[string]interface{})["size"].(float64))
-	backupSize := int64(repoStat["backup"].(map[string]interface{})["size"].(float64))
-	repoSize = syncSize + backupSize
-	backupCount = int(repoStat["backup"].(map[string]interface{})["count"].(float64))
-	return
-}
-
-func (repo *Repo) GetCloudRepoStat() (ret map[string]interface{}, err error) {
-	token := repo.cloud.GetConf().Token
-	dir := repo.cloud.GetConf().Dir
-	userId := repo.cloud.GetConf().UserID
-	server := repo.cloud.GetConf().Server
-
-	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudFileRequest15s()
-	resp, err := request.
-		SetResult(&result).
-		SetBody(map[string]string{"repo": dir, "token": token}).
-		Post(server + "/apis/siyuan/dejavu/getRepoStat?uid=" + userId)
-	if nil != err {
-		err = fmt.Errorf("get cloud repo stat failed: %s", err)
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = cloud.ErrCloudAuthFailed
-			return
-		}
-		err = fmt.Errorf("get cloud repo stat failed [%d]", resp.StatusCode)
-		return
-	}
-
-	if 0 != result.Code {
-		err = fmt.Errorf("get cloud repo stat failed: %s", result.Msg)
-		return
-	}
-
-	ret = result.Data.(map[string]interface{})
-	return
-}
-
-func (repo *Repo) getCloudRepoRefsFiles() (files []string, err error) {
-	token := repo.cloud.GetConf().Token
-	dir := repo.cloud.GetConf().Dir
-	userId := repo.cloud.GetConf().UserID
-	server := repo.cloud.GetConf().Server
-
-	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudFileRequest15s()
-	resp, err := request.
-		SetResult(&result).
-		SetBody(map[string]string{"repo": dir, "token": token}).
-		Post(server + "/apis/siyuan/dejavu/getRepoRefsFiles?uid=" + userId)
-	if nil != err {
-		err = fmt.Errorf("get cloud repo refs files failed: %s", err)
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = cloud.ErrCloudAuthFailed
-			return
-		}
-		err = fmt.Errorf("get cloud repo refs files failed [%d]", resp.StatusCode)
-		return
-	}
-
-	if 0 != result.Code {
-		err = fmt.Errorf("get cloud repo refs files failed: %s", result.Msg)
-		return
-	}
-
-	retData := result.Data.(map[string]interface{})
-	retFiles := retData["files"].([]interface{})
-	for _, retFile := range retFiles {
-		files = append(files, retFile.(string))
-	}
-	return
-}
-
-func (repo *Repo) GetCloudRepoTags() (tags []map[string]interface{}, err error) {
-	token := repo.cloud.GetConf().Token
-	dir := repo.cloud.GetConf().Dir
-	userId := repo.cloud.GetConf().UserID
-	server := repo.cloud.GetConf().Server
-
-	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest()
-	resp, err := request.
-		SetResult(&result).
-		SetBody(map[string]string{"repo": dir, "token": token}).
-		Post(server + "/apis/siyuan/dejavu/getRepoTags?uid=" + userId)
-	if nil != err {
-		err = fmt.Errorf("get cloud repo tags failed: %s", err)
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = cloud.ErrCloudAuthFailed
-			return
-		}
-		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)
-		return
-	}
-
-	if 0 != result.Code {
-		err = fmt.Errorf("get cloud repo tags failed: %s", result.Msg)
-		return
-	}
-
-	retData := result.Data.(map[string]interface{})
-	retTags := retData["tags"].([]interface{})
-	for _, retTag := range retTags {
-		tags = append(tags, retTag.(map[string]interface{}))
-	}
+	repoSize = repoStat.Sync.Size + repoStat.Backup.Size
+	backupCount = repoStat.Backup.Count
 	return
 }

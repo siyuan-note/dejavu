@@ -66,7 +66,7 @@ type Cloud interface {
 	RemoveObject(key string) (err error)
 
 	// GetTags 用于获取快照标记列表。
-	GetTags() (tags *Ref, err error)
+	GetTags() (tags []*Ref, err error)
 
 	// GetFiles 用于获取文件列表。
 	GetFiles(excludeFilesIDs []string) (fileIDs []string, err error)
@@ -84,14 +84,14 @@ type Cloud interface {
 type StatSync struct {
 	Size      int64  `json:"size"`      // 总大小字节数
 	FileCount int64  `json:"fileCount"` // 总文件数
-	Updated   string `json:"updated"`   // 最后更新时间
+	Updated   string `json:"updated"`   // 最近更新时间
 }
 
 type StatBackup struct {
 	Count     int    `json:"count"`     // 已标记的快照数量
 	Size      int64  `json:"size"`      // 总大小字节数
 	FileCount int64  `json:"fileCount"` // 总文件数
-	Updated   string `json:"updated"`   // 最后更新时间
+	Updated   string `json:"updated"`   // 最近更新时间
 }
 
 type Stat struct {
@@ -102,9 +102,9 @@ type Stat struct {
 }
 
 type Ref struct {
-	Name    string `json:"name"`
-	ID      string `json:"id"`
-	Updated string `json:"updated"`
+	Name    string `json:"name"`    // 引用文件名称，比如 latest、tag1
+	ID      string `json:"id"`      // 引用 ID
+	Updated string `json:"updated"` // 最近更新时间
 }
 
 type BaseCloud struct {

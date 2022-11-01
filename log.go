@@ -17,20 +17,15 @@
 package dejavu
 
 import (
-	"errors"
-	"fmt"
 	"math"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/88250/gulu"
 	"github.com/dustin/go-humanize"
-	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/httpclient"
 )
 
 type Log struct {
@@ -55,64 +50,27 @@ func (log *Log) String() string {
 	return string(data)
 }
 
-func (repo *Repo) RemoveCloudRepoTag(tag string, context map[string]interface{}) (err error) {
-	userId := repo.cloud.GetConf().UserID
-	dir := repo.cloud.GetConf().Dir
-	token := repo.cloud.GetConf().Token
-	server := repo.cloud.GetConf().Server
-
-	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest()
-	key := path.Join("siyuan", userId, "repo", dir, "refs", "tags", tag)
-	resp, err := request.
-		SetResult(&result).
-		SetBody(map[string]string{"repo": dir, "token": token, "key": key}).
-		Post(server + "/apis/siyuan/dejavu/removeRepoObject?uid=" + userId)
-	if nil != err {
-		return
-	}
-
-	if 200 != resp.StatusCode {
-		if 401 == resp.StatusCode {
-			err = cloud.ErrCloudAuthFailed
-			return
-		}
-		err = errors.New(fmt.Sprintf("remove cloud repo tag failed [%d]", resp.StatusCode))
-		return
-	}
-
-	if 0 != result.Code {
-		err = errors.New(fmt.Sprintf("remove cloud repo tag failed: %s", result.Msg))
-		return
-	}
-	return
-}
-
 func (repo *Repo) GetCloudRepoTagLogs(context map[string]interface{}) (ret []*Log, err error) {
-	cloudTags, err := repo.GetCloudRepoTags()
+	cloudTags, err := repo.cloud.GetTags()
 	if nil != err {
 		return
 	}
 	for _, tag := range cloudTags {
-		id := tag["id"].(string)
-
-		index, _ := repo.store.GetIndex(id)
+		index, _ := repo.store.GetIndex(tag.ID)
 		if nil == index {
-			_, index, err = repo.downloadCloudIndex(id, context)
+			_, index, err = repo.downloadCloudIndex(tag.ID, context)
 			if nil != err {
 				return
 			}
 		}
 
-		name := tag["name"].(string)
-		updated := tag["updated"].(string)
 		var log *Log
 		log, err = repo.getLog(index)
 		if nil != err {
 			return
 		}
-		log.Tag = name
-		log.HTagUpdated = updated
+		log.Tag = tag.Name
+		log.HTagUpdated = tag.Updated
 		ret = append(ret, log)
 	}
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Created > ret[j].Created })

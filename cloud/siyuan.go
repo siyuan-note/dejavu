@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/88250/gulu"
 	"github.com/qiniu/go-sdk/v7/client"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/siyuan-note/httpclient"
@@ -96,6 +97,213 @@ func (siyuan *SiYuan) DownloadObject(key string) (ret []byte, err error) {
 		return
 	}
 	//logging.LogInfof("downloaded object [%s]", key)
+	return
+}
+
+func (siyuan *SiYuan) RemoveObject(key string) (err error) {
+	userId := siyuan.Conf.UserID
+	dir := siyuan.Conf.Dir
+	token := siyuan.Conf.Token
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudRequest()
+	// TODO: key := path.Join("siyuan", userId, "repo", dir, "refs", "tags", tag)
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"repo": dir, "token": token, "key": key}).
+		Post(server + "/apis/siyuan/dejavu/removeRepoObject?uid=" + userId)
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("remove cloud repo tag failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("remove cloud repo tag failed: %s", result.Msg)
+		return
+	}
+	return
+}
+
+func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
+	token := siyuan.Conf.Token
+	dir := siyuan.Conf.Dir
+	userId := siyuan.Conf.UserID
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudRequest()
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"repo": dir, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/getRepoTags?uid=" + userId)
+	if nil != err {
+		err = fmt.Errorf("get cloud repo tags failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("get cloud repo tags failed: %s", result.Msg)
+		return
+	}
+
+	retData := result.Data.(map[string]interface{})
+	retTags := retData["tags"].([]interface{})
+	for _, retTag := range retTags {
+		data, marshalErr := gulu.JSON.MarshalJSON(retTag)
+		if nil != marshalErr {
+			logging.LogErrorf("marshal tag failed: %s", marshalErr)
+			continue
+		}
+		tag := &Ref{}
+		if unmarshalErr := gulu.JSON.UnmarshalJSON(data, tag); nil != unmarshalErr {
+			logging.LogErrorf("unmarshal tag failed: %s", unmarshalErr)
+			continue
+		}
+		tags = append(tags, tag)
+	}
+	return
+}
+
+func (siyuan *SiYuan) GetFiles(excludeFilesIDs []string) (fileIDs []string, err error) {
+	token := siyuan.Conf.Token
+	dir := siyuan.Conf.Dir
+	userId := siyuan.Conf.UserID
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudFileRequest15s()
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"repo": dir, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/getRepoRefsFiles?uid=" + userId)
+	if nil != err {
+		err = fmt.Errorf("get cloud repo refs files failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("get cloud repo refs files failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("get cloud repo refs files failed: %s", result.Msg)
+		return
+	}
+
+	retData := result.Data.(map[string]interface{})
+	retFiles := retData["files"].([]interface{})
+	for _, retFile := range retFiles {
+		fileIDs = append(fileIDs, retFile.(string))
+	}
+	return
+}
+
+func (siyuan *SiYuan) GetChunks(excludeChunkIDs []string) (chunkIDs []string, err error) {
+	if 1 > len(excludeChunkIDs) {
+		return
+	}
+
+	token := siyuan.Conf.Token
+	dir := siyuan.Conf.Dir
+	userId := siyuan.Conf.UserID
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudFileRequest2m()
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]interface{}{"repo": dir, "token": token, "chunks": excludeChunkIDs}).
+		Post(server + "/apis/siyuan/dejavu/getRepoUploadChunks?uid=" + userId)
+	if nil != err {
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("get cloud repo refs chunks failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("get cloud repo refs chunks failed: %s", result.Msg)
+		return
+	}
+
+	retData := result.Data.(map[string]interface{})
+	retChunks := retData["chunks"].([]interface{})
+	for _, retChunk := range retChunks {
+		chunkIDs = append(chunkIDs, retChunk.(string))
+	}
+	return
+}
+
+func (siyuan *SiYuan) GetStat() (stat *Stat, err error) {
+	token := siyuan.Conf.Token
+	dir := siyuan.Conf.Dir
+	userId := siyuan.Conf.UserID
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudFileRequest15s()
+	resp, err := request.
+		SetResult(&result).
+		SetBody(map[string]string{"repo": dir, "token": token}).
+		Post(server + "/apis/siyuan/dejavu/getRepoStat?uid=" + userId)
+	if nil != err {
+		err = fmt.Errorf("get cloud repo stat failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("get cloud repo stat failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("get cloud repo stat failed: %s", result.Msg)
+		return
+	}
+
+	data, marshalErr := gulu.JSON.MarshalJSON(result.Data)
+	if nil != marshalErr {
+		err = fmt.Errorf("marshal stat failed: %s", marshalErr)
+		return
+	}
+	stat = &Stat{}
+	if unmarshalErr := gulu.JSON.UnmarshalJSON(data, stat); nil != unmarshalErr {
+		err = fmt.Errorf("unmarshal stat failed: %s", unmarshalErr)
+		return
+	}
 	return
 }
 
