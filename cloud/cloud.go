@@ -16,7 +16,10 @@
 
 package cloud
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // Conf 用于描述云端存储服务配置信息。
 type Conf struct {
@@ -44,22 +47,22 @@ type Cloud interface {
 	// GetConf 用于获取配置信息。
 	GetConf() *Conf
 
-	// CreateRepo 用于创建云端仓库。
+	// CreateRepo 用于创建名称为 name 的云端仓库。
 	CreateRepo(name string) (err error)
 
 	// RemoveRepo 用于删除云端仓库。
 	RemoveRepo(name string) (err error)
 
-	// GetRepos 用于获取云端仓库列表。
-	GetRepos() (repos []map[string]interface{}, size int64, err error)
+	// GetRepos 用于获取云端仓库列表 repos，size 为仓库总大小字节数。
+	GetRepos() (repos []*Repo, size int64, err error)
 
 	// GetAvailableSize 用于获取云端存储可用空间字节数。
-	GetAvailableSize() (ret int64)
+	GetAvailableSize() (size int64)
 
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
 	UploadObject(filePath string, overwrite bool) (err error)
 
-	// DownloadObject 用于下载对象。
+	// DownloadObject 用于下载对象数据 data。
 	DownloadObject(key string) (data []byte, err error)
 
 	// RemoveObject 用于删除对象。
@@ -68,29 +71,29 @@ type Cloud interface {
 	// GetTags 用于获取快照标记列表。
 	GetTags() (tags []*Ref, err error)
 
-	// GetFiles 用于获取文件列表。
-	GetFiles(excludeFilesIDs []string) (fileIDs []string, err error)
+	// GetRefsFiles 用于获取所有引用索引中的文件 ID 列表 fileIDs。
+	GetRefsFiles() (fileIDs []string, err error)
 
-	// GetChunks 用于获取分块列表。
-	GetChunks(excludeChunkIDs []string) (chunkIDs []string, err error)
+	// GetChunks 用于获取 checkChunkIDs 中不存在的分块 ID 列表 chunkIDs。
+	GetChunks(checkChunkIDs []string) (chunkIDs []string, err error)
 
-	// GetStat 用于获取统计信息。
+	// GetStat 用于获取统计信息 stat。
 	GetStat() (stat *Stat, err error)
 
-	// AddTraffic 用于统计流量。
+	// AddTraffic 用于统计流量上传字节数 uploadBytes 和下载字节数 downloadBytes。
 	AddTraffic(uploadBytes, downloadBytes int64)
 }
 
 type StatSync struct {
 	Size      int64  `json:"size"`      // 总大小字节数
-	FileCount int64  `json:"fileCount"` // 总文件数
+	FileCount int    `json:"fileCount"` // 总文件数
 	Updated   string `json:"updated"`   // 最近更新时间
 }
 
 type StatBackup struct {
 	Count     int    `json:"count"`     // 已标记的快照数量
 	Size      int64  `json:"size"`      // 总大小字节数
-	FileCount int64  `json:"fileCount"` // 总文件数
+	FileCount int    `json:"fileCount"` // 总文件数
 	Updated   string `json:"updated"`   // 最近更新时间
 }
 
@@ -99,6 +102,12 @@ type Stat struct {
 	Backup    *StatBackup `json:"backup"`    // 备份统计
 	AssetSize int64       `json:"assetSize"` // 资源文件大小字节数
 	RepoCount int         `json:"repoCount"` // 仓库数量
+}
+
+type Repo struct {
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	Updated string `json:"updated"`
 }
 
 type Ref struct {
@@ -112,7 +121,7 @@ type BaseCloud struct {
 	Cloud
 }
 
-func (siyuan *SiYuan) GetAvailableSize() (ret int64) {
+func (siyuan *SiYuan) GetAvailableSize() (size int64) {
 	return siyuan.Conf.AvailableSize
 }
 
@@ -126,3 +135,32 @@ var (
 	// ErrCloudAuthFailed 描述了云端存储服务鉴权失败的错误。
 	ErrCloudAuthFailed = errors.New("cloud account auth failed")
 )
+
+func isValidCloudDirName(cloudDirName string) bool {
+	if 64 < len(cloudDirName) {
+		return false
+	}
+
+	chars := []byte{'~', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '+', '=',
+		'[', ']', '{', '}', '\\', '|', ';', ':', '\'', '"', '<', ',', '>', '.', '?', '/', ' '}
+	var charsStr string
+	for _, char := range chars {
+		charsStr += string(char)
+	}
+
+	if strings.ContainsAny(cloudDirName, charsStr) {
+		return false
+	}
+
+	tmp := stripCtlFromUTF8(cloudDirName)
+	return tmp == cloudDirName
+}
+
+func stripCtlFromUTF8(str string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 32 && r != 127 {
+			return r
+		}
+		return -1
+	}, str)
+}

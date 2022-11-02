@@ -137,7 +137,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	}
 
 	// 从云端获取文件列表
-	cloudFileIDs, err := repo.cloud.GetFiles(nil)
+	cloudFileIDs, err := repo.cloud.GetRefsFiles()
 	if nil != err {
 		logging.LogErrorf("get cloud repo refs files failed: %s", err)
 		return

@@ -1175,7 +1175,7 @@ func (repo *Repo) CreateCloudRepo(name string) (err error) {
 	return repo.cloud.CreateRepo(name)
 }
 
-func (repo *Repo) GetCloudRepos() (repos []map[string]interface{}, size int64, err error) {
+func (repo *Repo) GetCloudRepos() (repos []*cloud.Repo, size int64, err error) {
 	return repo.cloud.GetRepos()
 }
 

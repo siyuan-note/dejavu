@@ -181,7 +181,7 @@ func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-func (siyuan *SiYuan) GetFiles(excludeFilesIDs []string) (fileIDs []string, err error) {
+func (siyuan *SiYuan) GetRefsFiles() (fileIDs []string, err error) {
 	token := siyuan.Conf.Token
 	dir := siyuan.Conf.Dir
 	userId := siyuan.Conf.UserID
@@ -382,7 +382,7 @@ func (siyuan *SiYuan) CreateRepo(name string) (err error) {
 	return
 }
 
-func (siyuan *SiYuan) GetRepos() (repos []map[string]interface{}, size int64, err error) {
+func (siyuan *SiYuan) GetRepos() (repos []*Repo, size int64, err error) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 	userId := siyuan.Conf.UserID
@@ -413,13 +413,27 @@ func (siyuan *SiYuan) GetRepos() (repos []map[string]interface{}, size int64, er
 		return
 	}
 
-	data := result["data"].(map[string]interface{})
-	retRepos := data["repos"].([]interface{})
+	retData := result["data"].(map[string]interface{})
+	retRepos := retData["repos"].([]interface{})
 	for _, d := range retRepos {
-		repos = append(repos, d.(map[string]interface{}))
+		data, marshalErr := gulu.JSON.MarshalJSON(d)
+		if nil != marshalErr {
+			logging.LogErrorf("marshal repo failed: %s", marshalErr)
+			continue
+		}
+		repo := &Repo{}
+		if unmarshalErr := gulu.JSON.UnmarshalJSON(data, repo); nil != unmarshalErr {
+			logging.LogErrorf("unmarshal repo failed: %s", unmarshalErr)
+			continue
+		}
+
+		repos = append(repos, repo)
 	}
-	sort.Slice(repos, func(i, j int) bool { return repos[i]["name"].(string) < repos[j]["name"].(string) })
-	size = int64(data["size"].(float64))
+	if 1 > len(repos) {
+		repos = []*Repo{}
+	}
+	sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
+	size = int64(retData["size"].(float64))
 	return
 }
 
