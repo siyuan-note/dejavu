@@ -1182,3 +1182,7 @@ func (repo *Repo) GetCloudRepos() (repos []*cloud.Repo, size int64, err error) {
 func (repo *Repo) GetCloudAvailableSize() (ret int64) {
 	return repo.cloud.GetAvailableSize()
 }
+
+func (repo *Repo) GetCloudRepoStat() (stat *cloud.Stat, err error) {
+	return repo.cloud.GetStat()
+}

@@ -152,7 +152,7 @@ func (qiniu *Qiniu) UploadObject(filePath string, overwrite bool) (err error) {
 
 func (qiniu *Qiniu) DownloadObject(key string) (data []byte, err error) {
 	endpoint := qiniu.Conf.Endpoint
-	url := path.Join(endpoint, key)
+	url := endpoint + key
 
 	resp, err := httpclient.NewCloudFileRequest15s().Get(url)
 	if nil != err {
@@ -603,7 +603,7 @@ func (qiniu *Qiniu) listRepos(userId string) (ret []*Repo, err error) {
 
 func (qiniu *Qiniu) getFile(key string) (ret []byte, err error) {
 	endpoint := qiniu.Conf.Endpoint
-	url := path.Join(endpoint, key)
+	url := endpoint + key
 
 	resp, err := httpclient.NewCloudFileRequest15s().Get(url)
 	if nil != err {
