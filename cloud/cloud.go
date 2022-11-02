@@ -45,9 +45,6 @@ type Conf struct {
 // Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。
 type Cloud interface {
 
-	// GetConf 用于获取配置信息。
-	GetConf() *Conf
-
 	// CreateRepo 用于创建名称为 name 的云端仓库。
 	CreateRepo(name string) (err error)
 
@@ -56,9 +53,6 @@ type Cloud interface {
 
 	// GetRepos 用于获取云端仓库列表 repos，size 为仓库总大小字节数。
 	GetRepos() (repos []*Repo, size int64, err error)
-
-	// GetAvailableSize 用于获取云端存储可用空间字节数。
-	GetAvailableSize() (size int64)
 
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
 	UploadObject(filePath string, overwrite bool) (err error)
@@ -80,6 +74,12 @@ type Cloud interface {
 
 	// GetStat 用于获取统计信息 stat。
 	GetStat() (stat *Stat, err error)
+
+	// GetConf 用于获取配置信息。
+	GetConf() *Conf
+
+	// GetAvailableSize 用于获取云端存储可用空间字节数。
+	GetAvailableSize() (size int64)
 
 	// AddTraffic 用于统计流量上传字节数 uploadBytes 和下载字节数 downloadBytes。
 	AddTraffic(uploadBytes, downloadBytes int64)
@@ -128,15 +128,67 @@ type BaseCloud struct {
 	Cloud
 }
 
-func (baseCloud *BaseCloud) GetAvailableSize() (size int64) {
-	return baseCloud.Conf.AvailableSize
+func (baseCloud *BaseCloud) CreateRepo(name string) (err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) RemoveRepo(name string) (err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) GetRepos() (repos []*Repo, size int64, err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) DownloadObject(key string) (data []byte, err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) RemoveObject(key string) (err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) GetTags() (tags []*Ref, err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) GetRefsFiles() (fileIDs []string, err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
+	err = errors.New("not implemented")
+	return
+}
+
+func (baseCloud *BaseCloud) GetStat() (stat *Stat, err error) {
+	err = errors.New("not implemented")
+	return
 }
 
 func (baseCloud *BaseCloud) GetConf() *Conf {
 	return baseCloud.Conf
 }
 
+func (baseCloud *BaseCloud) GetAvailableSize() (size int64) {
+	// 默认按传入的配置大小返回
+	return baseCloud.Conf.AvailableSize
+}
+
 func (baseCloud *BaseCloud) AddTraffic(uploadBytes, downloadBytes int64) {
+	// 默认不统计流量
 	return
 }
 

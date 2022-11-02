@@ -33,7 +33,7 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
-// SiYuan 描述了思源笔记官方云端存储实现。
+// SiYuan 描述了思源笔记官方云端存储服务实现。
 type SiYuan struct {
 	*BaseCloud
 }

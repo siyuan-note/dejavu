@@ -39,7 +39,7 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
-// Qiniu 描述了七牛云对象存储实现。
+// Qiniu 描述了七牛云对象存储服务实现。
 type Qiniu struct {
 	*BaseCloud
 }
