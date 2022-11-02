@@ -34,7 +34,7 @@ type Conf struct {
 
 	// 以下值非官方存储服务不必传入
 	Token     string // 云端接口鉴权令牌
-	LimitSize int64  // 云端存储空间限制，0 为不限制
+	LimitSize int64  // 云端存储可用空间字节数
 	Server    string // 云端接口端点
 }
 
