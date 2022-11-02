@@ -32,7 +32,7 @@ type Conf struct {
 	Endpoint  string // 服务端点
 	AccessKey string // Access Key
 	SecretKey string // Secret Key
-	Regin     string // 存储区域
+	Region    string // 存储区域
 	Bucket    string // 存储空间
 
 	// 以下值非官方存储服务不必传入
@@ -121,12 +121,16 @@ type BaseCloud struct {
 	Cloud
 }
 
-func (siyuan *SiYuan) GetAvailableSize() (size int64) {
-	return siyuan.Conf.AvailableSize
+func (baseCloud *BaseCloud) GetAvailableSize() (size int64) {
+	return baseCloud.Conf.AvailableSize
 }
 
-func (siyuan *SiYuan) GetConf() *Conf {
-	return siyuan.Conf
+func (baseCloud *BaseCloud) GetConf() *Conf {
+	return baseCloud.Conf
+}
+
+func (baseCloud *BaseCloud) AddTraffic(uploadBytes, downloadBytes int64) {
+	return
 }
 
 var (
