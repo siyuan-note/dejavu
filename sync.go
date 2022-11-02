@@ -33,7 +33,6 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
-	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
 )
 
@@ -1031,30 +1030,12 @@ func (repo *Repo) downloadCloudFile(id string, context map[string]interface{}) (
 }
 
 func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
-	resp, err := httpclient.NewCloudFileRequest15s().Get(repo.cloud.GetConf().Endpoint + key)
+	data, err := repo.cloud.DownloadObject(key)
 	if nil != err {
-		err = fmt.Errorf("download object [%s] failed: %s", key, err)
-		return
-	}
-	if 200 != resp.StatusCode {
-		if 404 == resp.StatusCode {
-			if !strings.HasSuffix(key, "/refs/latest") {
-				logging.LogErrorf("download object [%s] failed: %s", key, cloud.ErrCloudObjectNotFound)
-			}
-			err = cloud.ErrCloudObjectNotFound
-			return
-		}
-		err = fmt.Errorf("download object [%s] failed [%d]", key, resp.StatusCode)
 		return
 	}
 
-	ret, err = resp.ToBytes()
-	if nil != err {
-		err = fmt.Errorf("download read data failed: %s", err)
-		return
-	}
-
-	ret, err = repo.decodeDownloadedData(key, ret)
+	ret, err = repo.decodeDownloadedData(key, data)
 	if nil != err {
 		return
 	}

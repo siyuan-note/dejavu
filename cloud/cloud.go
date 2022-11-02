@@ -27,14 +27,18 @@ type Conf struct {
 	Dir      string                 // 存储目录
 	UserID   string                 // 用户 ID，没有的话请传入一个定值比如 "0"
 	RepoPath string                 // 本地仓库的绝对路径，如：F:\\SiYuan\\repo\\
+	Endpoint string                 // 服务端点
 	Extras   map[string]interface{} // 一些可能需要的附加信息
 
 	// S3 协议所需配置
-	Endpoint  string // 服务端点
 	AccessKey string // Access Key
 	SecretKey string // Secret Key
 	Region    string // 存储区域
 	Bucket    string // 存储空间
+
+	// WebDAV 协议所需配置
+	Username string // 用户名
+	Password string // 密码
 
 	// 以下值非官方存储服务不必传入
 	Token         string // 云端接口鉴权令牌
@@ -193,10 +197,9 @@ func (baseCloud *BaseCloud) AddTraffic(uploadBytes, downloadBytes int64) {
 }
 
 var (
-	// ErrCloudObjectNotFound 描述了云端存储服务中的对象不存在的错误。
-	ErrCloudObjectNotFound = errors.New("cloud object not found")
-	// ErrCloudAuthFailed 描述了云端存储服务鉴权失败的错误。
-	ErrCloudAuthFailed = errors.New("cloud account auth failed")
+	ErrCloudObjectNotFound     = errors.New("cloud object not found")    // ErrCloudObjectNotFound 描述了云端存储服务中的对象不存在的错误
+	ErrCloudAuthFailed         = errors.New("cloud account auth failed") // ErrCloudAuthFailed 描述了云端存储服务鉴权失败的错误
+	ErrCloudServiceUnavailable = errors.New("cloud service unavailable") // ErrCloudServiceUnavailable 描述了云端存储服务不可用的错误
 )
 
 func IsValidCloudDirName(cloudDirName string) bool {
