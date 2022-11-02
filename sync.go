@@ -1031,7 +1031,7 @@ func (repo *Repo) downloadCloudFile(id string, context map[string]interface{}) (
 }
 
 func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
-	resp, err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
+	resp, err := httpclient.NewCloudFileRequest15s().Get(repo.cloud.GetConf().Endpoint + key)
 	if nil != err {
 		err = fmt.Errorf("download object [%s] failed: %s", key, err)
 		return

@@ -74,7 +74,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 }
 
 func (siyuan *SiYuan) DownloadObject(key string) (ret []byte, err error) {
-	resp, err := httpclient.NewCloudFileRequest15s().Get("https://siyuan-data.b3logfile.com/" + key)
+	resp, err := httpclient.NewCloudFileRequest15s().Get(siyuan.Endpoint + key)
 	if nil != err {
 		err = fmt.Errorf("download object [%s] failed: %s", key, err)
 		return
