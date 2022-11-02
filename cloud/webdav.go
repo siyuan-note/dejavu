@@ -43,33 +43,38 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 
 	key := path.Join("siyuan", webdav.Conf.UserID, "repo", webdav.Conf.Dir, filePath)
 	err = webdav.Client.Write(key, data, 0644)
+	err = webdav.parseErr(err)
 	return
 }
 
 func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 	data, err = webdav.Client.Read(filePath)
-	if nil != err {
-		switch err.(type) {
-		case *fs.PathError:
-			if e := errors.Unwrap(err); nil != e {
-				switch e.(type) {
-				case gowebdav.StatusError:
-					statusErr := e.(gowebdav.StatusError)
-					if 404 == statusErr.Status {
-						err = ErrCloudObjectNotFound
-						return
-					} else if 503 == statusErr.Status {
-						err = ErrCloudServiceUnavailable
-						return
-					}
+	err = webdav.parseErr(err)
+	return
+}
+
+func (webdav *WebDAV) parseErr(err error) error {
+	if nil == err {
+		return nil
+	}
+
+	switch err.(type) {
+	case *fs.PathError:
+		if e := errors.Unwrap(err); nil != e {
+			switch e.(type) {
+			case gowebdav.StatusError:
+				statusErr := e.(gowebdav.StatusError)
+				if 404 == statusErr.Status {
+					return ErrCloudObjectNotFound
+				} else if 503 == statusErr.Status {
+					return ErrCloudServiceUnavailable
 				}
 			}
-
-		}
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "404") || strings.Contains(msg, "no such file") {
-			err = ErrCloudObjectNotFound
 		}
 	}
-	return
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "404") || strings.Contains(msg, "no such file") {
+		err = ErrCloudObjectNotFound
+	}
+	return err
 }
