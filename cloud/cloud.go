@@ -33,9 +33,9 @@ type Conf struct {
 	Bucket    string // 存储空间
 
 	// 以下值非官方存储服务不必传入
-	Token     string // 云端接口鉴权令牌
-	LimitSize int64  // 云端存储可用空间字节数
-	Server    string // 云端接口端点
+	Token         string // 云端接口鉴权令牌
+	AvailableSize int64  // 云端存储可用空间字节数
+	Server        string // 云端接口端点
 }
 
 // Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。
@@ -53,8 +53,8 @@ type Cloud interface {
 	// GetRepos 用于获取云端仓库列表。
 	GetRepos() (repos []map[string]interface{}, size int64, err error)
 
-	// GetLimitSize 用于获取云端存储空间限制。
-	GetLimitSize() (ret int64)
+	// GetAvailableSize 用于获取云端存储可用空间字节数。
+	GetAvailableSize() (ret int64)
 
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
 	UploadObject(filePath string, overwrite bool) (err error)
@@ -112,8 +112,8 @@ type BaseCloud struct {
 	Cloud
 }
 
-func (siyuan *SiYuan) GetLimitSize() (ret int64) {
-	return siyuan.Conf.LimitSize
+func (siyuan *SiYuan) GetAvailableSize() (ret int64) {
+	return siyuan.Conf.AvailableSize
 }
 
 func (siyuan *SiYuan) GetConf() *Conf {

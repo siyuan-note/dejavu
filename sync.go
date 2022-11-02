@@ -118,8 +118,8 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 		return
 	}
 
-	limitSize := repo.cloud.GetLimitSize()
-	if limitSize <= cloudLatest.Size || limitSize <= latest.Size {
+	availableSize := repo.cloud.GetAvailableSize()
+	if availableSize <= cloudLatest.Size || availableSize <= latest.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
@@ -490,8 +490,8 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 		return
 	}
 
-	limitSize := repo.cloud.GetLimitSize()
-	if limitSize <= cloudLatest.Size || limitSize <= latest.Size {
+	availableSize := repo.cloud.GetAvailableSize()
+	if availableSize <= cloudLatest.Size || availableSize <= latest.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
@@ -1179,6 +1179,6 @@ func (repo *Repo) GetCloudRepos() (repos []map[string]interface{}, size int64, e
 	return repo.cloud.GetRepos()
 }
 
-func (repo *Repo) GetCloudLimitSize() (ret int64) {
-	return repo.cloud.GetLimitSize()
+func (repo *Repo) GetCloudAvailableSize() (ret int64) {
+	return repo.cloud.GetAvailableSize()
 }

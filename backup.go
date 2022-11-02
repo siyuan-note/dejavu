@@ -114,8 +114,8 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 		return
 	}
 
-	limitSize := repo.cloud.GetLimitSize()
-	if limitSize <= index.Size {
+	availableSize := repo.cloud.GetAvailableSize()
+	if availableSize <= index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
@@ -131,7 +131,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 		return
 	}
 
-	if limitSize <= cloudRepoSize+index.Size {
+	if availableSize <= cloudRepoSize+index.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
