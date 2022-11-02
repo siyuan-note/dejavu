@@ -52,8 +52,7 @@ func (qiniu *Qiniu) CreateRepo(name string) (err error) {
 	// 创建一个文件用于占位
 	key := path.Join("siyuan", userId, "repo", name, ".dejavu")
 	mac := auth.New(accessKey, secretKey)
-	cfg := storage.Config{UseHTTPS: true}
-	bucketManager := storage.NewBucketManager(mac, &cfg)
+	bucketManager := storage.NewBucketManager(mac, nil)
 	info, _ := bucketManager.Stat(bucket, key)
 	if 0 < info.Fsize {
 		return
@@ -63,7 +62,7 @@ func (qiniu *Qiniu) CreateRepo(name string) (err error) {
 		Scope: bucket + ":" + key,
 	}
 	upToken := putPolicy.UploadToken(mac)
-	formUploader := storage.NewFormUploader(&cfg)
+	formUploader := storage.NewFormUploader(nil)
 	putRet := storage.PutRet{}
 	data := []byte("")
 	err = formUploader.Put(context.Background(), &putRet, upToken, key, bytes.NewReader(data), int64(len(data)), nil)
@@ -129,7 +128,7 @@ func (qiniu *Qiniu) UploadObject(filePath string, overwrite bool) (err error) {
 		uploadToken = scopeUploadToken
 	}
 
-	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	formUploader := storage.NewFormUploader(nil)
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
@@ -194,8 +193,7 @@ func (qiniu *Qiniu) RemoveObject(key string) (err error) {
 	bucket := qiniu.Conf.Bucket
 
 	mac := auth.New(accessKey, secretKey)
-	cfg := storage.Config{UseHTTPS: true}
-	bucketManager := storage.NewBucketManager(mac, &cfg)
+	bucketManager := storage.NewBucketManager(mac, nil)
 	err = bucketManager.Delete(bucket, key)
 	if nil != err {
 		logging.LogErrorf("remove file [%s] failed: %s", key, err)
@@ -388,8 +386,7 @@ func (qiniu *Qiniu) removeDir(fullDirPath string) (err error) {
 	}
 
 	mac := auth.New(accessKey, secretKey)
-	cfg := storage.Config{UseHTTPS: true}
-	bucketManager := storage.NewBucketManager(mac, &cfg)
+	bucketManager := storage.NewBucketManager(mac, nil)
 	key := path.Join(fullDirPath, "index.json")
 	if err = bucketManager.Delete(bucket, key); nil != err {
 		if "no such file or directory" != err.Error() {
@@ -421,8 +418,7 @@ func (qiniu *Qiniu) removeDir0(fullDirPath string, index map[string]Index) (err 
 	}
 
 	mac := auth.New(accessKey, secretKey)
-	cfg := storage.Config{UseHTTPS: true}
-	bucketManager := storage.NewBucketManager(mac, &cfg)
+	bucketManager := storage.NewBucketManager(mac, nil)
 	for _, keys := range batch {
 		deleteOps := make([]string, 0, len(keys))
 		for _, key := range keys {
@@ -622,8 +618,7 @@ func (qiniu *Qiniu) statFile(key string) (info storage.FileInfo, err error) {
 	bucket := qiniu.Conf.Bucket
 
 	mac := auth.New(accessKey, secretKey)
-	cfg := storage.Config{UseHTTPS: true}
-	bucketManager := storage.NewBucketManager(mac, &cfg)
+	bucketManager := storage.NewBucketManager(mac, nil)
 	info, err = bucketManager.Stat(bucket, key)
 	return
 }
@@ -638,8 +633,7 @@ func (qiniu *Qiniu) getNotFound(keys []string) (ret []string, err error) {
 	bucket := qiniu.Conf.Bucket
 
 	mac := auth.New(accessKey, secretKey)
-	cfg := storage.Config{UseHTTPS: true}
-	bucketManager := storage.NewBucketManager(mac, &cfg)
+	bucketManager := storage.NewBucketManager(mac, nil)
 
 	var statOps [][]string
 	j := -1
@@ -786,9 +780,8 @@ func (qiniu *Qiniu) putFileBytes(data []byte, key string) (err error) {
 	putPolicy := storage.PutPolicy{Scope: bucket + ":" + key}
 	mac := auth.New(accessKey, secretKey)
 	upToken := putPolicy.UploadToken(mac)
-	cfg := storage.Config{Zone: &storage.ZoneHuadong, UseHTTPS: true}
 
-	formUploader := storage.NewFormUploader(&cfg)
+	formUploader := storage.NewFormUploader(nil)
 	ret := storage.PutRet{}
 
 	err = formUploader.Put(context.Background(), &ret, upToken, key, bytes.NewReader(data), int64(len(data)), nil)
