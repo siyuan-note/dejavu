@@ -19,6 +19,7 @@ package cloud
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 )
 
 // Conf 用于描述云端存储服务配置信息。
@@ -84,19 +85,7 @@ type Cloud interface {
 	AddTraffic(uploadBytes, downloadBytes int64)
 }
 
-type StatSync struct {
-	Size      int64  `json:"size"`      // 总大小字节数
-	FileCount int    `json:"fileCount"` // 总文件数
-	Updated   string `json:"updated"`   // 最近更新时间
-}
-
-type StatBackup struct {
-	Count     int    `json:"count"`     // 已标记的快照数量
-	Size      int64  `json:"size"`      // 总大小字节数
-	FileCount int    `json:"fileCount"` // 总文件数
-	Updated   string `json:"updated"`   // 最近更新时间
-}
-
+// Stat 描述了统计信息。
 type Stat struct {
 	Sync      *StatSync   `json:"sync"`      // 同步统计
 	Backup    *StatBackup `json:"backup"`    // 备份统计
@@ -104,18 +93,36 @@ type Stat struct {
 	RepoCount int         `json:"repoCount"` // 仓库数量
 }
 
+// Repo 描述了云端仓库。
 type Repo struct {
 	Name    string `json:"name"`
 	Size    int64  `json:"size"`
 	Updated string `json:"updated"`
 }
 
+// Ref 描述了快照引用。
 type Ref struct {
 	Name    string `json:"name"`    // 引用文件名称，比如 latest、tag1
 	ID      string `json:"id"`      // 引用 ID
 	Updated string `json:"updated"` // 最近更新时间
 }
 
+// StatSync 描述了同步统计信息。
+type StatSync struct {
+	Size      int64  `json:"size"`      // 总大小字节数
+	FileCount int    `json:"fileCount"` // 总文件数
+	Updated   string `json:"updated"`   // 最近更新时间
+}
+
+// StatBackup 描述了备份统计信息。
+type StatBackup struct {
+	Count     int    `json:"count"`     // 已标记的快照数量
+	Size      int64  `json:"size"`      // 总大小字节数
+	FileCount int    `json:"fileCount"` // 总文件数
+	Updated   string `json:"updated"`   // 最近更新时间
+}
+
+// BaseCloud 描述了云端存储服务的基础实现。
 type BaseCloud struct {
 	*Conf
 	Cloud
@@ -140,8 +147,8 @@ var (
 	ErrCloudAuthFailed = errors.New("cloud account auth failed")
 )
 
-func isValidCloudDirName(cloudDirName string) bool {
-	if 64 < len(cloudDirName) {
+func IsValidCloudDirName(cloudDirName string) bool {
+	if 16 < utf8.RuneCountInString(cloudDirName) || 1 > utf8.RuneCountInString(cloudDirName) {
 		return false
 	}
 

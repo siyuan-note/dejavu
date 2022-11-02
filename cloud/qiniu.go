@@ -39,6 +39,7 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
+// Qiniu 描述了七牛云对象存储实现。
 type Qiniu struct {
 	*BaseCloud
 }
@@ -74,7 +75,7 @@ func (qiniu *Qiniu) CreateRepo(name string) (err error) {
 }
 
 func (qiniu *Qiniu) RemoveRepo(name string) (err error) {
-	if !isValidCloudDirName(name) {
+	if !IsValidCloudDirName(name) {
 		err = errors.New("invalid repo name")
 		return
 	}
