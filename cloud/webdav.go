@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/studio-b12/gowebdav"
@@ -32,6 +33,59 @@ type WebDAV struct {
 	*BaseCloud
 
 	Client *gowebdav.Client
+}
+
+func (webdav *WebDAV) CreateRepo(name string) (err error) {
+	userId := webdav.Conf.UserID
+
+	key := path.Join("siyuan", userId, "repo", name, ".dejavu")
+	err = webdav.Client.Write(key, []byte(""), 0644)
+	return
+}
+
+func (webdav *WebDAV) RemoveRepo(name string) (err error) {
+	if !IsValidCloudDirName(name) {
+		err = errors.New("invalid repo name")
+		return
+	}
+
+	userId := webdav.Conf.UserID
+	key := path.Join("siyuan", userId, "repo", name)
+	err = webdav.Client.RemoveAll(key)
+	return
+}
+
+func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
+	userId := webdav.Conf.UserID
+
+	key := path.Join("siyuan", userId, "repo")
+	entries, err := webdav.Client.ReadDir(key)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		repo := &Repo{
+			Name:    entry.Name(),
+			Size:    entry.Size(), // FIXME: 计算实际大小，而不是文件夹大小
+			Updated: entry.ModTime().Format("2006-01-02 15:04:05"),
+		}
+		repos = append(repos, repo)
+	}
+
+	if 1 > len(repos) {
+		repos = []*Repo{}
+	}
+	sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
+
+	for _, repo := range repos {
+		size += repo.Size
+	}
+	return
+}
+
+func (webdav *WebDAV) GetAvailableSize() (size int64) {
+	return 1024 * 1024 * 1024 * 1024 * 2 // 2TB
 }
 
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) {

@@ -45,6 +45,11 @@ type Qiniu struct {
 }
 
 func (qiniu *Qiniu) CreateRepo(name string) (err error) {
+	if !IsValidCloudDirName(name) {
+		err = errors.New("invalid repo name")
+		return
+	}
+
 	userId := qiniu.Conf.UserID
 	accessKey := qiniu.Conf.AccessKey
 	secretKey := qiniu.Conf.SecretKey
