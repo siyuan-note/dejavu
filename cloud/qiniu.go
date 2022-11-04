@@ -446,33 +446,11 @@ func (qiniu *Qiniu) removeDir0(fullDirPath string, index map[string]Index) (err 
 	return
 }
 
-func (qiniu *Qiniu) repoLatest(repoDir string) (id string, err error) {
-	latestPath := path.Join(repoDir, "refs", "latest")
-	info, err := qiniu.statFile(latestPath)
-	if nil != err {
-		if isErrNotFound(err) {
-			err = nil
-		}
-		return
-	}
-	if 1 > info.Fsize {
-		// 不存在任何索引
-		return
-	}
-
-	data, err := qiniu.getFile(latestPath)
-	if nil != err {
-		return
-	}
-	id = string(data)
-	return
-}
-
 func (qiniu *Qiniu) repoIndex(repoDir, id string) (ret *entity.Index, err error) {
 	indexPath := path.Join(repoDir, "indexes", id)
 	info, err := qiniu.statFile(indexPath)
 	if nil != err {
-		if isErrNotFound(err) {
+		if qiniu.isErrNotFound(err) {
 			err = nil
 		}
 		return
@@ -600,6 +578,28 @@ func (qiniu *Qiniu) listRepos(userId string) (ret []*Repo, err error) {
 		}
 		marker = nextMarker
 	}
+	return
+}
+
+func (qiniu *Qiniu) repoLatest(repoDir string) (id string, err error) {
+	latestPath := path.Join(repoDir, "refs", "latest")
+	info, err := qiniu.statFile(latestPath)
+	if nil != err {
+		if qiniu.isErrNotFound(err) {
+			err = nil
+		}
+		return
+	}
+	if 1 > info.Fsize {
+		// 不存在任何索引
+		return
+	}
+
+	data, err := qiniu.getFile(latestPath)
+	if nil != err {
+		return
+	}
+	id = string(data)
 	return
 }
 
@@ -798,7 +798,7 @@ func (qiniu *Qiniu) putFileBytes(data []byte, key string) (err error) {
 	return
 }
 
-func isErrNotFound(err error) bool {
+func (qiniu *Qiniu) isErrNotFound(err error) bool {
 	switch err.(type) {
 	case *storage.ErrorInfo:
 		code := err.(*storage.ErrorInfo).Code
