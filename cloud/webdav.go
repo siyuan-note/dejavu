@@ -43,6 +43,13 @@ func (webdav *WebDAV) CreateRepo(name string) (err error) {
 	userId := webdav.Conf.UserID
 
 	key := path.Join("siyuan", userId, "repo", name, ".dejavu")
+	folder := path.Dir(key)
+	err = webdav.Client.MkdirAll(folder, 0755)
+	if nil != err {
+		err = webdav.parseErr(err)
+		return
+	}
+
 	err = webdav.Client.Write(key, []byte(""), 0644)
 	return
 }
