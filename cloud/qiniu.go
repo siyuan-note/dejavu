@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
-	"github.com/klauspost/compress/zstd"
 	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
 	"github.com/qiniu/go-sdk/v7/auth"
@@ -807,16 +806,4 @@ func (qiniu *Qiniu) isErrNotFound(err error) bool {
 		}
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "no such file or directory")
-}
-
-var (
-	compressDecoder *zstd.Decoder
-)
-
-func init() {
-	var err error
-	compressDecoder, err = zstd.NewReader(nil, zstd.WithDecoderMaxMemory(16*1024*1024*1024))
-	if nil != err {
-		panic(err)
-	}
 }

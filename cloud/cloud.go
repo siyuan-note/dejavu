@@ -20,6 +20,8 @@ import (
 	"errors"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // Conf 用于描述云端存储服务配置信息。
@@ -229,4 +231,16 @@ func stripCtlFromUTF8(str string) string {
 		}
 		return -1
 	}, str)
+}
+
+var (
+	compressDecoder *zstd.Decoder
+)
+
+func init() {
+	var err error
+	compressDecoder, err = zstd.NewReader(nil, zstd.WithDecoderMaxMemory(16*1024*1024*1024))
+	if nil != err {
+		panic(err)
+	}
 }
