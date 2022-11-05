@@ -101,6 +101,13 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 	}
 
 	key := path.Join("siyuan", webdav.Conf.UserID, "repo", webdav.Conf.Dir, filePath)
+	folder := path.Dir(key)
+	err = webdav.Client.MkdirAll(folder, 0755)
+	if nil != err {
+		err = webdav.parseErr(err)
+		return
+	}
+
 	err = webdav.Client.Write(key, data, 0644)
 	err = webdav.parseErr(err)
 	return
