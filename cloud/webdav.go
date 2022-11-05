@@ -354,11 +354,6 @@ func (webdav *WebDAV) repoLatest(repoDir string) (id string, err error) {
 	latestPath := path.Join(repoDir, "refs", "latest")
 	_, err = webdav.Client.Stat(latestPath)
 	if nil != err {
-		// TODO:
-		// if isErrNotFound(err) {
-		//	err = nil
-		//  return
-		//}
 		err = webdav.parseErr(err)
 		return
 	}
@@ -388,11 +383,7 @@ func (webdav *WebDAV) repoIndex(repoDir, id string) (ret *entity.Index, err erro
 	indexPath := path.Join(repoDir, "indexes", id)
 	info, err := webdav.Client.Stat(indexPath)
 	if nil != err {
-		// TODO:
-		// if isErrNotFound(err) {
-		//	err = nil
-		// return
-		//}
+		err = webdav.parseErr(err)
 		return
 	}
 	if 1 > info.Size() {
