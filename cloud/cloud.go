@@ -135,52 +135,52 @@ type BaseCloud struct {
 }
 
 func (baseCloud *BaseCloud) CreateRepo(name string) (err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) RemoveRepo(name string) (err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) GetRepos() (repos []*Repo, size int64, err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) DownloadObject(key string) (data []byte, err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) RemoveObject(key string) (err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) GetTags() (tags []*Ref, err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) GetRefsFiles() (fileIDs []string, err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
 func (baseCloud *BaseCloud) GetStat() (stat *Stat, err error) {
-	err = errors.New("not implemented")
+	err = ErrUnsupported
 	return
 }
 
@@ -199,6 +199,7 @@ func (baseCloud *BaseCloud) AddTraffic(uploadBytes, downloadBytes int64) {
 }
 
 var (
+	ErrUnsupported             = errors.New("not supported yet")         // ErrUnsupported 描述了尚未支持的操作
 	ErrCloudObjectNotFound     = errors.New("cloud object not found")    // ErrCloudObjectNotFound 描述了云端存储服务中的对象不存在的错误
 	ErrCloudAuthFailed         = errors.New("cloud account auth failed") // ErrCloudAuthFailed 描述了云端存储服务鉴权失败的错误
 	ErrCloudServiceUnavailable = errors.New("cloud service unavailable") // ErrCloudServiceUnavailable 描述了云端存储服务不可用的错误
