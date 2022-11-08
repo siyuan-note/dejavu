@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/88250/gulu"
@@ -37,16 +38,28 @@ type WebDAV struct {
 	*BaseCloud
 
 	Client *gowebdav.Client
+	lock   sync.Mutex
+}
+
+func NewWebDAV(baseCloud *BaseCloud, client *gowebdav.Client) *WebDAV {
+	return &WebDAV{
+		BaseCloud: baseCloud,
+		Client:    client,
+		lock:      sync.Mutex{},
+	}
 }
 
 func (webdav *WebDAV) CreateRepo(name string) (err error) {
+	webdav.lock.Lock()
+	defer webdav.lock.Unlock()
+
 	userId := webdav.Conf.UserID
 
 	key := path.Join("siyuan", userId, "repo", name, ".dejavu")
 	folder := path.Dir(key)
-	err = webdav.Client.MkdirAll(folder, 0755)
+
+	err = webdav.mkdirAll(folder)
 	if nil != err {
-		err = webdav.parseErr(err)
 		return
 	}
 
@@ -60,6 +73,9 @@ func (webdav *WebDAV) RemoveRepo(name string) (err error) {
 		return
 	}
 
+	webdav.lock.Lock()
+	defer webdav.lock.Unlock()
+
 	userId := webdav.Conf.UserID
 	key := path.Join("siyuan", userId, "repo", name)
 	err = webdav.Client.RemoveAll(key)
@@ -68,10 +84,17 @@ func (webdav *WebDAV) RemoveRepo(name string) (err error) {
 }
 
 func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
+	repos = []*Repo{}
 	userId := webdav.Conf.UserID
-
 	key := path.Join("siyuan", userId, "repo")
 	entries, err := webdav.Client.ReadDir(key)
+	if nil != err {
+		err = webdav.parseErr(err)
+		if ErrCloudObjectNotFound == err {
+			err = nil
+		}
+		return
+	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -83,10 +106,6 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 			Updated: entry.ModTime().Format("2006-01-02 15:04:05"),
 		}
 		repos = append(repos, repo)
-	}
-
-	if 1 > len(repos) {
-		repos = []*Repo{}
 	}
 	sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
 
@@ -101,6 +120,9 @@ func (webdav *WebDAV) GetAvailableSize() (size int64) {
 }
 
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) {
+	webdav.lock.Lock()
+	defer webdav.lock.Unlock()
+
 	absFilePath := filepath.Join(webdav.Conf.RepoPath, filePath)
 	data, err := os.ReadFile(absFilePath)
 	if nil != err {
@@ -109,9 +131,8 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 
 	key := path.Join("siyuan", webdav.Conf.UserID, "repo", webdav.Conf.Dir, filePath)
 	folder := path.Dir(key)
-	err = webdav.Client.MkdirAll(folder, 0755)
+	err = webdav.mkdirAll(folder)
 	if nil != err {
-		err = webdav.parseErr(err)
 		return
 	}
 
@@ -127,6 +148,9 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 }
 
 func (webdav *WebDAV) RemoveObject(key string) (err error) {
+	webdav.lock.Lock()
+	defer webdav.lock.Unlock()
+
 	userId := webdav.Conf.UserID
 	dir := webdav.Conf.Dir
 
@@ -309,6 +333,9 @@ func (webdav *WebDAV) listRepos(userId string) (ret []*Repo, err error) {
 	infos, err := webdav.Client.ReadDir(path.Join("siyuan", userId, "repo"))
 	if nil != err {
 		err = webdav.parseErr(err)
+		if ErrCloudObjectNotFound == err {
+			err = nil
+		}
 		return
 	}
 
@@ -371,8 +398,9 @@ func (webdav *WebDAV) getNotFound(keys []string) (ret []string, err error) {
 		return
 	}
 	for _, key := range keys {
-		info, _ := webdav.Client.Stat(key)
-		if nil == info {
+		_, statErr := webdav.Client.Stat(key)
+		statErr = webdav.parseErr(statErr)
+		if ErrCloudObjectNotFound == statErr {
 			ret = append(ret, key)
 		}
 	}
@@ -427,4 +455,18 @@ func (webdav *WebDAV) parseErr(err error) error {
 		err = ErrCloudObjectNotFound
 	}
 	return err
+}
+
+func (webdav *WebDAV) mkdirAll(folder string) (err error) {
+	_, err = webdav.Client.Stat(folder)
+	if nil != err {
+		err = webdav.parseErr(err)
+		if ErrCloudObjectNotFound != err {
+			return
+		}
+	}
+
+	err = webdav.Client.MkdirAll(folder, 0755)
+	err = webdav.parseErr(err)
+	return
 }
