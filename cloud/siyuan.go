@@ -38,6 +38,10 @@ type SiYuan struct {
 	*BaseCloud
 }
 
+func NewSiYuan(baseCloud *BaseCloud) *SiYuan {
+	return &SiYuan{BaseCloud: baseCloud}
+}
+
 func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) {
 	absFilePath := filepath.Join(siyuan.Conf.RepoPath, filePath)
 

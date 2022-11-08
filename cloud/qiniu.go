@@ -43,6 +43,10 @@ type Qiniu struct {
 	*BaseCloud
 }
 
+func NewQiniu(baseCloud *BaseCloud) *Qiniu {
+	return &Qiniu{baseCloud}
+}
+
 func (qiniu *Qiniu) CreateRepo(name string) (err error) {
 	if !IsValidCloudDirName(name) {
 		err = errors.New("invalid repo name")
