@@ -83,8 +83,8 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 	return
 }
 
-func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
-	data, err = webdav.Client.Read(filePath)
+func (webdav *WebDAV) DownloadObject(key string) (data []byte, err error) {
+	data, err = webdav.Client.Read(path.Join(webdav.Dir, key))
 	err = webdav.parseErr(err)
 	return
 }
@@ -93,6 +93,7 @@ func (webdav *WebDAV) RemoveObject(key string) (err error) {
 	userId := webdav.Conf.UserID
 	dir := webdav.Conf.Dir
 
+	key = path.Join(webdav.Dir, key)
 	if !strings.HasPrefix(key, path.Join(webdav.Dir, "siyuan", userId, "repo", dir, "refs", "tags")) { // 仅允许删除标签
 		err = errors.New("invalid key")
 		return
