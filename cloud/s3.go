@@ -86,6 +86,9 @@ func (s3 *S3) DownloadObject(key string) (data []byte, err error) {
 	}
 	resp, err := svc.GetObjectWithContext(ctx, input)
 	if nil != err {
+		if s3.isErrNotFound(err) {
+			err = ErrCloudObjectNotFound
+		}
 		return
 	}
 	defer resp.Body.Close()
