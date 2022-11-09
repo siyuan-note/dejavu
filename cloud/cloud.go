@@ -181,7 +181,10 @@ func (baseCloud *BaseCloud) GetChunks(checkChunkIDs []string) (chunkIDs []string
 }
 
 func (baseCloud *BaseCloud) GetStat() (stat *Stat, err error) {
-	err = ErrUnsupported
+	stat = &Stat{
+		Sync:   &StatSync{},
+		Backup: &StatBackup{},
+	}
 	return
 }
 
@@ -190,12 +193,10 @@ func (baseCloud *BaseCloud) GetConf() *Conf {
 }
 
 func (baseCloud *BaseCloud) GetAvailableSize() (size int64) {
-	// 默认按传入的配置大小返回
 	return baseCloud.Conf.AvailableSize
 }
 
 func (baseCloud *BaseCloud) AddTraffic(uploadBytes, downloadBytes int64) {
-	// 默认不统计流量
 	return
 }
 

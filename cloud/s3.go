@@ -172,79 +172,6 @@ func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 	return
 }
 
-func (s3 *S3) GetStat() (stat *Stat, err error) {
-	userId := s3.Conf.UserID
-
-	syncSize, backupSize, syncFileCount, backupCount, backupFileCount, repoCount, syncUpdated, backupUpdated, err := s3.repoStat(userId)
-	if nil != err {
-		return
-	}
-
-	stat = &Stat{
-		Sync: &StatSync{
-			Size:      syncSize,
-			FileCount: syncFileCount,
-			Updated:   syncUpdated,
-		},
-		Backup: &StatBackup{
-			Size:      backupSize,
-			Count:     backupCount,
-			FileCount: backupFileCount,
-			Updated:   backupUpdated,
-		},
-		AssetSize: 0, // 不统计图床资源大小
-		RepoCount: repoCount,
-	}
-	return
-}
-
-func (s3 *S3) repoStat(userId string) (syncSize, backupSize int64, syncFileCount, backupCount, backupFileCount, repoCount int, syncUpdated, backupUpdated string, err error) {
-	repos, err := s3.listRepos()
-	if nil != err {
-		return
-	}
-	repoCount = len(repos)
-
-	for _, repo := range repos {
-		var refs []*Ref
-		refs, err = s3.listRepoRefs(userId, repo.Name, "")
-		if nil != err {
-			logging.LogErrorf("list repo refs for user [%s] failed: %s", userId, err)
-			return
-		}
-
-		repoKey := path.Join("siyuan", userId, "repo", repo.Name)
-		for _, ref := range refs {
-			index, getErr := s3.repoIndex(repoKey, ref.ID)
-			if nil != getErr {
-				err = getErr
-				return
-			}
-			if nil == index {
-				continue
-			}
-
-			if "latest" == ref.Name {
-				syncSize += index.Size
-				syncFileCount += index.Count
-				if syncUpdated < repo.Updated {
-					syncUpdated = ref.Updated
-				}
-			} else {
-				if backupSize < index.Size {
-					backupSize = index.Size
-				}
-				backupCount++
-				backupFileCount += index.Count
-				if backupUpdated < ref.Updated {
-					backupUpdated = ref.Updated
-				}
-			}
-		}
-	}
-	return
-}
-
 func (s3 *S3) repoIndex(repoDir, id string) (ret *entity.Index, err error) {
 	indexPath := path.Join(repoDir, "indexes", id)
 	info, err := s3.statFile(indexPath)
@@ -336,7 +263,6 @@ func (s3 *S3) listRepos() (ret []*Repo, err error) {
 			Updated: (*bucket.CreationDate).Format("2006-01-02 15:04:05"),
 		})
 	}
-
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
 	return
 }

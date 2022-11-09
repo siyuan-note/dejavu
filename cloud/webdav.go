@@ -25,11 +25,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/logging"
 	"github.com/studio-b12/gowebdav"
 )
 
@@ -51,30 +49,10 @@ func NewWebDAV(baseCloud *BaseCloud, client *gowebdav.Client) (ret *WebDAV) {
 }
 
 func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
-	repos = []*Repo{}
-	userId := webdav.Conf.UserID
-	key := path.Join("siyuan", userId, "repo")
-	entries, err := webdav.Client.ReadDir(key)
+	repos, err = webdav.listRepos()
 	if nil != err {
-		err = webdav.parseErr(err)
-		if ErrCloudObjectNotFound == err {
-			err = nil
-		}
 		return
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		repo := &Repo{
-			Name:    entry.Name(),
-			Size:    0,
-			Updated: entry.ModTime().Format("2006-01-02 15:04:05"),
-		}
-		repos = append(repos, repo)
-	}
-	sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
 
 	for _, repo := range repos {
 		size += repo.Size
@@ -184,79 +162,6 @@ func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err 
 	return
 }
 
-func (webdav *WebDAV) GetStat() (stat *Stat, err error) {
-	userId := webdav.Conf.UserID
-
-	syncSize, backupSize, syncFileCount, backupCount, backupFileCount, repoCount, syncUpdated, backupUpdated, err := webdav.repoStat(userId)
-	if nil != err {
-		return
-	}
-
-	stat = &Stat{
-		Sync: &StatSync{
-			Size:      syncSize,
-			FileCount: syncFileCount,
-			Updated:   syncUpdated,
-		},
-		Backup: &StatBackup{
-			Size:      backupSize,
-			Count:     backupCount,
-			FileCount: backupFileCount,
-			Updated:   backupUpdated,
-		},
-		AssetSize: 0, // 不统计图床资源大小
-		RepoCount: repoCount,
-	}
-	return
-}
-
-func (webdav *WebDAV) repoStat(userId string) (syncSize, backupSize int64, syncFileCount, backupCount, backupFileCount, repoCount int, syncUpdated, backupUpdated string, err error) {
-	repos, err := webdav.listRepos(userId)
-	if nil != err {
-		return
-	}
-	repoCount = len(repos)
-
-	for _, repo := range repos {
-		var refs []*Ref
-		refs, err = webdav.listRepoRefs(userId, repo.Name, "")
-		if nil != err {
-			logging.LogErrorf("list repo refs for user [%s] failed: %s", userId, err)
-			return
-		}
-
-		repoKey := path.Join("siyuan", userId, "repo", repo.Name)
-		for _, ref := range refs {
-			index, getErr := webdav.repoIndex(repoKey, ref.ID)
-			if nil != getErr {
-				err = getErr
-				return
-			}
-			if nil == index {
-				continue
-			}
-
-			if "latest" == ref.Name {
-				syncSize += index.Size
-				syncFileCount += index.Count
-				if syncUpdated < repo.Updated {
-					syncUpdated = ref.Updated
-				}
-			} else {
-				if backupSize < index.Size {
-					backupSize = index.Size
-				}
-				backupCount++
-				backupFileCount += index.Count
-				if backupUpdated < ref.Updated {
-					backupUpdated = ref.Updated
-				}
-			}
-		}
-	}
-	return
-}
-
 func (webdav *WebDAV) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, err error) {
 	keyPath := path.Join("siyuan", userId, "repo", repo, "refs", refPrefix)
 	infos, err := webdav.Client.ReadDir(keyPath)
@@ -286,8 +191,8 @@ func (webdav *WebDAV) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, 
 	return
 }
 
-func (webdav *WebDAV) listRepos(userId string) (ret []*Repo, err error) {
-	infos, err := webdav.Client.ReadDir(path.Join("siyuan", userId, "repo"))
+func (webdav *WebDAV) listRepos() (ret []*Repo, err error) {
+	infos, err := webdav.Client.ReadDir("/")
 	if nil != err {
 		err = webdav.parseErr(err)
 		if ErrCloudObjectNotFound == err {
@@ -297,40 +202,13 @@ func (webdav *WebDAV) listRepos(userId string) (ret []*Repo, err error) {
 	}
 
 	for _, repoInfo := range infos {
-		dir := repoInfo.Name()
-		repo := path.Join("siyuan", userId, "repo", dir)
-		latestID, getErr := webdav.repoLatest(repo)
-		if nil != getErr {
-			return nil, getErr
-		}
-		var size int64
-		var updated string
-		if "" != latestID {
-			var latest *entity.Index
-			latest, getErr = webdav.repoIndex(repo, latestID)
-			if nil != getErr {
-				return nil, getErr
-			}
-			if nil == latest {
-				continue
-			}
-			size = latest.Size
-			updated = time.UnixMilli(latest.Created).Format("2006-01-02 15:04:05")
-		} else {
-			info, statErr := webdav.Client.Stat(path.Join(repo, ".dejavu"))
-			if nil != statErr {
-				updated = time.Now().Format("2006-01-02 15:04:05")
-			} else {
-				updated = info.ModTime().Format("2006-01-02 15:04:05")
-			}
-		}
-
 		ret = append(ret, &Repo{
-			Name:    dir,
-			Size:    size,
-			Updated: updated,
+			Name:    repoInfo.Name(),
+			Size:    0,
+			Updated: repoInfo.ModTime().Format("2006-01-02 15:04:05"),
 		})
 	}
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
 	return
 }
 
