@@ -454,12 +454,16 @@ func (webdav *WebDAV) parseErr(err error) error {
 }
 
 func (webdav *WebDAV) mkdirAll(folder string) (err error) {
-	_, err = webdav.Client.Stat(folder)
+	info, err := webdav.Client.Stat(folder)
 	if nil != err {
 		err = webdav.parseErr(err)
 		if ErrCloudObjectNotFound != err {
 			return
 		}
+	}
+	i := info.(*gowebdav.File)
+	if nil != i && i.IsDir() {
+		return
 	}
 
 	err = webdav.Client.MkdirAll(folder, 0755)
