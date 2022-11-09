@@ -41,8 +41,8 @@ type S3 struct {
 	*BaseCloud
 }
 
-func NewS3(baseCloud *BaseCloud) *OSS {
-	return &OSS{baseCloud}
+func NewS3(baseCloud *BaseCloud) *S3 {
+	return &S3{baseCloud}
 }
 
 func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
