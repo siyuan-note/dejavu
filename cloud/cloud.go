@@ -32,7 +32,7 @@ type Conf struct {
 	Endpoint string                 // 服务端点
 	Extras   map[string]interface{} // 一些可能需要的附加信息
 
-	// S3 协议所需配置
+	// 对象存储协议所需配置
 	AccessKey string // Access Key
 	SecretKey string // Secret Key
 	Region    string // 存储区域
@@ -244,4 +244,18 @@ func init() {
 	if nil != err {
 		panic(err)
 	}
+}
+
+// Index 描述了索引信息，主要用于内部处理。
+type Index struct {
+	Hash    string `json:"hash"`
+	Size    int64  `json:"size"`
+	Updated int64  `json:"updated"` // Unix timestamp 秒
+}
+
+// ObjectInfo 描述了对象信息，主要用于内部处理。
+type ObjectInfo struct {
+	Key     string `json:"key"`
+	Size    int64  `json:"size"`
+	Updated string `json:"updated"`
 }

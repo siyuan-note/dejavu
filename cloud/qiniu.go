@@ -119,10 +119,6 @@ func (qiniu *Qiniu) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (qiniu *Qiniu) GetAvailableSize() (size int64) {
-	return 1024 * 1024 * 1024 * 1024 * 2 // 2TB
-}
-
 func (qiniu *Qiniu) UploadObject(filePath string, overwrite bool) (err error) {
 	absFilePath := filepath.Join(qiniu.Conf.RepoPath, filePath)
 
@@ -710,12 +706,6 @@ func (qiniu *Qiniu) getNotFound(keys []string) (ret []string, err error) {
 		}
 	}
 	return
-}
-
-type Index struct {
-	Hash    string `json:"hash"`
-	Size    int64  `json:"size"`
-	Updated int64  `json:"updated"` // Unix timestamp 秒
 }
 
 func (qiniu *Qiniu) getIndex(fullDirPath string) (ret map[string]Index, err error) {
