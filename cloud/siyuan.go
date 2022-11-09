@@ -77,7 +77,8 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 	return
 }
 
-func (siyuan *SiYuan) DownloadObject(key string) (ret []byte, err error) {
+func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
+	key := path.Join("siyuan", siyuan.Conf.UserID, "repo", siyuan.Conf.Dir, filePath)
 	resp, err := httpclient.NewCloudFileRequest15s().Get(siyuan.Endpoint + key)
 	if nil != err {
 		err = fmt.Errorf("download object [%s] failed: %s", key, err)
@@ -104,12 +105,13 @@ func (siyuan *SiYuan) DownloadObject(key string) (ret []byte, err error) {
 	return
 }
 
-func (siyuan *SiYuan) RemoveObject(key string) (err error) {
+func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 	userId := siyuan.Conf.UserID
 	dir := siyuan.Conf.Dir
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
+	key := path.Join("siyuan", userId, "repo", dir, filePath)
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest()
 	resp, err := request.

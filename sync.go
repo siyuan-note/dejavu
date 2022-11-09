@@ -999,9 +999,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 func (repo *Repo) downloadCloudChunk(id string, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id)
 
-	userId := repo.cloud.GetConf().UserID
-	dir := repo.cloud.GetConf().Dir
-	key := path.Join("siyuan", userId, "repo", dir, "objects", id[:2], id[2:])
+	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		logging.LogErrorf("download cloud chunk [%s] failed: %s", id, err)
@@ -1015,9 +1013,7 @@ func (repo *Repo) downloadCloudChunk(id string, context map[string]interface{}) 
 func (repo *Repo) downloadCloudFile(id string, context map[string]interface{}) (length int64, ret *entity.File, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id)
 
-	userId := repo.cloud.GetConf().UserID
-	dir := repo.cloud.GetConf().Dir
-	key := path.Join("siyuan", userId, "repo", dir, "objects", id[:2], id[2:])
+	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		logging.LogErrorf("download cloud file [%s] failed: %s", id, err)
@@ -1029,17 +1025,17 @@ func (repo *Repo) downloadCloudFile(id string, context map[string]interface{}) (
 	return
 }
 
-func (repo *Repo) downloadCloudObject(key string) (ret []byte, err error) {
-	data, err := repo.cloud.DownloadObject(key)
+func (repo *Repo) downloadCloudObject(filePath string) (ret []byte, err error) {
+	data, err := repo.cloud.DownloadObject(filePath)
 	if nil != err {
 		return
 	}
 
-	ret, err = repo.decodeDownloadedData(key, data)
+	ret, err = repo.decodeDownloadedData(filePath, data)
 	if nil != err {
 		return
 	}
-	//logging.LogInfof("downloaded object [%s]", key)
+	//logging.LogInfof("downloaded object [%s]", filePath)
 	return
 }
 
@@ -1065,9 +1061,7 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, id)
 	index = &entity.Index{}
 
-	userId := repo.cloud.GetConf().UserID
-	dir := repo.cloud.GetConf().Dir
-	key := path.Join("siyuan", userId, "repo", dir, "indexes", id)
+	key := path.Join("indexes", id)
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		return
@@ -1083,9 +1077,7 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
 	index = &entity.Index{}
 
-	userId := repo.cloud.GetConf().UserID
-	dir := repo.cloud.GetConf().Dir
-	key := path.Join("siyuan", userId, "repo", dir, "refs", "latest")
+	key := path.Join("refs", "latest")
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
@@ -1096,7 +1088,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		return
 	}
 	latestID := string(data)
-	key = path.Join("siyuan", userId, "repo", dir, "indexes", latestID)
+	key = path.Join("indexes", latestID)
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, latestID)
 	data, err = repo.downloadCloudObject(key)
 	if nil != err {

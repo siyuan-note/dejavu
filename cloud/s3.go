@@ -67,22 +67,21 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
 		return
 	}
 	defer file.Close()
-	key := path.Join("repo", filePath)
 	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
 		Bucket: aws.String(s3.Conf.Bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(path.Join("repo", filePath)),
 		Body:   file,
 	})
 	return
 }
 
-func (s3 *S3) DownloadObject(key string) (data []byte, err error) {
+func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	svc := s3.getService()
 	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelFn()
 	input := &as3.GetObjectInput{
 		Bucket: aws.String(s3.Conf.Bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(path.Join("repo", filePath)),
 	}
 	resp, err := svc.GetObjectWithContext(ctx, input)
 	if nil != err {

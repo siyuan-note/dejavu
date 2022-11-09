@@ -65,10 +65,10 @@ type Cloud interface {
 	UploadObject(filePath string, overwrite bool) (err error)
 
 	// DownloadObject 用于下载对象数据 data。
-	DownloadObject(key string) (data []byte, err error)
+	DownloadObject(filePath string) (data []byte, err error)
 
 	// RemoveObject 用于删除对象。
-	RemoveObject(key string) (err error)
+	RemoveObject(filePath string) (err error)
 
 	// GetTags 用于获取快照标记列表。
 	GetTags() (tags []*Ref, err error)
@@ -155,7 +155,7 @@ func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (err e
 	return
 }
 
-func (baseCloud *BaseCloud) DownloadObject(key string) (data []byte, err error) {
+func (baseCloud *BaseCloud) DownloadObject(filePath string) (data []byte, err error) {
 	err = ErrUnsupported
 	return
 }
