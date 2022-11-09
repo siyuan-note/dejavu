@@ -21,6 +21,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/dgraph-io/ristretto"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -236,11 +237,21 @@ func stripCtlFromUTF8(str string) string {
 
 var (
 	compressDecoder *zstd.Decoder
+	cache           *ristretto.Cache
 )
 
 func init() {
 	var err error
 	compressDecoder, err = zstd.NewReader(nil, zstd.WithDecoderMaxMemory(16*1024*1024*1024))
+	if nil != err {
+		panic(err)
+	}
+
+	cache, err = ristretto.NewCache(&ristretto.Config{
+		NumCounters: 200000,
+		MaxCost:     1000 * 1000 * 32,
+		BufferItems: 64,
+	})
 	if nil != err {
 		panic(err)
 	}

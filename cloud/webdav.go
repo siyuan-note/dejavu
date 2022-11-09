@@ -36,50 +36,17 @@ import (
 // WebDAV 描述了 WebDAV 云端存储服务实现。
 type WebDAV struct {
 	*BaseCloud
-
 	Client *gowebdav.Client
-	lock   sync.Mutex
+
+	lock sync.Mutex
 }
 
-func NewWebDAV(baseCloud *BaseCloud, client *gowebdav.Client) *WebDAV {
-	return &WebDAV{
+func NewWebDAV(baseCloud *BaseCloud, client *gowebdav.Client) (ret *WebDAV) {
+	ret = &WebDAV{
 		BaseCloud: baseCloud,
 		Client:    client,
 		lock:      sync.Mutex{},
 	}
-}
-
-func (webdav *WebDAV) CreateRepo(name string) (err error) {
-	webdav.lock.Lock()
-	defer webdav.lock.Unlock()
-
-	userId := webdav.Conf.UserID
-
-	key := path.Join("siyuan", userId, "repo", name, ".dejavu")
-	folder := path.Dir(key)
-
-	err = webdav.mkdirAll(folder)
-	if nil != err {
-		return
-	}
-
-	err = webdav.Client.Write(key, []byte(""), 0644)
-	return
-}
-
-func (webdav *WebDAV) RemoveRepo(name string) (err error) {
-	if !IsValidCloudDirName(name) {
-		err = errors.New("invalid repo name")
-		return
-	}
-
-	webdav.lock.Lock()
-	defer webdav.lock.Unlock()
-
-	userId := webdav.Conf.UserID
-	key := path.Join("siyuan", userId, "repo", name)
-	err = webdav.Client.RemoveAll(key)
-	err = webdav.parseErr(err)
 	return
 }
 
@@ -102,7 +69,7 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 
 		repo := &Repo{
 			Name:    entry.Name(),
-			Size:    entry.Size(), // FIXME: 计算实际大小，而不是文件夹大小
+			Size:    0,
 			Updated: entry.ModTime().Format("2006-01-02 15:04:05"),
 		}
 		repos = append(repos, repo)
@@ -116,9 +83,6 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 }
 
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) {
-	webdav.lock.Lock()
-	defer webdav.lock.Unlock()
-
 	absFilePath := filepath.Join(webdav.Conf.RepoPath, filePath)
 	data, err := os.ReadFile(absFilePath)
 	if nil != err {
@@ -144,9 +108,6 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 }
 
 func (webdav *WebDAV) RemoveObject(key string) (err error) {
-	webdav.lock.Lock()
-	defer webdav.lock.Unlock()
-
 	userId := webdav.Conf.UserID
 	dir := webdav.Conf.Dir
 
@@ -454,6 +415,15 @@ func (webdav *WebDAV) parseErr(err error) error {
 }
 
 func (webdav *WebDAV) mkdirAll(folder string) (err error) {
+	cacheKey := "webdav.dir." + folder
+	_, ok := cache.Get(cacheKey)
+	if ok {
+		return
+	}
+
+	webdav.lock.Lock()
+	defer webdav.lock.Unlock()
+
 	info, err := webdav.Client.Stat(folder)
 	if nil != err {
 		err = webdav.parseErr(err)
@@ -463,10 +433,14 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 	}
 	i := info.(*gowebdav.File)
 	if nil != i && i.IsDir() {
+		cache.Set(cacheKey, true, 0)
 		return
 	}
 
 	err = webdav.Client.MkdirAll(folder, 0755)
 	err = webdav.parseErr(err)
+	if nil == err {
+		cache.Set(cacheKey, true, 0)
+	}
 	return
 }
