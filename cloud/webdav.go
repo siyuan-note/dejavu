@@ -115,10 +115,6 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (webdav *WebDAV) GetAvailableSize() (size int64) {
-	return 1024 * 1024 * 1024 * 1024 * 2 // 2TB
-}
-
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) {
 	webdav.lock.Lock()
 	defer webdav.lock.Unlock()
