@@ -27,7 +27,7 @@ import (
 
 // Conf 用于描述云端存储服务配置信息。
 type Conf struct {
-	Dir      string                 // 存储目录
+	Dir      string                 // 存储目录，第三方存储不使用 Dir 区别多租户
 	UserID   string                 // 用户 ID，没有的话请传入一个定值比如 "0"
 	RepoPath string                 // 本地仓库的绝对路径，如：F:\\SiYuan\\repo\\
 	Endpoint string                 // 服务端点
