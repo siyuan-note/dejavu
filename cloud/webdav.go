@@ -283,7 +283,7 @@ func (webdav *WebDAV) parseErr(err error) error {
 				statusErr := e.(gowebdav.StatusError)
 				if 404 == statusErr.Status {
 					return ErrCloudObjectNotFound
-				} else if 503 == statusErr.Status {
+				} else if 503 == statusErr.Status || 502 == statusErr.Status {
 					return ErrCloudServiceUnavailable
 				} else if 200 == statusErr.Status {
 					return nil
