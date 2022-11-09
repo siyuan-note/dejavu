@@ -28,6 +28,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/logging"
 	"github.com/studio-b12/gowebdav"
 )
 
@@ -67,7 +68,7 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 		return
 	}
 
-	key := path.Join("siyuan", webdav.Conf.UserID, "repo", webdav.Conf.Dir, filePath)
+	key := path.Join(webdav.Dir, "siyuan", webdav.Conf.UserID, "repo", webdav.Conf.Dir, filePath)
 	folder := path.Dir(key)
 	err = webdav.mkdirAll(folder)
 	if nil != err {
@@ -76,6 +77,9 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 
 	err = webdav.Client.Write(key, data, 0644)
 	err = webdav.parseErr(err)
+	if nil != err {
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
+	}
 	return
 }
 
@@ -89,7 +93,7 @@ func (webdav *WebDAV) RemoveObject(key string) (err error) {
 	userId := webdav.Conf.UserID
 	dir := webdav.Conf.Dir
 
-	if !strings.HasPrefix(key, path.Join("siyuan", userId, "repo", dir, "refs", "tags")) { // 仅允许删除标签
+	if !strings.HasPrefix(key, path.Join(webdav.Dir, "siyuan", userId, "repo", dir, "refs", "tags")) { // 仅允许删除标签
 		err = errors.New("invalid key")
 		return
 	}
@@ -119,7 +123,7 @@ func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, err error) {
 	dir := webdav.Conf.Dir
 
 	refs, err := webdav.listRepoRefs(userId, dir, "")
-	repoKey := path.Join("siyuan", userId, "repo", dir)
+	repoKey := path.Join(webdav.Dir, "siyuan", userId, "repo", dir)
 	var files []string
 	for _, ref := range refs {
 		index, getErr := webdav.repoIndex(repoKey, ref.ID)
@@ -143,7 +147,7 @@ func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err 
 	userId := webdav.Conf.UserID
 	dir := webdav.Conf.Dir
 
-	repoKey := path.Join("siyuan", userId, "repo", dir)
+	repoKey := path.Join(webdav.Dir, "siyuan", userId, "repo", dir)
 	var keys []string
 	for _, chunk := range checkChunkIDs {
 		key := path.Join(repoKey, "objects", chunk[:2], chunk[2:])
@@ -163,7 +167,7 @@ func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err 
 }
 
 func (webdav *WebDAV) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, err error) {
-	keyPath := path.Join("siyuan", userId, "repo", repo, "refs", refPrefix)
+	keyPath := path.Join(webdav.Dir, "siyuan", userId, "repo", repo, "refs", refPrefix)
 	infos, err := webdav.Client.ReadDir(keyPath)
 	if nil != err {
 		err = webdav.parseErr(err)
@@ -281,6 +285,8 @@ func (webdav *WebDAV) parseErr(err error) error {
 					return ErrCloudObjectNotFound
 				} else if 503 == statusErr.Status {
 					return ErrCloudServiceUnavailable
+				} else if 200 == statusErr.Status {
+					return nil
 				}
 			}
 		}
@@ -317,7 +323,9 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 
 	err = webdav.Client.MkdirAll(folder, 0755)
 	err = webdav.parseErr(err)
-	if nil == err {
+	if nil != err {
+		logging.LogErrorf("mkdir [%s] failed: %s", folder, err)
+	} else {
 		cache.Set(cacheKey, true, 0)
 	}
 	return
