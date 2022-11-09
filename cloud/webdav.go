@@ -311,6 +311,11 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 	info, err := webdav.Client.Stat(folder)
 	if nil != err {
 		err = webdav.parseErr(err)
+		if nil == err {
+			cache.Set(cacheKey, true, 0)
+			return
+		}
+
 		if ErrCloudObjectNotFound != err {
 			return
 		}
