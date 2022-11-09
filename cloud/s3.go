@@ -67,7 +67,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
 		return
 	}
 	defer file.Close()
-	key := path.Join("siyuan", s3.Conf.UserID, "repo", s3.Conf.Dir, filePath)
+	key := path.Join("siyuan", s3.Conf.UserID, "repo", filePath)
 	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
 		Bucket: aws.String(s3.Conf.Bucket),
 		Key:    aws.String(key),
@@ -109,9 +109,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 
 func (s3 *S3) GetTags() (tags []*Ref, err error) {
 	userId := s3.Conf.UserID
-	dir := s3.Conf.Dir
-
-	tags, err = s3.listRepoRefs(userId, dir, "tags")
+	tags, err = s3.listRepoRefs(userId, "tags")
 	if nil != err {
 		logging.LogErrorf("list repo tags for user [%s] failed: %s", userId, err)
 		return
@@ -124,15 +122,14 @@ func (s3 *S3) GetTags() (tags []*Ref, err error) {
 
 func (s3 *S3) GetRefsFiles() (fileIDs []string, err error) {
 	userId := s3.Conf.UserID
-	dir := s3.Conf.Dir
 
-	refs, err := s3.listRepoRefs(userId, dir, "")
+	refs, err := s3.listRepoRefs(userId, "")
 	if nil != err {
 		logging.LogErrorf("list repo refs for user [%s] failed: %s", userId, err)
 		return
 	}
 
-	repoKey := path.Join("siyuan", userId, "repo", dir)
+	repoKey := path.Join("siyuan", userId, "repo")
 	var files []string
 	for _, ref := range refs {
 		index, getErr := s3.repoIndex(repoKey, ref.ID)
@@ -153,10 +150,7 @@ func (s3 *S3) GetRefsFiles() (fileIDs []string, err error) {
 }
 
 func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
-	userId := s3.Conf.UserID
-	dir := s3.Conf.Dir
-
-	repoKey := path.Join("siyuan", userId, "repo", dir)
+	repoKey := path.Join("siyuan", s3.Conf.UserID, "repo")
 	var keys []string
 	for _, chunk := range checkChunkIDs {
 		key := path.Join(repoKey, "objects", chunk[:2], chunk[2:])
@@ -201,10 +195,10 @@ func (s3 *S3) repoIndex(repoDir, id string) (ret *entity.Index, err error) {
 	return
 }
 
-func (s3 *S3) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, err error) {
+func (s3 *S3) listRepoRefs(userId, refPrefix string) (ret []*Ref, err error) {
 	svc := s3.getService()
 
-	prefix := path.Join("siyuan", userId, "repo", repo, "refs", refPrefix)
+	prefix := path.Join("siyuan", userId, "repo", "refs", refPrefix)
 	limit := int64(32)
 	marker := ""
 	for {
@@ -228,7 +222,7 @@ func (s3 *S3) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, err erro
 			}
 
 			id := string(data)
-			info, statErr := s3.statFile(path.Join("siyuan", userId, "repo", repo, "indexes", id))
+			info, statErr := s3.statFile(path.Join("siyuan", userId, "repo", "indexes", id))
 			if nil != statErr {
 				err = statErr
 				return
