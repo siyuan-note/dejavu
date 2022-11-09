@@ -314,7 +314,7 @@ func (s3 *S3) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, err erro
 			})
 		}
 
-		if *output.IsTruncated {
+		if !(*output.IsTruncated) {
 			break
 		}
 	}
@@ -363,7 +363,7 @@ func (s3 *S3) repoLatest(repoDir string) (id string, err error) {
 	return
 }
 
-func (s3 *S3) statFile(key string) (info *ObjectInfo, err error) {
+func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 	svc := s3.getService()
 
 	header, err := svc.HeadObject(&as3.HeadObjectInput{
@@ -376,7 +376,7 @@ func (s3 *S3) statFile(key string) (info *ObjectInfo, err error) {
 
 	updated := header.LastModified.Format("2006-01-02 15:04:05")
 	size := *header.ContentLength
-	info = &ObjectInfo{
+	info = &objectInfo{
 		Key:     key,
 		Updated: updated,
 		Size:    size,

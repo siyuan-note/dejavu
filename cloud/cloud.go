@@ -246,15 +246,8 @@ func init() {
 	}
 }
 
-// Index 描述了索引信息，主要用于内部处理。
-type Index struct {
-	Hash    string `json:"hash"`
-	Size    int64  `json:"size"`
-	Updated int64  `json:"updated"` // Unix timestamp 秒
-}
-
-// ObjectInfo 描述了对象信息，主要用于内部处理。
-type ObjectInfo struct {
+// objectInfo 描述了对象信息，用于内部处理。
+type objectInfo struct {
 	Key     string `json:"key"`
 	Size    int64  `json:"size"`
 	Updated string `json:"updated"`

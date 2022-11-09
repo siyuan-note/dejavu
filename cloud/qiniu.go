@@ -17,7 +17,6 @@
 package cloud
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"path"
@@ -47,63 +46,10 @@ func NewQiniu(baseCloud *BaseCloud) *Qiniu {
 	return &Qiniu{baseCloud}
 }
 
-func (qiniu *Qiniu) CreateRepo(name string) (err error) {
-	if !IsValidCloudDirName(name) {
-		err = errors.New("invalid repo name")
-		return
-	}
-
-	userId := qiniu.Conf.UserID
-	accessKey := qiniu.Conf.AccessKey
-	secretKey := qiniu.Conf.SecretKey
-	bucket := qiniu.Conf.Bucket
-
-	// 创建一个文件用于占位
-	key := path.Join("siyuan", userId, "repo", name, ".dejavu")
-	mac := auth.New(accessKey, secretKey)
-	bucketManager := storage.NewBucketManager(mac, nil)
-	info, _ := bucketManager.Stat(bucket, key)
-	if 0 < info.Fsize {
-		return
-	}
-
-	putPolicy := storage.PutPolicy{
-		Scope: bucket + ":" + key,
-	}
-	upToken := putPolicy.UploadToken(mac)
-	formUploader := storage.NewFormUploader(nil)
-	putRet := storage.PutRet{}
-	data := []byte("")
-	err = formUploader.Put(context.Background(), &putRet, upToken, key, bytes.NewReader(data), int64(len(data)), nil)
-	if nil != err {
-		logging.LogErrorf("put meta dir [%s] failed: %s", key, err)
-		return
-	}
-	return
-}
-
-func (qiniu *Qiniu) RemoveRepo(name string) (err error) {
-	if !IsValidCloudDirName(name) {
-		err = errors.New("invalid repo name")
-		return
-	}
-
-	userId := qiniu.Conf.UserID
-	key := path.Join("siyuan", userId, "repo", name)
-	index, err := qiniu.genIndex0(key)
-	if nil != err {
-		return
-	}
-	if err = qiniu.removeDir0(key, index); nil != err {
-		return
-	}
-	return
-}
-
 func (qiniu *Qiniu) GetRepos() (repos []*Repo, size int64, err error) {
 	userId := qiniu.Conf.UserID
 
-	repos, err = qiniu.listRepos(userId)
+	repos, err = qiniu.listRepos()
 	if nil != err {
 		logging.LogErrorf("list repos for user [%s] failed: %s", userId, err)
 		return
@@ -302,7 +248,7 @@ func (qiniu *Qiniu) GetStat() (stat *Stat, err error) {
 }
 
 func (qiniu *Qiniu) repoStat(userId string) (syncSize, backupSize int64, syncFileCount, backupCount, backupFileCount, repoCount int, syncUpdated, backupUpdated string, err error) {
-	repos, err := qiniu.listRepos(userId)
+	repos, err := qiniu.listRepos()
 	if nil != err {
 		return
 	}
@@ -375,76 +321,6 @@ func (qiniu *Qiniu) getScopeKeyUploadToken(key string) (keyUploadToken, scopeUpl
 	return
 }
 
-func (qiniu *Qiniu) removeDir(fullDirPath string) (err error) {
-	accessKey := qiniu.Conf.AccessKey
-	secretKey := qiniu.Conf.SecretKey
-	bucket := qiniu.Conf.Bucket
-
-	index, err := qiniu.getIndex(fullDirPath)
-	if nil != err {
-		return
-	}
-
-	err = qiniu.removeDir0(fullDirPath, index)
-	if nil != err {
-		return
-	}
-
-	mac := auth.New(accessKey, secretKey)
-	bucketManager := storage.NewBucketManager(mac, nil)
-	key := path.Join(fullDirPath, "index.json")
-	if err = bucketManager.Delete(bucket, key); nil != err {
-		if "no such file or directory" != err.Error() {
-			logging.LogErrorf("remove file [%s] failed: %s", key, err)
-			return
-		}
-		err = nil
-	}
-	if err = bucketManager.Delete(bucket, path.Join(fullDirPath, "conf.json")); nil != err {
-		if "no such file or directory" != err.Error() {
-			logging.LogErrorf("remove file [%s] failed: %s", key, err)
-			return
-		}
-		err = nil
-	}
-	return
-}
-
-func (qiniu *Qiniu) removeDir0(fullDirPath string, index map[string]Index) (err error) {
-	accessKey := qiniu.Conf.AccessKey
-	secretKey := qiniu.Conf.SecretKey
-	bucket := qiniu.Conf.Bucket
-
-	batch := map[int][]string{}
-	var i int
-	for p, _ := range index {
-		batch[i/1000] = append(batch[i/1000], path.Join(fullDirPath, p))
-		i++
-	}
-
-	mac := auth.New(accessKey, secretKey)
-	bucketManager := storage.NewBucketManager(mac, nil)
-	for _, keys := range batch {
-		deleteOps := make([]string, 0, len(keys))
-		for _, key := range keys {
-			deleteOps = append(deleteOps, storage.URIDelete(bucket, key))
-		}
-		var rets []storage.BatchOpRet
-		rets, err = bucketManager.Batch(deleteOps)
-		if nil != err {
-			if _, ok := err.(*storage.ErrorInfo); ok {
-				for _, ret := range rets {
-					logging.LogErrorf("batch remove ret code [%d]: %s", ret.Code, ret.Data.Error)
-				}
-			} else {
-				logging.LogErrorf("batch remove failed: %s", err)
-			}
-			return
-		}
-	}
-	return
-}
-
 func (qiniu *Qiniu) repoIndex(repoDir, id string) (ret *entity.Index, err error) {
 	indexPath := path.Join(repoDir, "indexes", id)
 	info, err := qiniu.statFile(indexPath)
@@ -458,7 +334,7 @@ func (qiniu *Qiniu) repoIndex(repoDir, id string) (ret *entity.Index, err error)
 		return
 	}
 
-	data, err := qiniu.getFile(indexPath)
+	data, err := qiniu.DownloadObject(indexPath)
 	if nil != err {
 		return
 	}
@@ -490,7 +366,7 @@ func (qiniu *Qiniu) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, er
 			return nil, listErr
 		}
 		for _, entry := range entries {
-			data, getErr := qiniu.getFile(entry.Key)
+			data, getErr := qiniu.DownloadObject(entry.Key)
 			if nil != getErr {
 				err = getErr
 				return
@@ -520,62 +396,25 @@ func (qiniu *Qiniu) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, er
 	return
 }
 
-func (qiniu *Qiniu) listRepos(userId string) (ret []*Repo, err error) {
+func (qiniu *Qiniu) listRepos() (ret []*Repo, err error) {
 	accessKey := qiniu.Conf.AccessKey
 	secretKey := qiniu.Conf.SecretKey
-	bucket := qiniu.Conf.Bucket
 
 	ret = []*Repo{}
 	mac := auth.New(accessKey, secretKey)
 	bucketManager := storage.NewBucketManager(mac, nil)
 
-	limit := 32
-	prefix := path.Join("siyuan", userId, "repo") + "/"
-	delimiter := "/"
-	marker := ""
-	for {
-		_, commonPrefixes, nextMarker, hashNext, listErr := bucketManager.ListFiles(bucket, prefix, delimiter, marker, limit)
-		if nil != listErr {
-			logging.LogErrorf("list failed: %s", listErr)
-			return nil, listErr
-		}
-		for _, repo := range commonPrefixes {
-			latestID, getErr := qiniu.repoLatest(repo)
-			if nil != getErr {
-				return nil, getErr
-			}
-			var size int64
-			var updated string
-			if "" != latestID {
-				var latest *entity.Index
-				latest, getErr = qiniu.repoIndex(repo, latestID)
-				if nil != getErr {
-					return nil, getErr
-				}
-				if nil == latest {
-					continue
-				}
-				size = latest.Size
-				updated = time.UnixMilli(latest.Created).Format("2006-01-02 15:04:05")
-			} else {
-				info, statErr := qiniu.statFile(path.Join(repo, ".dejavu"))
-				if nil != statErr {
-					updated = time.Now().Format("2006-01-02 15:04:05")
-				} else {
-					updated = storage.ParsePutTime(info.PutTime).Format("2006-01-02 15:04:05")
-				}
-			}
+	bucketNames, err := bucketManager.Buckets(true)
+	if nil != err {
+		return
+	}
 
-			ret = append(ret, &Repo{
-				Name:    path.Base(repo),
-				Size:    size,
-				Updated: updated,
-			})
-		}
-		if !hashNext {
-			break
-		}
-		marker = nextMarker
+	ret = []*Repo{}
+	for _, bucketName := range bucketNames {
+		ret = append(ret, &Repo{
+			Name: bucketName,
+			Size: 0,
+		})
 	}
 	return
 }
@@ -594,27 +433,12 @@ func (qiniu *Qiniu) repoLatest(repoDir string) (id string, err error) {
 		return
 	}
 
-	data, err := qiniu.getFile(latestPath)
+	data, err := qiniu.DownloadObject(latestPath)
 	if nil != err {
 		return
 	}
 	id = string(data)
 	return
-}
-
-func (qiniu *Qiniu) getFile(key string) (ret []byte, err error) {
-	endpoint := qiniu.Conf.Endpoint
-	url := endpoint + key
-
-	resp, err := httpclient.NewCloudFileRequest15s().Get(url)
-	if nil != err {
-		logging.LogErrorf("get file [%s] failed, err: %s", key, err)
-		return
-	}
-	if 200 != resp.StatusCode {
-		return nil, fmt.Errorf("get file failed: %d", resp.StatusCode)
-	}
-	return resp.ToBytes()
 }
 
 func (qiniu *Qiniu) statFile(key string) (info storage.FileInfo, err error) {
@@ -704,89 +528,6 @@ func (qiniu *Qiniu) getNotFound(keys []string) (ret []string, err error) {
 		for _, index := range indexes {
 			ret = append(ret, keys[i*1000+index])
 		}
-	}
-	return
-}
-
-func (qiniu *Qiniu) getIndex(fullDirPath string) (ret map[string]Index, err error) {
-	indexPath := path.Join(fullDirPath, "index.json")
-	data, err := qiniu.getFile(indexPath)
-	if nil != err {
-		ret, err = qiniu.genIndex(fullDirPath)
-		return
-	}
-
-	if err = gulu.JSON.UnmarshalJSON(data, &ret); nil != err {
-		logging.LogWarnf("unmarshal index [%s] failed [%s], regenerate it", indexPath, err)
-		ret, err = qiniu.genIndex(fullDirPath)
-		if nil == err {
-			logging.LogInfof("regenerated index [%s]", indexPath)
-		}
-	}
-	return
-}
-
-func (qiniu *Qiniu) genIndex(fullDirPath string) (ret map[string]Index, err error) {
-	ret, err = qiniu.genIndex0(fullDirPath)
-	if nil != err {
-		return
-	}
-	if data, marshalErr := gulu.JSON.MarshalJSON(ret); nil == marshalErr {
-		if putErr := qiniu.putFileBytes(data, path.Join(fullDirPath, "index.json")); nil != putErr {
-			logging.LogErrorf("put index failed, err: %s", putErr)
-			return nil, putErr
-		}
-	}
-	return
-}
-
-func (qiniu *Qiniu) genIndex0(fullDirPath string) (ret map[string]Index, err error) {
-	accessKey := qiniu.Conf.AccessKey
-	secretKey := qiniu.Conf.SecretKey
-	bucket := qiniu.Conf.Bucket
-
-	mac := auth.New(accessKey, secretKey)
-	bucketManager := storage.NewBucketManager(mac, nil)
-
-	limit := 1000
-	prefix := fullDirPath
-	delimiter := ""
-	marker := ""
-	ret = map[string]Index{}
-	for {
-		entries, _, nextMarker, hashNext, listErr := bucketManager.ListFiles(bucket, prefix, delimiter, marker, limit)
-		if nil != listErr {
-			logging.LogErrorf("list failed: %s", listErr)
-			return nil, listErr
-		}
-		for _, entry := range entries {
-			p := entry.Key[len(fullDirPath):]
-			ret[p] = Index{Hash: entry.Hash, Size: entry.Fsize, Updated: entry.PutTime / 10000000}
-		}
-		if !hashNext {
-			break
-		}
-		marker = nextMarker
-	}
-	return
-}
-
-func (qiniu *Qiniu) putFileBytes(data []byte, key string) (err error) {
-	accessKey := qiniu.Conf.AccessKey
-	secretKey := qiniu.Conf.SecretKey
-	bucket := qiniu.Conf.Bucket
-
-	putPolicy := storage.PutPolicy{Scope: bucket + ":" + key}
-	mac := auth.New(accessKey, secretKey)
-	upToken := putPolicy.UploadToken(mac)
-
-	formUploader := storage.NewFormUploader(nil)
-	ret := storage.PutRet{}
-
-	err = formUploader.Put(context.Background(), &ret, upToken, key, bytes.NewReader(data), int64(len(data)), nil)
-	if nil != err {
-		logging.LogErrorf("put file [%s] failed: %s", key, err)
-		return
 	}
 	return
 }

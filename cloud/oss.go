@@ -343,7 +343,7 @@ func (oss *OSS) listRepoRefs(userId, repo, refPrefix string) (ret []*Ref, err er
 			})
 		}
 
-		if listObjectResult.IsTruncated {
+		if !listObjectResult.IsTruncated {
 			break
 		}
 	}
@@ -405,7 +405,7 @@ func (oss *OSS) repoLatest(repoDir string) (id string, err error) {
 	return
 }
 
-func (oss *OSS) statFile(key string) (info *ObjectInfo, err error) {
+func (oss *OSS) statFile(key string) (info *objectInfo, err error) {
 	accessKey := oss.Conf.AccessKey
 	secretKey := oss.Conf.SecretKey
 	endpoint := oss.Conf.Endpoint
@@ -430,7 +430,7 @@ func (oss *OSS) statFile(key string) (info *ObjectInfo, err error) {
 	updated := t.Format("2006-01-02 15:04:05")
 	contentLen := header.Get("Content-Length")
 	size, _ := strconv.ParseInt(contentLen, 10, 64)
-	info = &ObjectInfo{
+	info = &objectInfo{
 		Key:     key,
 		Updated: updated,
 		Size:    size,
