@@ -83,15 +83,15 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 	return
 }
 
-func (webdav *WebDAV) DownloadObject(key string) (data []byte, err error) {
-	data, err = webdav.Client.Read(path.Join(webdav.Dir, key))
+func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
+	data, err = webdav.Client.Read(path.Join(webdav.Dir, filePath))
 	err = webdav.parseErr(err)
 	return
 }
 
-func (webdav *WebDAV) RemoveObject(key string) (err error) {
-	key = path.Join(webdav.Dir, key)
-	if !strings.HasPrefix(key, path.Join(webdav.Dir, "siyuan", "repo", "refs", "tags")) { // 仅允许删除标签
+func (webdav *WebDAV) RemoveObject(filePath string) (err error) {
+	key := path.Join(webdav.Dir, filePath)
+	if !strings.HasPrefix(filePath, path.Join(webdav.Dir, "siyuan", "repo", "refs", "tags")) { // 仅允许删除标签
 		err = errors.New("invalid key")
 		return
 	}
@@ -288,6 +288,15 @@ func (webdav *WebDAV) parseErr(err error) error {
 }
 
 func (webdav *WebDAV) mkdirAll(folder string) (err error) {
+	if 1 > cache.Metrics.KeysAdded() {
+		// 预热缓存
+		infos, _ := webdav.Client.ReadDir(path.Join(webdav.Dir, "siyuan", "repo", "objects"))
+		for _, info := range infos {
+			k := "webdav.dir." + path.Join(webdav.Dir, "siyuan", "repo", "objects", info.Name())
+			cache.Set(k, true, 1)
+		}
+	}
+
 	cacheKey := "webdav.dir." + folder
 	_, ok := cache.Get(cacheKey)
 	if ok {
@@ -301,7 +310,7 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 	if nil != err {
 		err = webdav.parseErr(err)
 		if nil == err {
-			cache.Set(cacheKey, true, 0)
+			cache.Set(cacheKey, true, 1)
 			return
 		}
 
@@ -311,7 +320,7 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 	}
 	i := info.(*gowebdav.File)
 	if nil != i && i.IsDir() {
-		cache.Set(cacheKey, true, 0)
+		cache.Set(cacheKey, true, 1)
 		return
 	}
 
@@ -320,7 +329,7 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 	if nil != err {
 		logging.LogErrorf("mkdir [%s] failed: %s", folder, err)
 	} else {
-		cache.Set(cacheKey, true, 0)
+		cache.Set(cacheKey, true, 1)
 	}
 	return
 }
