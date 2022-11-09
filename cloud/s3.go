@@ -67,7 +67,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
 		return
 	}
 	defer file.Close()
-	key := path.Join("siyuan", s3.Conf.UserID, "repo", filePath)
+	key := path.Join("repo", filePath)
 	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
 		Bucket: aws.String(s3.Conf.Bucket),
 		Key:    aws.String(key),
@@ -108,10 +108,9 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 }
 
 func (s3 *S3) GetTags() (tags []*Ref, err error) {
-	userId := s3.Conf.UserID
-	tags, err = s3.listRepoRefs(userId, "tags")
+	tags, err = s3.listRepoRefs("tags")
 	if nil != err {
-		logging.LogErrorf("list repo tags for user [%s] failed: %s", userId, err)
+		logging.LogErrorf("list repo tags failed: %s", err)
 		return
 	}
 	if 1 > len(tags) {
@@ -121,18 +120,15 @@ func (s3 *S3) GetTags() (tags []*Ref, err error) {
 }
 
 func (s3 *S3) GetRefsFiles() (fileIDs []string, err error) {
-	userId := s3.Conf.UserID
-
-	refs, err := s3.listRepoRefs(userId, "")
+	refs, err := s3.listRepoRefs("")
 	if nil != err {
-		logging.LogErrorf("list repo refs for user [%s] failed: %s", userId, err)
+		logging.LogErrorf("list repo refs failed: %s", err)
 		return
 	}
 
-	repoKey := path.Join("siyuan", userId, "repo")
 	var files []string
 	for _, ref := range refs {
-		index, getErr := s3.repoIndex(repoKey, ref.ID)
+		index, getErr := s3.repoIndex(ref.ID)
 		if nil != getErr {
 			return
 		}
@@ -150,10 +146,9 @@ func (s3 *S3) GetRefsFiles() (fileIDs []string, err error) {
 }
 
 func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
-	repoKey := path.Join("siyuan", s3.Conf.UserID, "repo")
 	var keys []string
 	for _, chunk := range checkChunkIDs {
-		key := path.Join(repoKey, "objects", chunk[:2], chunk[2:])
+		key := path.Join("repo", "objects", chunk[:2], chunk[2:])
 		keys = append(keys, key)
 	}
 
@@ -169,8 +164,8 @@ func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 	return
 }
 
-func (s3 *S3) repoIndex(repoDir, id string) (ret *entity.Index, err error) {
-	indexPath := path.Join(repoDir, "indexes", id)
+func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
+	indexPath := path.Join("repo", "indexes", id)
 	info, err := s3.statFile(indexPath)
 	if nil != err {
 		if s3.isErrNotFound(err) {
@@ -195,10 +190,10 @@ func (s3 *S3) repoIndex(repoDir, id string) (ret *entity.Index, err error) {
 	return
 }
 
-func (s3 *S3) listRepoRefs(userId, refPrefix string) (ret []*Ref, err error) {
+func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	svc := s3.getService()
 
-	prefix := path.Join("siyuan", userId, "repo", "refs", refPrefix)
+	prefix := path.Join("repo", "refs", refPrefix)
 	limit := int64(32)
 	marker := ""
 	for {
@@ -222,7 +217,7 @@ func (s3 *S3) listRepoRefs(userId, refPrefix string) (ret []*Ref, err error) {
 			}
 
 			id := string(data)
-			info, statErr := s3.statFile(path.Join("siyuan", userId, "repo", "indexes", id))
+			info, statErr := s3.statFile(path.Join("repo", "indexes", id))
 			if nil != statErr {
 				err = statErr
 				return
@@ -261,28 +256,6 @@ func (s3 *S3) listRepos() (ret []*Repo, err error) {
 		})
 	}
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
-	return
-}
-
-func (s3 *S3) repoLatest(repoDir string) (id string, err error) {
-	latestPath := path.Join(repoDir, "refs", "latest")
-	info, err := s3.statFile(latestPath)
-	if nil != err {
-		if s3.isErrNotFound(err) {
-			err = nil
-		}
-		return
-	}
-	if 1 > info.Size {
-		// 不存在任何索引
-		return
-	}
-
-	data, err := s3.DownloadObject(latestPath)
-	if nil != err {
-		return
-	}
-	id = string(data)
 	return
 }
 

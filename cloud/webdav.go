@@ -68,7 +68,7 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) 
 		return
 	}
 
-	key := path.Join(webdav.Dir, "siyuan", webdav.Conf.UserID, "repo", filePath)
+	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
 	folder := path.Dir(key)
 	err = webdav.mkdirAll(folder)
 	if nil != err {
@@ -90,10 +90,8 @@ func (webdav *WebDAV) DownloadObject(key string) (data []byte, err error) {
 }
 
 func (webdav *WebDAV) RemoveObject(key string) (err error) {
-	userId := webdav.Conf.UserID
-
 	key = path.Join(webdav.Dir, key)
-	if !strings.HasPrefix(key, path.Join(webdav.Dir, "siyuan", userId, "repo", "refs", "tags")) { // 仅允许删除标签
+	if !strings.HasPrefix(key, path.Join(webdav.Dir, "siyuan", "repo", "refs", "tags")) { // 仅允许删除标签
 		err = errors.New("invalid key")
 		return
 	}
@@ -104,9 +102,7 @@ func (webdav *WebDAV) RemoveObject(key string) (err error) {
 }
 
 func (webdav *WebDAV) GetTags() (tags []*Ref, err error) {
-	userId := webdav.Conf.UserID
-
-	tags, err = webdav.listRepoRefs(userId, "tags")
+	tags, err = webdav.listRepoRefs("tags")
 	if nil != err {
 		err = webdav.parseErr(err)
 		return
@@ -118,10 +114,8 @@ func (webdav *WebDAV) GetTags() (tags []*Ref, err error) {
 }
 
 func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, err error) {
-	userId := webdav.Conf.UserID
-
-	refs, err := webdav.listRepoRefs(userId, "")
-	repoKey := path.Join(webdav.Dir, "siyuan", userId, "repo")
+	refs, err := webdav.listRepoRefs("")
+	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
 	var files []string
 	for _, ref := range refs {
 		index, getErr := webdav.repoIndex(repoKey, ref.ID)
@@ -142,9 +136,7 @@ func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, err error) {
 }
 
 func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
-	userId := webdav.Conf.UserID
-
-	repoKey := path.Join(webdav.Dir, "siyuan", userId, "repo")
+	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
 	var keys []string
 	for _, chunk := range checkChunkIDs {
 		key := path.Join(repoKey, "objects", chunk[:2], chunk[2:])
@@ -163,8 +155,8 @@ func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err 
 	return
 }
 
-func (webdav *WebDAV) listRepoRefs(userId, refPrefix string) (ret []*Ref, err error) {
-	keyPath := path.Join(webdav.Dir, "siyuan", userId, "repo", "refs", refPrefix)
+func (webdav *WebDAV) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
+	keyPath := path.Join(webdav.Dir, "siyuan", "repo", "refs", refPrefix)
 	infos, err := webdav.Client.ReadDir(keyPath)
 	if nil != err {
 		err = webdav.parseErr(err)
