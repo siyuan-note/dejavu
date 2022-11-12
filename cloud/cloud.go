@@ -38,6 +38,7 @@ type Conf struct {
 	SecretKey string // Secret Key
 	Region    string // 存储区域
 	Bucket    string // 存储空间
+	PathStyle bool   // 是否使用路径风格寻址
 
 	// WebDAV 协议所需配置
 	Username string // 用户名

@@ -294,9 +294,10 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 
 func (s3 *S3) getService() *as3.S3 {
 	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(s3.Conf.AccessKey, s3.Conf.SecretKey, ""),
-		Endpoint:    aws.String(s3.Conf.Endpoint),
-		Region:      aws.String(s3.Conf.Region),
+		Credentials:      credentials.NewStaticCredentials(s3.Conf.AccessKey, s3.Conf.SecretKey, ""),
+		Endpoint:         aws.String(s3.Conf.Endpoint),
+		Region:           aws.String(s3.Conf.Region),
+		S3ForcePathStyle: aws.Bool(s3.Conf.PathStyle),
 	}))
 	return as3.New(sess)
 }
