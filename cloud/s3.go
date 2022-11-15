@@ -18,7 +18,9 @@ package cloud
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -292,12 +294,16 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 	return
 }
 
+// S3 数据同步跳过 HTTPS 证书校验 https://github.com/siyuan-note/siyuan/issues/6592
+var s3HTTPClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
 func (s3 *S3) getService() *as3.S3 {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Credentials:      credentials.NewStaticCredentials(s3.Conf.AccessKey, s3.Conf.SecretKey, ""),
 		Endpoint:         aws.String(s3.Conf.Endpoint),
 		Region:           aws.String(s3.Conf.Region),
 		S3ForcePathStyle: aws.Bool(s3.Conf.PathStyle),
+		HTTPClient:       s3HTTPClient,
 	}))
 	return as3.New(sess)
 }
