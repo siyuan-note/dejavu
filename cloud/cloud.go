@@ -33,21 +33,35 @@ type Conf struct {
 	Endpoint string                 // 服务端点
 	Extras   map[string]interface{} // 一些可能需要的附加信息
 
-	// 对象存储协议所需配置
-	AccessKey string // Access Key
-	SecretKey string // Secret Key
-	Region    string // 存储区域
-	Bucket    string // 存储空间
-	PathStyle bool   // 是否使用路径风格寻址
+	// S3 对象存储协议所需配置
+	S3 *ConfS3
 
 	// WebDAV 协议所需配置
-	Username string // 用户名
-	Password string // 密码
+	WebDAV *ConfWebDAV
 
 	// 以下值非官方存储服务不必传入
 	Token         string // 云端接口鉴权令牌
 	AvailableSize int64  // 云端存储可用空间字节数
 	Server        string // 云端接口端点
+}
+
+// ConfS3 用于描述 S3 对象存储协议所需配置。
+type ConfS3 struct {
+	Endpoint      string // 服务端点
+	AccessKey     string // Access Key
+	SecretKey     string // Secret Key
+	Region        string // 存储区域
+	Bucket        string // 存储空间
+	PathStyle     bool   // 是否使用路径风格寻址
+	SkipTlsVerify bool   //  是否跳过 TLS 验证
+}
+
+// ConfWebDAV 用于描述 WebDAV 协议所需配置。
+type ConfWebDAV struct {
+	Endpoint      string // 服务端点
+	Username      string // 用户名
+	Password      string // 密码
+	SkipTlsVerify bool   // 是否跳过 TLS 验证
 }
 
 // Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。

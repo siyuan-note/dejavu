@@ -18,7 +18,6 @@ package cloud
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"net/http"
 	"os"
@@ -41,10 +40,11 @@ import (
 // S3 描述了 S3 协议兼容的对象存储服务实现。
 type S3 struct {
 	*BaseCloud
+	HTTPClient *http.Client
 }
 
-func NewS3(baseCloud *BaseCloud) *S3 {
-	return &S3{baseCloud}
+func NewS3(baseCloud *BaseCloud, httpClient *http.Client) *S3 {
+	return &S3{baseCloud, httpClient}
 }
 
 func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
@@ -70,7 +70,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
 	}
 	defer file.Close()
 	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
-		Bucket: aws.String(s3.Conf.Bucket),
+		Bucket: aws.String(s3.Conf.S3.Bucket),
 		Key:    aws.String(path.Join("repo", filePath)),
 		Body:   file,
 	})
@@ -82,7 +82,7 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelFn()
 	input := &as3.GetObjectInput{
-		Bucket: aws.String(s3.Conf.Bucket),
+		Bucket: aws.String(s3.Conf.S3.Bucket),
 		Key:    aws.String(path.Join("repo", filePath)),
 	}
 	resp, err := svc.GetObjectWithContext(ctx, input)
@@ -102,7 +102,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelFn()
 	_, err = svc.DeleteObjectWithContext(ctx, &as3.DeleteObjectInput{
-		Bucket: aws.String(s3.Conf.Bucket),
+		Bucket: aws.String(s3.Conf.S3.Bucket),
 		Key:    aws.String(key),
 	})
 	return
@@ -199,7 +199,7 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	marker := ""
 	for {
 		output, listErr := svc.ListObjects(&as3.ListObjectsInput{
-			Bucket:  &s3.Conf.Bucket,
+			Bucket:  &s3.Conf.S3.Bucket,
 			Prefix:  &prefix,
 			Marker:  &marker,
 			MaxKeys: &limit,
@@ -265,7 +265,7 @@ func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 	svc := s3.getService()
 
 	header, err := svc.HeadObject(&as3.HeadObjectInput{
-		Bucket: &s3.Conf.Bucket,
+		Bucket: &s3.Conf.S3.Bucket,
 		Key:    &key,
 	})
 	if nil != err {
@@ -295,16 +295,13 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 	return
 }
 
-// S3 数据同步跳过 HTTPS 证书校验 https://github.com/siyuan-note/siyuan/issues/6592
-var s3HTTPClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
-
 func (s3 *S3) getService() *as3.S3 {
 	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials:      credentials.NewStaticCredentials(s3.Conf.AccessKey, s3.Conf.SecretKey, ""),
-		Endpoint:         aws.String(s3.Conf.Endpoint),
-		Region:           aws.String(s3.Conf.Region),
-		S3ForcePathStyle: aws.Bool(s3.Conf.PathStyle),
-		HTTPClient:       s3HTTPClient,
+		Credentials:      credentials.NewStaticCredentials(s3.Conf.S3.AccessKey, s3.Conf.S3.SecretKey, ""),
+		Endpoint:         aws.String(s3.Conf.S3.Endpoint),
+		Region:           aws.String(s3.Conf.S3.Region),
+		S3ForcePathStyle: aws.Bool(s3.Conf.S3.PathStyle),
+		HTTPClient:       s3.HTTPClient,
 	}))
 	return as3.New(sess)
 }
