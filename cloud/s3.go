@@ -139,9 +139,9 @@ func (s3 *S3) GetRefsFiles() (fileIDs []string, err error) {
 
 		files = append(files, index.Files...)
 	}
-	files = gulu.Str.RemoveDuplicatedElem(files)
-	if 1 > len(files) {
-		files = []string{}
+	fileIDs = gulu.Str.RemoveDuplicatedElem(files)
+	if 1 > len(fileIDs) {
+		fileIDs = []string{}
 	}
 	return
 }
@@ -178,7 +178,7 @@ func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 		return
 	}
 
-	data, err := s3.DownloadObject(indexPath)
+	data, err := s3.DownloadObject(path.Join("indexes", id))
 	if nil != err {
 		return
 	}
@@ -211,7 +211,8 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 		marker = *output.Marker
 
 		for _, entry := range output.Contents {
-			data, getErr := s3.DownloadObject(*entry.Key)
+			filePath := strings.TrimPrefix(*entry.Key, "repo/")
+			data, getErr := s3.DownloadObject(filePath)
 			if nil != getErr {
 				err = getErr
 				return

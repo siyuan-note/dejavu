@@ -128,9 +128,9 @@ func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, err error) {
 
 		files = append(files, index.Files...)
 	}
-	files = gulu.Str.RemoveDuplicatedElem(files)
-	if 1 > len(files) {
-		files = []string{}
+	fileIDs = gulu.Str.RemoveDuplicatedElem(files)
+	if 1 > len(fileIDs) {
+		fileIDs = []string{}
 	}
 	return
 }
