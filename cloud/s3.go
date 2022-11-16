@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/88250/gulu"
@@ -33,6 +34,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	as3 "github.com/aws/aws-sdk-go/service/s3"
+	"github.com/panjf2000/ants/v2"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/logging"
 )
@@ -103,7 +105,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 	defer cancelFn()
 	_, err = svc.DeleteObjectWithContext(ctx, &as3.DeleteObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(path.Join("repo", key)),
 	})
 	return
 }
@@ -286,12 +288,25 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 	if 1 > len(keys) {
 		return
 	}
-	for _, key := range keys {
+	waitGroup := &sync.WaitGroup{}
+	p, _ := ants.NewPoolWithFunc(8, func(arg interface{}) {
+		defer waitGroup.Done()
+		key := arg.(string)
 		info, statErr := s3.statFile(key)
 		if nil == info || nil != statErr {
 			ret = append(ret, key)
 		}
+	})
+
+	for _, key := range keys {
+		waitGroup.Add(1)
+		err = p.Invoke(key)
+		if nil != err {
+			return
+		}
 	}
+	waitGroup.Wait()
+	p.Release()
 	return
 }
 
