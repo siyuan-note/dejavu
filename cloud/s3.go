@@ -18,6 +18,7 @@ package cloud
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -100,12 +101,18 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 }
 
 func (s3 *S3) RemoveObject(key string) (err error) {
+	key = path.Join("repo", key)
+	if !strings.HasPrefix(key, path.Join("repo", "refs", "tags")) { // 仅允许删除标签
+		err = errors.New("invalid key")
+		return
+	}
+
 	svc := s3.getService()
 	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelFn()
 	_, err = svc.DeleteObjectWithContext(ctx, &as3.DeleteObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(path.Join("repo", key)),
+		Key:    aws.String(key),
 	})
 	return
 }

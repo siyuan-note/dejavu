@@ -90,8 +90,8 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 }
 
 func (webdav *WebDAV) RemoveObject(filePath string) (err error) {
-	key := path.Join(webdav.Dir, filePath)
-	if !strings.HasPrefix(filePath, path.Join(webdav.Dir, "siyuan", "repo", "refs", "tags")) { // 仅允许删除标签
+	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
+	if !strings.HasPrefix(key, path.Join(webdav.Dir, "siyuan", "repo", "refs", "tags")) { // 仅允许删除标签
 		err = errors.New("invalid key")
 		return
 	}
