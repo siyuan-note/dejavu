@@ -13,7 +13,6 @@
 * Data compression
 * AES Encrypted
 * Cloud sync and backup
-* Load assets on demand
 
 ⚠️ Attention
 
