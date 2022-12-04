@@ -64,7 +64,7 @@ func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
 
 func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 	absFilePath := filepath.Join(s3.Conf.RepoPath, filePath)
 	file, err := os.Open(absFilePath)
@@ -82,7 +82,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
 
 func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 	input := &as3.GetObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
@@ -108,7 +108,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 	}
 
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 	_, err = svc.DeleteObjectWithContext(ctx, &as3.DeleteObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
