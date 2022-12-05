@@ -42,7 +42,8 @@ type SiYuan struct {
 
 func NewSiYuan(baseCloud *BaseCloud) *SiYuan {
 	clientInit.Do(func() {
-		storage.DefaultClient = client.Client{Client: httpclient.GetCloudFileClient2Min()}
+		client.DefaultClient = client.Client{Client: httpclient.GetCloudFileClient2Min()}
+		storage.DefaultClient = client.DefaultClient
 	})
 	return &SiYuan{BaseCloud: baseCloud}
 }
