@@ -33,12 +33,17 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
+var clientInit = sync.Once{}
+
 // SiYuan 描述了思源笔记官方云端存储服务实现。
 type SiYuan struct {
 	*BaseCloud
 }
 
 func NewSiYuan(baseCloud *BaseCloud) *SiYuan {
+	clientInit.Do(func() {
+		storage.DefaultClient = client.Client{Client: httpclient.GetCloudFileClient2Min()}
+	})
 	return &SiYuan{BaseCloud: baseCloud}
 }
 
@@ -57,6 +62,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 	}
 
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
@@ -79,7 +85,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 
 func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
 	key := path.Join("siyuan", siyuan.Conf.UserID, "repo", siyuan.Conf.Dir, filePath)
-	resp, err := httpclient.NewCloudFileRequest15s().Get(siyuan.Endpoint + key)
+	resp, err := httpclient.NewCloudFileRequest2m().Get(siyuan.Endpoint + key)
 	if nil != err {
 		err = fmt.Errorf("download object [%s] failed: %s", key, err)
 		return
@@ -113,7 +119,7 @@ func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 
 	key := path.Join("siyuan", userId, "repo", dir, filePath)
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest()
+	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token, "key": key}).
@@ -145,7 +151,7 @@ func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
 	server := siyuan.Conf.Server
 
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudRequest()
+	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token}).
@@ -194,7 +200,7 @@ func (siyuan *SiYuan) GetRefsFiles() (fileIDs []string, err error) {
 	server := siyuan.Conf.Server
 
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudFileRequest15s()
+	request := httpclient.NewCloudFileRequest2m()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token}).
@@ -275,7 +281,7 @@ func (siyuan *SiYuan) GetStat() (stat *Stat, err error) {
 	server := siyuan.Conf.Server
 
 	result := gulu.Ret.NewResult()
-	request := httpclient.NewCloudFileRequest15s()
+	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token}).
@@ -316,7 +322,7 @@ func (siyuan *SiYuan) AddTraffic(uploadBytes, downloadBytes int64) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
-	request := httpclient.NewCloudRequest()
+	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetBody(map[string]interface{}{"token": token, "uploadBytes": uploadBytes, "downloadBytes": downloadBytes}).
 		Post(server + "/apis/siyuan/dejavu/addTraffic")
@@ -336,7 +342,7 @@ func (siyuan *SiYuan) RemoveRepo(name string) (err error) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
-	request := httpclient.NewCloudFileRequest15s()
+	request := httpclient.NewCloudFileRequest2m()
 	resp, err := request.
 		SetBody(map[string]string{"name": name, "token": token}).
 		Post(server + "/apis/siyuan/dejavu/removeRepo")
@@ -361,7 +367,7 @@ func (siyuan *SiYuan) CreateRepo(name string) (err error) {
 	server := siyuan.Conf.Server
 
 	result := map[string]interface{}{}
-	request := httpclient.NewCloudRequest()
+	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetResult(&result).
 		SetBody(map[string]string{"name": name, "token": token}).
@@ -394,7 +400,7 @@ func (siyuan *SiYuan) GetRepos() (repos []*Repo, size int64, err error) {
 	userId := siyuan.Conf.UserID
 
 	result := map[string]interface{}{}
-	request := httpclient.NewCloudRequest()
+	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetBody(map[string]interface{}{"token": token}).
 		SetResult(&result).
@@ -477,7 +483,7 @@ func (siyuan *SiYuan) requestScopeKeyUploadToken(key string) (keyToken, scopeTok
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 	var result map[string]interface{}
-	req := httpclient.NewCloudRequest().SetResult(&result)
+	req := httpclient.NewCloudRequest30s().SetResult(&result)
 	req.SetBody(map[string]interface{}{
 		"token":     token,
 		"key":       key,

@@ -15,7 +15,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20220916025349-3ac6e75522da
 	github.com/siyuan-note/filelock v0.0.0-20221117095924-e1947438a35e
-	github.com/siyuan-note/httpclient v0.0.0-20221204023746-16d8a3bf1d66
+	github.com/siyuan-note/httpclient v0.0.0-20221205141252-e46668b2ddf7
 	github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a
 	github.com/studio-b12/gowebdav v0.0.0-20221109171924-60ec5ad56012
 )
@@ -30,7 +30,7 @@ require (
 	github.com/google/pprof v0.0.0-20221203041831-ce31453925ec // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/imroc/req/v3 v3.26.3 // indirect
+	github.com/imroc/req/v3 v3.26.4 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/lucas-clemente/quic-go v0.31.0 // indirect
 	github.com/marten-seemann/qpack v0.3.0 // indirect
@@ -43,11 +43,11 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.3.0 // indirect
-	golang.org/x/exp v0.0.0-20221126150942-6ab00d035af9 // indirect
+	golang.org/x/exp v0.0.0-20221204150635-6dcec336b2bb // indirect
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/net v0.2.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.2.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/tools v0.3.0 // indirect
 )
