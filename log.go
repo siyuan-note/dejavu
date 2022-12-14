@@ -172,14 +172,20 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 }
 
 func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
+	files, err := repo.getFiles(index.Files)
+	if nil != err {
+		return
+	}
+
 	ret = &Log{
 		ID:       index.ID,
 		Parent:   index.Parent,
 		Memo:     index.Memo,
 		Created:  index.Created,
 		HCreated: time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
-		Size:     index.Size,
+		Files:    files,
 		Count:    index.Count,
+		Size:     index.Size,
 		HSize:    humanize.Bytes(uint64(index.Size)),
 	}
 	return
