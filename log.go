@@ -65,7 +65,7 @@ func (repo *Repo) GetCloudRepoTagLogs(context map[string]interface{}) (ret []*Lo
 		}
 
 		var log *Log
-		log, err = repo.getLog(index)
+		log, err = repo.getLog(index, false)
 		if nil != err {
 			return
 		}
@@ -110,7 +110,7 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 		}
 
 		var log *Log
-		log, err = repo.getLog(index)
+		log, err = repo.getLog(index, true)
 		if nil != err {
 			return
 		}
@@ -162,7 +162,7 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 
 	for _, idx := range indexes {
 		var log *Log
-		log, err = repo.getLog(idx)
+		log, err = repo.getLog(idx, true)
 		if nil != err {
 			return
 		}
@@ -171,12 +171,11 @@ func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, total
 	return
 }
 
-func (repo *Repo) getLog(index *entity.Index) (ret *Log, err error) {
-	files, err := repo.getFiles(index.Files)
-	if nil != err {
-		return
+func (repo *Repo) getLog(index *entity.Index, fetchFiles bool) (ret *Log, err error) {
+	var files []*entity.File
+	if fetchFiles {
+		files, _ = repo.getFiles(index.Files)
 	}
-
 	ret = &Log{
 		ID:       index.ID,
 		Parent:   index.Parent,
