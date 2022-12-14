@@ -690,18 +690,6 @@ func (repo *Repo) existDataFile(files []*entity.File, file *entity.File) bool {
 	return false
 }
 
-func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
-	for _, fileID := range fileIDs {
-		file, getErr := repo.store.GetFile(fileID)
-		if nil != getErr {
-			err = getErr
-			return
-		}
-		ret = append(ret, file)
-	}
-	return
-}
-
 func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, ref)
 

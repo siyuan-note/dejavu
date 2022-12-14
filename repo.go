@@ -138,15 +138,11 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 
 	defer gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
 
-	var latestFiles []*entity.File
-	for _, f := range index.Files {
-		var file *entity.File
-		file, err = repo.store.GetFile(f)
-		if nil != err {
-			return
-		}
-		latestFiles = append(latestFiles, file)
+	latestFiles, err := repo.getFiles(index.Files)
+	if nil != err {
+		return
 	}
+
 	upserts, removes = repo.DiffUpsertRemove(latestFiles, files)
 	if 1 > len(upserts) && 1 > len(removes) {
 		return
@@ -245,6 +241,12 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 	defer lock.Unlock()
 
 	ret, err = repo.index(memo, context)
+	return
+}
+
+// GetFiles 返回快照索引 index 中的文件列表。
+func (repo *Repo) GetFiles(index *entity.Index) (ret []*entity.File, err error) {
+	ret, err = repo.getFiles(index.Files)
 	return
 }
 
@@ -490,6 +492,18 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 	}
 	if closeErr := reader.Close(); nil != closeErr {
 		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
+	}
+	return
+}
+
+func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
+	for _, fileID := range fileIDs {
+		file, getErr := repo.store.GetFile(fileID)
+		if nil != getErr {
+			err = getErr
+			return
+		}
+		ret = append(ret, file)
 	}
 	return
 }
