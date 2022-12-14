@@ -75,10 +75,18 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 	if nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}
+
+	indexCache.Set(index.ID, index, int64(len(data)))
 	return
 }
 
 func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
+	cached, _ := indexCache.Get(id)
+	if nil != cached {
+		ret = cached.(*entity.Index)
+		return
+	}
+
 	_, file := store.IndexAbsPath(id)
 	var data []byte
 	data, err = os.ReadFile(file)
@@ -92,6 +100,11 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 		ret = &entity.Index{}
 		err = gulu.JSON.UnmarshalJSON(data, ret)
 	}
+	if nil != err {
+		return
+	}
+
+	indexCache.Set(id, ret, int64(len(data)))
 	return
 }
 
@@ -229,5 +242,11 @@ func (store *Store) decodeData(data []byte) (ret []byte, err error) {
 var fileCache, _ = ristretto.NewCache(&ristretto.Config{
 	NumCounters: 200000,
 	MaxCost:     1000 * 1000 * 32, // 1 个文件按 300 字节计算，32MB 大概可以缓存 10W 个文件实例
+	BufferItems: 64,
+})
+
+var indexCache, _ = ristretto.NewCache(&ristretto.Config{
+	NumCounters: 200000,
+	MaxCost:     1000 * 1000 * 128, // 1 个文件按 300K 字节（大约 1.5W 个文件）计算，128MB 大概可以缓存 400 个索引
 	BufferItems: 64,
 })
