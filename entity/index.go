@@ -16,6 +16,7 @@
 
 package entity
 
+// Index 描述了快照索引。
 type Index struct {
 	ID      string   `json:"id"`      // Hash
 	Parent  string   `json:"parent"`  // 指向上一个索引

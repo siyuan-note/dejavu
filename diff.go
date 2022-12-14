@@ -52,3 +52,45 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 	}
 	return
 }
+
+// DiffIndex 返回索引 left 比索引 right 新增、更新和删除的文件列表。
+func (repo *Repo) DiffIndex(left, right *entity.Index) (adds, updates, removes []*entity.File, err error) {
+	leftFiles, err := repo.getFiles(left.Files)
+	if nil != err {
+		return
+	}
+	rightFiles, err := repo.getFiles(right.Files)
+	if nil != err {
+		return
+	}
+
+	l := map[string]*entity.File{}
+	r := map[string]*entity.File{}
+	for _, f := range leftFiles {
+		l[f.Path] = f
+	}
+	for _, f := range rightFiles {
+		r[f.Path] = f
+	}
+
+	for lPath, lFile := range l {
+		rFile := r[lPath]
+		if nil == rFile {
+			adds = append(adds, l[lPath])
+			continue
+		}
+		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
+			updates = append(updates, l[lPath])
+			continue
+		}
+	}
+
+	for rPath := range r {
+		lFile := l[rPath]
+		if nil == lFile {
+			removes = append(removes, r[rPath])
+			continue
+		}
+	}
+	return
+}

@@ -23,6 +23,7 @@ import (
 	"github.com/siyuan-note/dejavu/util"
 )
 
+// File 描述了文件。
 type File struct {
 	ID      string   `json:"id"`      // Hash
 	Path    string   `json:"path"`    // 文件路径
