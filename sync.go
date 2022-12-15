@@ -651,14 +651,9 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 }
 
 func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context map[string]interface{}) (err error) {
-	var data []byte
-	for _, c := range file.Chunks {
-		chunk, getErr := repo.store.GetChunk(c)
-		if nil != getErr {
-			err = getErr
-			return
-		}
-		data = append(data, chunk.Data...)
+	data, err := repo.openFile(file)
+	if nil != err {
+		return
 	}
 
 	absPath := filepath.Join(checkoutDir, file.Path)

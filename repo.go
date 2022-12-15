@@ -162,17 +162,12 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 			return
 		}
 
-		var data []byte
-		for _, c := range file.Chunks {
-			var chunk *entity.Chunk
-			chunk, getErr = repo.store.GetChunk(c)
-			if nil != getErr {
-				errLock.Lock()
-				errs = append(errs, getErr)
-				errLock.Unlock()
-				return
-			}
-			data = append(data, chunk.Data...)
+		data, openErr := repo.openFile(file)
+		if nil != openErr {
+			errLock.Lock()
+			errs = append(errs, getErr)
+			errLock.Unlock()
+			return
 		}
 
 		absPath := filepath.Join(repo.DataPath, file.Path)
@@ -247,6 +242,26 @@ func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entit
 // GetFiles 返回快照索引 index 中的文件列表。
 func (repo *Repo) GetFiles(index *entity.Index) (ret []*entity.File, err error) {
 	ret, err = repo.getFiles(index.Files)
+	return
+}
+
+func (repo *Repo) GetFile(fileID string) (ret *entity.File, err error) {
+	ret, err = repo.store.GetFile(fileID)
+	return
+}
+
+func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
+	ret, err = repo.openFile(file)
+	return
+}
+
+func (repo *Repo) OpenFileByID(fileID string) (ret []byte, err error) {
+	f, err := repo.store.GetFile(fileID)
+	if nil != err {
+		return
+	}
+
+	ret, err = repo.openFile(f)
 	return
 }
 
@@ -504,6 +519,18 @@ func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 			return
 		}
 		ret = append(ret, file)
+	}
+	return
+}
+
+func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
+	for _, c := range file.Chunks {
+		var chunk *entity.Chunk
+		chunk, err = repo.store.GetChunk(c)
+		if nil != err {
+			return
+		}
+		ret = append(ret, chunk.Data...)
 	}
 	return
 }
