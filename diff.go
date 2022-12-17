@@ -53,13 +53,29 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 	return
 }
 
+type LeftRightDiff struct {
+	AddsLeft     []*entity.File
+	UpdatesLeft  []*entity.File
+	UpdatesRight []*entity.File
+	RemovesRight []*entity.File
+}
+
 // DiffIndex 返回索引 left 比索引 right 新增、更新和删除的文件列表。
-func (repo *Repo) DiffIndex(left, right *entity.Index) (adds, updates, removes []*entity.File, err error) {
-	leftFiles, err := repo.getFiles(left.Files)
+func (repo *Repo) DiffIndex(leftIndexID, rightIndexID string) (ret *LeftRightDiff, err error) {
+	leftIndex, err := repo.GetIndex(leftIndexID)
 	if nil != err {
 		return
 	}
-	rightFiles, err := repo.getFiles(right.Files)
+	rightIndex, err := repo.GetIndex(rightIndexID)
+	if nil != err {
+		return
+	}
+
+	leftFiles, err := repo.getFiles(leftIndex.Files)
+	if nil != err {
+		return
+	}
+	rightFiles, err := repo.getFiles(rightIndex.Files)
 	if nil != err {
 		return
 	}
@@ -73,14 +89,17 @@ func (repo *Repo) DiffIndex(left, right *entity.Index) (adds, updates, removes [
 		r[f.Path] = f
 	}
 
+	ret = &LeftRightDiff{}
+
 	for lPath, lFile := range l {
 		rFile := r[lPath]
 		if nil == rFile {
-			adds = append(adds, l[lPath])
+			ret.AddsLeft = append(ret.AddsLeft, l[lPath])
 			continue
 		}
 		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
-			updates = append(updates, l[lPath])
+			ret.UpdatesLeft = append(ret.UpdatesLeft, l[lPath])
+			ret.UpdatesRight = append(ret.UpdatesRight, r[lPath])
 			continue
 		}
 	}
@@ -88,7 +107,7 @@ func (repo *Repo) DiffIndex(left, right *entity.Index) (adds, updates, removes [
 	for rPath := range r {
 		lFile := l[rPath]
 		if nil == lFile {
-			removes = append(removes, r[rPath])
+			ret.RemovesRight = append(ret.RemovesRight, r[rPath])
 			continue
 		}
 	}
