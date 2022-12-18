@@ -67,12 +67,17 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
-		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
-			// file exists
-			//logging.LogWarnf("upload object [%s] exists: %s", absFilePath, err)
+		if strings.Contains(err.Error(), "file exists") {
 			err = nil
 			return
 		}
+
+		if e, ok := err.(*client.ErrorInfo); ok && 614 == e.Code {
+			// file exists
+			err = nil
+			return
+		}
+
 		time.Sleep(3 * time.Second)
 		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 		if nil != err {
