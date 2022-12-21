@@ -157,8 +157,15 @@ func (repo *Repo) sync0(context map[string]interface{},
 	latestSync := repo.latestSync()
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
+	// 组装还原云端最新文件列表
+	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
+	if nil != err {
+		logging.LogErrorf("get cloud latest files failed: %s", err)
+		return
+	}
+
 	// 从文件列表中得到去重后的分块列表
-	cloudChunkIDs := repo.getChunks(fetchedFiles)
+	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
 
 	// 计算本地缺失的分块
 	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
@@ -200,31 +207,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 	trafficStat.UploadBytes += length
 
 	// 从云端下载缺失分块并入库
-	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
-	if nil != err {
-		logging.LogErrorf("download cloud chunks put failed: %s", err)
-		return
-	}
-	trafficStat.DownloadBytes += length
-	trafficStat.DownloadChunkCount = len(fetchChunkIDs)
-
-	// 组装还原云端最新文件列表
-	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
-	if nil != err {
-		logging.LogErrorf("get cloud latest files failed: %s", err)
-		return
-	}
-
-	// 校验本地缺失的分块，如果不全则下载补全
-	//
-	// 因为前面通过 fetchedFiles 下载文件成功后下载分块可能失败，导致文件对象并不完整，后续再次重试时 fetchedFiles 就不会再有待获取文件
-	// 所以这里需要根据还原出来的云端最新文件列表中再次校验缺失的块并下载补全
-	cloudChunkIDs = repo.getChunks(cloudLatestFiles)
-	fetchChunkIDs, err = repo.localNotFoundChunks(cloudChunkIDs)
-	if nil != err {
-		logging.LogErrorf("get local not found chunks failed: %s", err)
-		return
-	}
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud chunks put failed: %s", err)
