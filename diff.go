@@ -54,6 +54,8 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 }
 
 type LeftRightDiff struct {
+	LeftIndex    *entity.Index
+	RightIndex   *entity.Index
 	AddsLeft     []*entity.File
 	UpdatesLeft  []*entity.File
 	UpdatesRight []*entity.File
@@ -89,7 +91,10 @@ func (repo *Repo) DiffIndex(leftIndexID, rightIndexID string) (ret *LeftRightDif
 		r[f.Path] = f
 	}
 
-	ret = &LeftRightDiff{}
+	ret = &LeftRightDiff{
+		LeftIndex:  leftIndex,
+		RightIndex: rightIndex,
+	}
 
 	for lPath, lFile := range l {
 		rFile := r[lPath]
