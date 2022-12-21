@@ -65,7 +65,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
 
 	ret := storage.PutRet{}
-	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
+	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, &storage.PutExtra{TryTimes: 1})
 	if nil != err {
 		if strings.Contains(err.Error(), "file exists") {
 			err = nil
@@ -78,12 +78,8 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 			return
 		}
 
-		time.Sleep(3 * time.Second)
-		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
-		if nil != err {
-			logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
-			return
-		}
+		logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
+		return
 	}
 	//logging.LogInfof("uploaded object [%s]", key)
 	return
