@@ -62,7 +62,8 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 		uploadToken = scopeUploadToken
 	}
 
-	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	region, _ := storage.GetRegionByID(storage.RIDHuadong)
+	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true, Region: &region, UseCdnDomains: true})
 
 	ret := storage.PutRet{}
 	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, &storage.PutExtra{TryTimes: 1})
