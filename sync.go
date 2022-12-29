@@ -912,10 +912,18 @@ func (repo *Repo) localUpsertFiles(localIndexes []*entity.Index, cloudFileIDs []
 	}
 
 	for fileID := range files {
-		var file *entity.File
-		file, err = repo.store.GetFile(fileID)
-		if nil != err {
-			return
+		file, getErr := repo.store.GetFile(fileID)
+		if nil != getErr {
+			if os.IsNotExist(getErr) {
+				continue
+			}
+
+			logging.LogWarnf("get file [%s] failed: %s", fileID, getErr)
+			continue
+		}
+		if nil == file {
+			logging.LogWarnf("file [%s] not found", fileID)
+			continue
 		}
 
 		ret = append(ret, file)

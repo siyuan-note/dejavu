@@ -309,11 +309,9 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
 			if nil != err {
-				if nil != err {
-					logging.LogErrorf("get file [%s] failed: %s", f, err)
-					err = ErrNotFoundObject
-					return
-				}
+				logging.LogErrorf("get file [%s] failed: %s", f, err)
+				err = ErrNotFoundObject
+				return
 			}
 			latestFiles = append(latestFiles, file)
 		}
@@ -323,29 +321,6 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		ret = latest
 		return
 	}
-
-	waitGroup := &sync.WaitGroup{}
-	var errs []error
-	errLock := sync.Mutex{}
-	p, _ := ants.NewPoolWithFunc(2, func(arg interface{}) {
-		defer waitGroup.Done()
-		var putErr error
-		switch obj := arg.(type) {
-		case *entity.Chunk:
-			putErr = repo.store.PutChunk(obj)
-		case *entity.File:
-			eventbus.Publish(eventbus.EvtIndexUpsertFile, context, obj.Path)
-			putErr = repo.store.PutFile(obj)
-		case *entity.Index:
-			putErr = repo.store.PutIndex(obj)
-		}
-
-		if nil != putErr {
-			errLock.Lock()
-			errs = append(errs, putErr)
-			errLock.Unlock()
-		}
-	})
 
 	if init {
 		ret = latest
@@ -369,30 +344,17 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		file.Chunks = hashes
 
 		for _, chunk := range chunks {
-			waitGroup.Add(1)
-			err = p.Invoke(chunk)
+			err = repo.store.PutChunk(chunk)
 			if nil != err {
 				return
 			}
 		}
 
-		waitGroup.Add(1)
-		err = p.Invoke(file)
+		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, file.Path)
+		err = repo.store.PutFile(file)
 		if nil != err {
 			return
 		}
-		if 0 < len(errs) {
-			err = errs[0]
-			return
-		}
-	}
-
-	waitGroup.Wait()
-	p.Release()
-
-	if 0 < len(errs) {
-		err = errs[0]
-		return
 	}
 
 	for _, file := range files {

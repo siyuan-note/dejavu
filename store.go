@@ -155,6 +155,7 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 	ret = &entity.File{}
 	err = gulu.JSON.UnmarshalJSON(data, ret)
 	if nil != err {
+		ret = nil
 		return
 	}
 
