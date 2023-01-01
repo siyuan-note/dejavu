@@ -372,7 +372,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	return
 }
 
-func (repo *Repo) builtInIgnore(info os.FileInfo, path string) (ignored bool, err error) {
+func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool, err error) {
 	name := info.Name()
 	if info.IsDir() {
 		if strings.HasPrefix(name, ".") {
@@ -382,11 +382,18 @@ func (repo *Repo) builtInIgnore(info os.FileInfo, path string) (ignored bool, er
 			return true, filepath.SkipDir
 		}
 		return true, nil
-	} else if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".tmp") {
-		return true, nil
+	} else {
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".tmp") {
+			return true, nil
+		}
+
+		if strings.HasSuffix(filepath.ToSlash(absPath), "data/storage/local.json") {
+			// localStorage 不再支持同步 https://github.com/siyuan-note/siyuan/issues/6964
+			return true, nil
+		}
 	}
 
-	if gulu.File.IsHidden(path) {
+	if gulu.File.IsHidden(absPath) {
 		return true, nil
 	}
 
