@@ -66,9 +66,14 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true, Region: &region, UseCdnDomains: true})
 
 	ret := storage.PutRet{}
-	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, &storage.PutExtra{TryTimes: 1})
+	err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
 	if nil != err {
-		logging.LogErrorf("upload object [%s] failed: %+v", absFilePath, err)
+		if msg := fmt.Sprintf("%s", err); strings.Contains(msg, "file exists") {
+			err = nil
+			return
+		}
+
+		logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
 		if e, ok := err.(*client.ErrorInfo); ok {
 			if 614 == e.Code {
 				// file exists
@@ -79,16 +84,36 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 				err = nil
 				return
 			}
+
 			logging.LogErrorf("error detail: %s", e.ErrorDetail())
-			return
 		}
 
-		if msg := fmt.Sprintf("%s", err); strings.Contains(msg, "file exists") {
-			err = nil
-			return
+		time.Sleep(1 * time.Second)
+		err = formUploader.PutFile(context.Background(), &ret, uploadToken, key, absFilePath, nil)
+		if nil != err {
+			if msg := fmt.Sprintf("%s", err); strings.Contains(msg, "file exists") {
+				err = nil
+				return
+			}
+
+			logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
+			if e, ok := err.(*client.ErrorInfo); ok {
+				if 614 == e.Code {
+					// file exists
+					err = nil
+					return
+				}
+				if strings.Contains(e.Err, "file exists") {
+					err = nil
+					return
+				}
+
+				logging.LogErrorf("error detail: %s", e.ErrorDetail())
+			}
 		}
 		return
 	}
+
 	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
