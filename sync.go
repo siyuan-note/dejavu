@@ -268,6 +268,10 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 
 		if !repo.existDataFile(localRemoves, cloudUpsert) {
+			if strings.HasSuffix(cloudUpsert.Path, ".tmp") {
+				// 数据仓库不迁出 `.tmp` 临时文件 https://github.com/siyuan-note/siyuan/issues/7087
+				continue
+			}
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
 		}
 	}
