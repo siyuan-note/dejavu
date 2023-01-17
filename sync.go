@@ -270,6 +270,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		if !repo.existDataFile(localRemoves, cloudUpsert) {
 			if strings.HasSuffix(cloudUpsert.Path, ".tmp") {
 				// 数据仓库不迁出 `.tmp` 临时文件 https://github.com/siyuan-note/siyuan/issues/7087
+				logging.LogWarnf("ignored tmp file [%s]", cloudUpsert.Path)
 				continue
 			}
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
@@ -650,6 +651,12 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context ma
 	}
 
 	if err = filelock.WriteFile(absPath, data); nil != err {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "file name too long") {
+			logging.LogWarnf("ignored checkout file [%s] caused by file name too long", file.Path)
+			// 数据仓库迁出时忽略路径太长导致的迁出失败 https://github.com/siyuan-note/siyuan/issues/7097
+			return nil
+		}
 		return
 	}
 
