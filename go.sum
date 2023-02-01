@@ -211,8 +211,8 @@ github.com/siyuan-note/eventbus v0.0.0-20230126092943-c6bf51e65ae2 h1:njoj0265FO
 github.com/siyuan-note/eventbus v0.0.0-20230126092943-c6bf51e65ae2/go.mod h1:Sqo4FYX5lAXu7gWkbEdJF0e6P57tNNVV4WDKYDctokI=
 github.com/siyuan-note/filelock v0.0.0-20221117095924-e1947438a35e h1:i3RKrdrddr4AuaHJtoWYAEVNuR7Y9wIsEqPmuFFbJC4=
 github.com/siyuan-note/filelock v0.0.0-20221117095924-e1947438a35e/go.mod h1:NmpSIVtIGy8eNWapjDIiiCw5+5r5wxC76k40oG+WRXQ=
-github.com/siyuan-note/httpclient v0.0.0-20230201020305-de7c4e01d02f h1:pcWuSqqst7psFt9CK9drMsCAn1et9BekDLrvzPXB+vA=
-github.com/siyuan-note/httpclient v0.0.0-20230201020305-de7c4e01d02f/go.mod h1:oXSO1zqTwj/vHlo9xkuLwtBxkuBDhuHjHhn+RbOPM+s=
+github.com/siyuan-note/httpclient v0.0.0-20230201041143-5c2b2b88b985 h1:L5NArfUHYrY43OQ1dreuzuBe8UXP2an94AYqk553f+w=
+github.com/siyuan-note/httpclient v0.0.0-20230201041143-5c2b2b88b985/go.mod h1:oXSO1zqTwj/vHlo9xkuLwtBxkuBDhuHjHhn+RbOPM+s=
 github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a h1:b9VJCE8IccYjsadwNBI11he+Wn25hI9lCma4uYoIYEM=
 github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a/go.mod h1:t1zRGxK13L/9ZFoGyTD39IbFCbee3CsypDj4b5dt4qM=
 github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d/go.mod h1:UdhH50NIW0fCiwBSr0co2m7BnFLdv4fQTgdqdJTHFeE=
