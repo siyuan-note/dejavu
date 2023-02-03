@@ -367,13 +367,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 	}
 
-	// 更新本地 latest
-	err = repo.UpdateLatest(latest.ID)
-	if nil != err {
-		logging.LogErrorf("update latest failed: %s", err)
-		return
-	}
-
 	// 上传索引
 	length, err = repo.uploadIndex(latest, context)
 	if nil != err {
@@ -389,6 +382,20 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 	trafficStat.UploadBytes += length
+
+	// 更新本地 latest
+	err = repo.UpdateLatest(latest.ID)
+	if nil != err {
+		logging.LogErrorf("update latest failed: %s", err)
+		return
+	}
+
+	// 更新本地同步点
+	err = repo.UpdateLatestSync(latest.ID)
+	if nil != err {
+		logging.LogErrorf("update latest sync failed: %s", err)
+		return
+	}
 
 	// 统计流量
 	go repo.cloud.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
