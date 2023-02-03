@@ -874,7 +874,7 @@ func (repo *Repo) uploadCloud(context map[string]interface{},
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
 	}
-	trafficStat.UploadChunkCount = len(upsertChunkIDs)
+	trafficStat.UploadChunkCount += len(upsertChunkIDs)
 	trafficStat.UploadBytes += length
 
 	// 上传文件
@@ -883,7 +883,7 @@ func (repo *Repo) uploadCloud(context map[string]interface{},
 		logging.LogErrorf("upload files failed: %s", err)
 		return
 	}
-	trafficStat.UploadFileCount = len(upsertFiles)
+	trafficStat.UploadFileCount += len(upsertFiles)
 	trafficStat.UploadBytes += length
 	return
 }
