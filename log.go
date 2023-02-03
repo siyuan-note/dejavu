@@ -201,34 +201,4 @@ func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err err
 			return
 		}
 	}
-	return
-}
-
-// getIndexes 返回 [fromID, toID) 区间内的索引。
-func (repo *Repo) getIndexes(fromID, toID string) (ret []*entity.Index) {
-	ret = []*entity.Index{}
-	added := map[string]bool{} // 意外出现循环引用时跳出
-	const max = 64             // 最大深度跳出
-	var i int
-	for index, err := repo.store.GetIndex(fromID); max > i; i++ {
-		if nil != err || added[index.ID] {
-			return
-		}
-		if index.ID != fromID { // 意外情况：存储的 ID 和文件名不一致
-			// 继续查找上一个索引
-			fromID = index.Parent
-			if fromID == toID || "" == fromID {
-				return
-			}
-			continue
-		}
-
-		ret = append(ret, index)
-		added[index.ID] = true
-		if index.Parent == toID || "" == index.Parent || index.ID == toID {
-			return
-		}
-		fromID = index.Parent
-	}
-	return
 }

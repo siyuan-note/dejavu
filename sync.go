@@ -155,7 +155,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 	fetchedFiles []*entity.File, cloudLatest *entity.Index, latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat) (err error) {
 	// 获取本地同步点
 	latestSync := repo.latestSync()
-	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
@@ -357,7 +356,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 			logging.LogErrorf("put merge index failed: %s", err)
 			return
 		}
-		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 
 		// 索引后的 upserts 需要上传到云端，实测某些系统上
 		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
