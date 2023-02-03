@@ -13,7 +13,7 @@ require (
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
-	github.com/siyuan-note/eventbus v0.0.0-20230126092943-c6bf51e65ae2
+	github.com/siyuan-note/eventbus v0.0.0-20230203085647-fb624740be03
 	github.com/siyuan-note/filelock v0.0.0-20221117095924-e1947438a35e
 	github.com/siyuan-note/httpclient v0.0.0-20230201041143-5c2b2b88b985
 	github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a

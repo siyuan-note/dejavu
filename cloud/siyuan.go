@@ -127,7 +127,7 @@ func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
 	}
 	if 200 != resp.StatusCode {
 		if 404 == resp.StatusCode {
-			if !strings.HasSuffix(key, "/refs/latest") {
+			if !strings.HasSuffix(key, "/refs/latest") && !strings.HasSuffix(key, "/lock-sync") {
 				logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
 			}
 			err = ErrCloudObjectNotFound
@@ -168,12 +168,12 @@ func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = fmt.Errorf("remove cloud repo tag failed [%d]", resp.StatusCode)
+		err = fmt.Errorf("remove cloud repo object failed [%d]", resp.StatusCode)
 		return
 	}
 
 	if 0 != result.Code {
-		err = fmt.Errorf("remove cloud repo tag failed: %s", result.Msg)
+		err = fmt.Errorf("remove cloud repo object failed: %s", result.Msg)
 		return
 	}
 	return

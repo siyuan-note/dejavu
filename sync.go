@@ -173,6 +173,13 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 
+	// 锁定云端，防止其他设备并发上传数据
+	err = repo.tryLockCloud(context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
 	// 上传数据
 	err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 	if nil != err {
