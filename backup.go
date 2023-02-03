@@ -186,7 +186,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	uploadBytes += length
 
 	// 上传索引
-	length, err = repo.uploadIndexes([]*entity.Index{index}, context)
+	length, err = repo.uploadIndex(index, context)
 	uploadFileCount++
 	uploadBytes += length
 

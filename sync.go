@@ -153,7 +153,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 // trafficStat 待返回的流量统计
 func (repo *Repo) sync0(context map[string]interface{},
 	fetchedFiles []*entity.File, cloudLatest *entity.Index, latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat) (err error) {
-	// 获取本地同步点到最新索引之间的索引列表
+	// 获取本地同步点
 	latestSync := repo.latestSync()
 	localIndexes := repo.getIndexes(latest.ID, latestSync.ID)
 
@@ -174,40 +174,15 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 
-	// 计算待上传云端的本地变更文件
-	upsertFiles, err := repo.localUpsertFiles(localIndexes, cloudLatest.Files)
+	// 上传数据
+	err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 	if nil != err {
-		logging.LogErrorf("get local upsert files failed: %s", err)
+		logging.LogErrorf("upload cloud failed: %s", err)
 		return
 	}
-
-	// 计算待上传云端的分块
-	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
-	if nil != err {
-		logging.LogErrorf("get local upsert chunk ids failed: %s", err)
-		return
-	}
-
-	// 上传分块
-	length, err := repo.uploadChunks(upsertChunkIDs, context)
-	if nil != err {
-		logging.LogErrorf("upload chunks failed: %s", err)
-		return
-	}
-	trafficStat.UploadChunkCount = len(upsertChunkIDs)
-	trafficStat.UploadBytes += length
-
-	// 上传文件
-	length, err = repo.uploadFiles(upsertFiles, context)
-	if nil != err {
-		logging.LogErrorf("upload files failed: %s", err)
-		return
-	}
-	trafficStat.UploadFileCount = len(upsertFiles)
-	trafficStat.UploadBytes += length
 
 	// 从云端下载缺失分块并入库
-	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
+	length, err := repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud chunks put failed: %s", err)
 		return
@@ -377,46 +352,20 @@ func (repo *Repo) sync0(context map[string]interface{},
 		mergeElapsed := time.Since(mergeStart)
 		mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
 		latest.Memo = mergeMemo
-		_ = repo.store.PutIndex(latest)
+		err = repo.store.PutIndex(latest)
+		if nil != err {
+			logging.LogErrorf("put merge index failed: %s", err)
+			return
+		}
 		localIndexes = append([]*entity.Index{latest}, localIndexes...)
 
-		// 索引后的 upserts 需要上传到云端
-		upsertFiles, err = repo.localUpsertFiles(localIndexes, cloudLatest.Files)
+		// 索引后的 upserts 需要上传到云端，实测某些系统上
+		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 		if nil != err {
-			logging.LogErrorf("get local upsert files failed: %s", err)
+			logging.LogErrorf("upload cloud failed: %s", err)
 			return
 		}
-
-		upsertChunkIDs, err = repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
-		if nil != err {
-			logging.LogErrorf("get local upsert chunk ids failed: %s", err)
-			return
-		}
-
-		length, err = repo.uploadChunks(upsertChunkIDs, context)
-		if nil != err {
-			logging.LogErrorf("upload chunks failed: %s", err)
-			return
-		}
-		trafficStat.UploadChunkCount = len(upsertChunkIDs)
-		trafficStat.UploadBytes += length
-
-		length, err = repo.uploadFiles(upsertFiles, context)
-		if nil != err {
-			logging.LogErrorf("upload files failed: %s", err)
-			return
-		}
-		trafficStat.UploadFileCount = len(upsertFiles)
-		trafficStat.UploadBytes += length
 	}
-
-	// 上传索引
-	length, err = repo.uploadIndexes(localIndexes, context)
-	if nil != err {
-		logging.LogErrorf("upload indexes failed: %s", err)
-		return
-	}
-	trafficStat.UploadBytes += length
 
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
@@ -425,6 +374,14 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 
+	// 上传索引
+	length, err = repo.uploadIndex(latest, context)
+	if nil != err {
+		logging.LogErrorf("upload indexes failed: %s", err)
+		return
+	}
+	trafficStat.UploadBytes += length
+
 	// 更新云端 latest
 	length, err = repo.updateCloudRef("refs/latest", context)
 	if nil != err {
@@ -432,13 +389,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 	trafficStat.UploadBytes += length
-
-	// 更新本地同步点
-	err = repo.UpdateLatestSync(latest.ID)
-	if nil != err {
-		logging.LogErrorf("update latest sync failed: %s", err)
-		return
-	}
 
 	// 统计流量
 	go repo.cloud.AddTraffic(trafficStat.UploadBytes, trafficStat.DownloadBytes)
@@ -686,56 +636,17 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	return
 }
 
-func (repo *Repo) uploadIndexes(indexes []*entity.Index, context map[string]interface{}) (uploadBytes int64, err error) {
-	if 1 > len(indexes) {
+func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{}) (uploadBytes int64, err error) {
+	absFilePath := filepath.Join(repo.Path, "indexes", index.ID)
+	info, statErr := os.Stat(absFilePath)
+	if nil != statErr {
 		return
 	}
+	length := info.Size()
+	uploadBytes += length
 
-	for _, index := range indexes {
-		absFilePath := filepath.Join(repo.Path, "indexes", index.ID)
-		info, statErr := os.Stat(absFilePath)
-		if nil != statErr {
-			return
-		}
-		length := info.Size()
-		uploadBytes += length
-	}
-
-	waitGroup := &sync.WaitGroup{}
-	var uploadErr error
-	poolSize := 4
-	if poolSize > len(indexes) {
-		poolSize = len(indexes)
-	}
-	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
-		defer waitGroup.Done()
-		if nil != uploadErr {
-			return // 快速失败
-		}
-
-		indexID := arg.(string)
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, indexID)
-		if uoErr := repo.cloud.UploadObject(path.Join("indexes", indexID), false); nil != uoErr {
-			uploadErr = uoErr
-			return
-		}
-	})
-	if nil != err {
-		return
-	}
-
-	for _, index := range indexes {
-		waitGroup.Add(1)
-		if err = p.Invoke(index.ID); nil != err {
-			return
-		}
-		if nil != uploadErr {
-			err = uploadErr
-			return
-		}
-	}
-	waitGroup.Wait()
-	p.Release()
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, index.ID)
+	err = repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
 	return
 }
 
@@ -905,31 +816,25 @@ func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs [
 	return
 }
 
-func (repo *Repo) localUpsertFiles(localIndexes []*entity.Index, cloudFileIDs []string) (ret []*entity.File, err error) {
+func (repo *Repo) localUpsertFiles(latest *entity.Index, cloudLatest *entity.Index) (ret []*entity.File, err error) {
 	files := map[string]bool{}
-	for _, index := range localIndexes {
-		for _, file := range index.Files {
-			files[file] = true
-		}
+	for _, file := range latest.Files {
+		files[file] = true
 	}
 
-	for _, cloudFileID := range cloudFileIDs {
+	for _, cloudFileID := range cloudLatest.Files {
 		delete(files, cloudFileID)
 	}
 
 	for fileID := range files {
 		file, getErr := repo.store.GetFile(fileID)
 		if nil != getErr {
-			if os.IsNotExist(getErr) {
-				continue
-			}
-
-			logging.LogWarnf("get file [%s] failed: %s", fileID, getErr)
-			continue
+			logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
+			return
 		}
 		if nil == file {
-			logging.LogWarnf("file [%s] not found", fileID)
-			continue
+			logging.LogErrorf("file [%s] not found", fileID)
+			err = ErrNotFoundObject
 		}
 
 		ret = append(ret, file)
@@ -944,6 +849,42 @@ func (repo *Repo) UpdateLatestSync(id string) (err error) {
 		return
 	}
 	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest-sync"), []byte(id), 0644)
+	return
+}
+
+func (repo *Repo) uploadCloud(context map[string]interface{},
+	latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat) (err error) {
+	// 计算待上传云端的本地变更文件
+	upsertFiles, err := repo.localUpsertFiles(latest, cloudLatest)
+	if nil != err {
+		logging.LogErrorf("get local upsert files failed: %s", err)
+		return
+	}
+
+	// 计算待上传云端的分块
+	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
+	if nil != err {
+		logging.LogErrorf("get local upsert chunk ids failed: %s", err)
+		return
+	}
+
+	// 上传分块
+	length, err := repo.uploadChunks(upsertChunkIDs, context)
+	if nil != err {
+		logging.LogErrorf("upload chunks failed: %s", err)
+		return
+	}
+	trafficStat.UploadChunkCount = len(upsertChunkIDs)
+	trafficStat.UploadBytes += length
+
+	// 上传文件
+	length, err = repo.uploadFiles(upsertFiles, context)
+	if nil != err {
+		logging.LogErrorf("upload files failed: %s", err)
+		return
+	}
+	trafficStat.UploadFileCount = len(upsertFiles)
+	trafficStat.UploadBytes += length
 	return
 }
 
