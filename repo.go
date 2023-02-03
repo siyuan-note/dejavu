@@ -387,8 +387,13 @@ func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool,
 			return true, nil
 		}
 
-		if strings.HasSuffix(filepath.ToSlash(absPath), "data/storage/local.json") {
+		slashAbsPath := filepath.ToSlash(absPath)
+		if strings.HasSuffix(slashAbsPath, "data/storage/local.json") {
 			// localStorage 不再支持同步 https://github.com/siyuan-note/siyuan/issues/6964
+			return true, nil
+		}
+		if strings.HasSuffix(slashAbsPath, "data/storage/recent-doc.json") {
+			// 数据同步忽略最近文档存储 https://github.com/siyuan-note/siyuan/issues/7246
 			return true, nil
 		}
 	}
