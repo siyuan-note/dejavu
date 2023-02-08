@@ -28,6 +28,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	lock.Lock()
 	defer lock.Unlock()
 
+	mergeResult = &MergeResult{}
 	trafficStat = &TrafficStat{}
 
 	// 获取本地最新索引
@@ -89,7 +90,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 从云端下载缺失分块并入库
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	trafficStat.DownloadBytes += length
-	trafficStat.DownloadChunkCount = len(fetchChunkIDs)
+	trafficStat.DownloadChunkCount += len(fetchChunkIDs)
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
