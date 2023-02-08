@@ -95,6 +95,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	mergeResult = &MergeResult{Time: time.Now()}
 	trafficStat = &TrafficStat{}
 
+	// 获取本地最新索引
 	latest, err := repo.Latest()
 	if nil != err {
 		logging.LogErrorf("get latest failed: %s", err)
@@ -153,9 +154,6 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 // trafficStat 待返回的流量统计
 func (repo *Repo) sync0(context map[string]interface{},
 	fetchedFiles []*entity.File, cloudLatest *entity.Index, latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat) (err error) {
-	// 获取本地同步点
-	latestSync := repo.latestSync()
-
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
 	if nil != err {
@@ -202,6 +200,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get latest files failed: %s", err)
 		return
 	}
+	latestSync := repo.latestSync()
 	latestSyncFiles, err := repo.getFiles(latestSync.Files)
 	if nil != err {
 		logging.LogErrorf("get latest sync files failed: %s", err)
@@ -364,7 +363,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			return
 		}
 
-		// 索引后的 upserts 需要上传到云端，实测某些系统上
+		// 索引后的 upserts 需要上传到云端
 		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 		if nil != err {
 			logging.LogErrorf("upload cloud failed: %s", err)
@@ -378,6 +377,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("upload indexes failed: %s", err)
 		return
 	}
+	//trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
 
 	// 更新云端 latest
@@ -386,6 +386,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
 		return
 	}
+	//trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
 
 	// 更新本地 latest
