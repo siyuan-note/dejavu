@@ -18,6 +18,9 @@ package dejavu
 
 import (
 	"errors"
+	"path/filepath"
+	"time"
+
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
@@ -28,7 +31,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	lock.Lock()
 	defer lock.Unlock()
 
-	mergeResult = &MergeResult{}
+	mergeResult = &MergeResult{Time: time.Now()}
 	trafficStat = &TrafficStat{}
 
 	// 获取本地最新索引
@@ -120,7 +123,34 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	for _, localUpsert := range localUpserts {
 		if repo.existDataFile(mergeResult.Upserts, localUpsert) || repo.existDataFile(mergeResult.Removes, localUpsert) {
 			mergeResult.Conflicts = append(mergeResult.Conflicts, localUpsert)
-			continue
+		}
+	}
+
+	// 冲突文件复制到数据历史文件夹
+	if 0 < len(mergeResult.Conflicts) {
+		now := mergeResult.Time.Format("2006-01-02-150405")
+		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
+		for _, file := range mergeResult.Conflicts {
+			var checkoutTmp *entity.File
+			checkoutTmp, err = repo.store.GetFile(file.ID)
+			if nil != err {
+				logging.LogErrorf("get file failed: %s", err)
+				return
+			}
+
+			err = repo.checkoutFile(checkoutTmp, temp, context)
+			if nil != err {
+				logging.LogErrorf("checkout file failed: %s", err)
+				return
+			}
+
+			absPath := filepath.Join(temp, checkoutTmp.Path)
+			err = repo.genSyncHistory(now, file.Path, absPath)
+			if nil != err {
+				logging.LogErrorf("generate sync history failed: %s", err)
+				err = ErrCloudGenerateConflictHistory
+				return
+			}
 		}
 	}
 
