@@ -28,6 +28,8 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	lock.Lock()
 	defer lock.Unlock()
 
+	trafficStat = &TrafficStat{}
+
 	// 获取本地最新索引
 	latest, err := repo.Latest()
 	if nil != err {
@@ -178,6 +180,8 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+
+	trafficStat = &TrafficStat{}
 
 	latest, err := repo.Latest()
 	if nil != err {
