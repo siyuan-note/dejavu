@@ -52,7 +52,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) 
 	absFilePath := filepath.Join(siyuan.Conf.RepoPath, filePath)
 
 	key := path.Join("siyuan", siyuan.Conf.UserID, "repo", siyuan.Conf.Dir, filePath)
-	keyUploadToken, scopeUploadToken, err := siyuan.requestScopeKeyUploadToken(key)
+	keyUploadToken, scopeUploadToken, err := siyuan.requestScopeKeyUploadToken(key, overwrite)
 	if nil != err {
 		return
 	}
@@ -156,7 +156,7 @@ func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
-		SetResult(&result).
+		SetSuccessResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token, "key": key}).
 		Post(server + "/apis/siyuan/dejavu/removeRepoObject?uid=" + userId)
 	if nil != err {
@@ -188,7 +188,7 @@ func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
-		SetResult(&result).
+		SetSuccessResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token}).
 		Post(server + "/apis/siyuan/dejavu/getRepoTags?uid=" + userId)
 	if nil != err {
@@ -237,7 +237,7 @@ func (siyuan *SiYuan) GetRefsFiles() (fileIDs []string, err error) {
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest2m()
 	resp, err := request.
-		SetResult(&result).
+		SetSuccessResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token}).
 		Post(server + "/apis/siyuan/dejavu/getRepoRefsFiles?uid=" + userId)
 	if nil != err {
@@ -280,7 +280,7 @@ func (siyuan *SiYuan) GetChunks(excludeChunkIDs []string) (chunkIDs []string, er
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudFileRequest2m()
 	resp, err := request.
-		SetResult(&result).
+		SetSuccessResult(&result).
 		SetBody(map[string]interface{}{"repo": dir, "token": token, "chunks": excludeChunkIDs}).
 		Post(server + "/apis/siyuan/dejavu/getRepoUploadChunks?uid=" + userId)
 	if nil != err {
@@ -318,7 +318,7 @@ func (siyuan *SiYuan) GetStat() (stat *Stat, err error) {
 	result := gulu.Ret.NewResult()
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
-		SetResult(&result).
+		SetSuccessResult(&result).
 		SetBody(map[string]string{"repo": dir, "token": token}).
 		Post(server + "/apis/siyuan/dejavu/getRepoStat?uid=" + userId)
 	if nil != err {
@@ -404,7 +404,7 @@ func (siyuan *SiYuan) CreateRepo(name string) (err error) {
 	result := map[string]interface{}{}
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
-		SetResult(&result).
+		SetSuccessResult(&result).
 		SetBody(map[string]string{"name": name, "token": token}).
 		Post(server + "/apis/siyuan/dejavu/createRepo")
 	if nil != err {
@@ -438,7 +438,7 @@ func (siyuan *SiYuan) GetRepos() (repos []*Repo, size int64, err error) {
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetBody(map[string]interface{}{"token": token}).
-		SetResult(&result).
+		SetSuccessResult(&result).
 		Post(server + "/apis/siyuan/dejavu/getRepos?uid=" + userId)
 	if nil != err {
 		err = fmt.Errorf("get cloud repos failed: %s", err)
@@ -495,30 +495,43 @@ var (
 	uploadTokenMapLock  = &sync.Mutex{}
 )
 
-func (siyuan *SiYuan) requestScopeKeyUploadToken(key string) (keyToken, scopeToken string, err error) {
+func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (keyToken, scopeToken string, err error) {
 	userId := siyuan.Conf.UserID
 	now := time.Now().UnixMilli()
 	keyPrefix := path.Join("siyuan", userId)
 
 	uploadTokenMapLock.Lock()
 	cachedKeyToken := keyUploadTokenMap[key]
-	cachedScopeToken := scopeUploadTokenMap[keyPrefix]
-	if nil != cachedScopeToken && nil != cachedKeyToken {
-		if now < cachedKeyToken.expired && now < cachedScopeToken.expired {
+	if nil != cachedKeyToken {
+		if now < cachedKeyToken.expired {
 			keyToken = cachedKeyToken.token
-			scopeToken = cachedScopeToken.token
-			uploadTokenMapLock.Unlock()
-			return
+		} else {
+			delete(keyUploadTokenMap, key)
 		}
-		delete(keyUploadTokenMap, key)
-		delete(scopeUploadTokenMap, keyPrefix)
+	}
+	if overwrite && "" != keyToken {
+		uploadTokenMapLock.Unlock()
+		return
+	}
+
+	cachedScopeToken := scopeUploadTokenMap[keyPrefix]
+	if nil != cachedScopeToken {
+		if now < cachedScopeToken.expired {
+			scopeToken = cachedScopeToken.token
+		} else {
+			delete(scopeUploadTokenMap, keyPrefix)
+		}
+	}
+	if !overwrite && "" != scopeToken {
+		uploadTokenMapLock.Unlock()
+		return
 	}
 	uploadTokenMapLock.Unlock()
 
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 	var result map[string]interface{}
-	req := httpclient.NewCloudRequest30s().SetResult(&result)
+	req := httpclient.NewCloudRequest30s().SetSuccessResult(&result)
 	req.SetBody(map[string]interface{}{
 		"token":     token,
 		"key":       key,
