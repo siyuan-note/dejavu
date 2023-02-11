@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -175,22 +176,31 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		}
 	}
 
-	// 更新本地索引
-	err = repo.store.PutIndex(cloudLatest)
+	// 创建 merge 快照
+	mergeStart := time.Now()
+	latest, err = repo.index("[Sync] Cloud sync merge", context)
 	if nil != err {
-		logging.LogErrorf("put index failed: %s", err)
+		logging.LogErrorf("merge index failed: %s", err)
+		return
+	}
+	mergeElapsed := time.Since(mergeStart)
+	mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
+	latest.Memo = mergeMemo
+	err = repo.store.PutIndex(latest)
+	if nil != err {
+		logging.LogErrorf("put merge index failed: %s", err)
 		return
 	}
 
 	// 更新本地 latest
-	err = repo.UpdateLatest(cloudLatest.ID)
+	err = repo.UpdateLatest(latest.ID)
 	if nil != err {
 		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
 
 	// 更新本地同步点
-	err = repo.UpdateLatestSync(cloudLatest.ID)
+	err = repo.UpdateLatestSync(latest.ID)
 	if nil != err {
 		logging.LogErrorf("update latest sync failed: %s", err)
 		return
