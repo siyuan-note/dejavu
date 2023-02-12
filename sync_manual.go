@@ -247,7 +247,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 
 	availableSize := repo.cloud.GetAvailableSize()
-	if availableSize <= cloudLatest.Size {
+	if availableSize <= cloudLatest.Size || availableSize <= latest.Size {
 		err = ErrCloudStorageSizeExceeded
 		return
 	}
