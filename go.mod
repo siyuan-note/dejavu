@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20221117052724-cd06804db798
-	github.com/aws/aws-sdk-go v1.44.191
+	github.com/aws/aws-sdk-go v1.44.199
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/klauspost/compress v1.15.15
@@ -17,13 +17,13 @@ require (
 	github.com/siyuan-note/filelock v0.0.0-20221117095924-e1947438a35e
 	github.com/siyuan-note/httpclient v0.0.0-20230211023949-b9d36c2da3ea
 	github.com/siyuan-note/logging v0.0.0-20221031125421-9b7234d79d8a
-	github.com/studio-b12/gowebdav v0.0.0-20221109171924-60ec5ad56012
+	github.com/studio-b12/gowebdav v0.0.0-20230203202212-3282f94193f2
 )
 
 require (
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/getsentry/sentry-go v0.17.0 // indirect
+	github.com/getsentry/sentry-go v0.18.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
