@@ -214,7 +214,11 @@ func (repo *Repo) sync0(context map[string]interface{},
 		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
 	}
 
-	var cloudUpsertIgnore, localUpsertIgnore *entity.File
+	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
+	localUpserts = repo.filterLocalUpserts(localUpserts, cloudUpserts)
+
+	// 记录本地 syncignore 变更
+	var localUpsertIgnore *entity.File
 	for _, upsert := range localUpserts {
 		if "/.siyuan/syncignore" == upsert.Path {
 			localUpsertIgnore = upsert
@@ -230,6 +234,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
 	// 冲突的文件以本地 upsert 和 remove 为准
 	var tmpMergeConflicts []*entity.File
+	var cloudUpsertIgnore *entity.File
 	for _, cloudUpsert := range cloudUpserts {
 		if "/.siyuan/syncignore" == cloudUpsert.Path {
 			cloudUpsertIgnore = cloudUpsert
@@ -289,15 +294,15 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	ignoreMatcher := ignore.CompileIgnoreLines(ignoreLines...)
-	var tmp []*entity.File
+	var mergeResultRemovesTmp []*entity.File
 	for _, remove := range mergeResult.Removes {
 		if !ignoreMatcher.MatchesPath(remove.Path) {
-			tmp = append(tmp, remove)
+			mergeResultRemovesTmp = append(mergeResultRemovesTmp, remove)
 			continue
 		}
 		// logging.LogInfof("sync merge ignore remove [%s]", remove.Path)
 	}
-	mergeResult.Removes = tmp
+	mergeResult.Removes = mergeResultRemovesTmp
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(tmpMergeConflicts) {
@@ -411,6 +416,30 @@ func (repo *Repo) sync0(context map[string]interface{},
 	if nil != err {
 		logging.LogErrorf("remove empty dirs failed: %s", err)
 		return
+	}
+	return
+}
+
+// filterLocalUpserts 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
+func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) (ret []*entity.File) {
+	cloudUpsertsMap := map[string]*entity.File{}
+	for _, cloudUpsert := range cloudUpserts {
+		cloudUpsertsMap[cloudUpsert.Path] = cloudUpsert
+	}
+
+	var toRemoveLocalUpsertPaths []string
+	for _, localUpsert := range localUpserts {
+		if cloudUpsert := cloudUpsertsMap[localUpsert.Path]; nil != cloudUpsert {
+			if localUpsert.Updated < cloudUpsert.Updated-1000*60*7 { // 本地早于云端 7 分钟
+				toRemoveLocalUpsertPaths = append(toRemoveLocalUpsertPaths, localUpsert.Path) // 使用云端数据覆盖本地数据
+			}
+		}
+	}
+
+	for _, localUpsert := range localUpserts {
+		if !gulu.Str.Contains(localUpsert.Path, toRemoveLocalUpsertPaths) {
+			ret = append(ret, localUpsert)
+		}
 	}
 	return
 }
