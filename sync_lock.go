@@ -84,9 +84,7 @@ func (repo *Repo) tryLockCloud(context map[string]interface{}) (err error) {
 func (repo *Repo) lockCloud() (err error) {
 	data, err := repo.cloud.DownloadObject("lock-sync")
 	if errors.Is(err, cloud.ErrCloudObjectNotFound) {
-		if err = repo.lockCloud0(); nil != err {
-			err = ErrLockCloudFailed
-		}
+		err = repo.lockCloud0()
 		return
 	}
 
@@ -103,9 +101,7 @@ func (repo *Repo) lockCloud() (err error) {
 	lockTime := time.UnixMilli(t)
 	if now.After(lockTime.Add(65*time.Second)) || deviceID == repo.DeviceID {
 		// 云端锁超时过期或者就是当前设备锁的，那么当前设备可以继续直接锁
-		if err = repo.lockCloud0(); nil != err {
-			err = ErrLockCloudFailed
-		}
+		err = repo.lockCloud0()
 		return
 	}
 
@@ -123,14 +119,23 @@ func (repo *Repo) lockCloud0() (err error) {
 	data, err := gulu.JSON.MarshalJSON(content)
 	if nil != err {
 		logging.LogErrorf("marshal lock sync failed: %s", err)
+		err = ErrLockCloudFailed
 		return
 	}
 	err = gulu.File.WriteFileSafer(lockSync, data, 0644)
 	if nil != err {
 		logging.LogErrorf("write lock sync failed: %s", err)
+		err = ErrCloudLocked
 		return
 	}
 
 	err = repo.cloud.UploadObject("lock-sync", true)
+	if nil != err {
+		if errors.Is(err, cloud.ErrSystemTimeIncorrect) {
+			return
+		}
+		logging.LogErrorf("upload lock sync failed: %s", err)
+		err = ErrLockCloudFailed
+	}
 	return
 }
