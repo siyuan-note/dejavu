@@ -18,6 +18,7 @@ package cloud
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -495,6 +496,10 @@ var (
 	uploadTokenMapLock  = &sync.Mutex{}
 )
 
+var (
+	ErrSystemTimeIncorrect = errors.New("system time incorrect")
+)
+
 func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (keyToken, scopeToken string, err error) {
 	userId := siyuan.Conf.UserID
 	now := time.Now().UnixMilli()
@@ -555,7 +560,11 @@ func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (ke
 
 	code := result["code"].(float64)
 	if 0 != code {
-		err = fmt.Errorf("request repo upload token failed: %s", result["msg"].(string))
+		msg := result["msg"].(string)
+		err = fmt.Errorf("request repo upload token failed: %s", msg)
+		if 1 == code { // 系统时间不一致
+			err = ErrSystemTimeIncorrect
+		}
 		return
 	}
 
