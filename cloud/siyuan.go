@@ -536,6 +536,7 @@ func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (ke
 		"token":     token,
 		"key":       key,
 		"keyPrefix": keyPrefix,
+		"time":      now, // 数据同步加入系统时间校验 https://github.com/siyuan-note/siyuan/issues/7669
 	})
 	resp, err := req.Post(server + "/apis/siyuan/dejavu/getRepoScopeKeyUploadToken?uid=" + userId)
 	if nil != err {
