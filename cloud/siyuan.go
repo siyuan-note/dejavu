@@ -18,7 +18,6 @@ package cloud
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -494,10 +493,6 @@ var (
 	keyUploadTokenMap   = map[string]*UploadToken{}
 	scopeUploadTokenMap = map[string]*UploadToken{}
 	uploadTokenMapLock  = &sync.Mutex{}
-)
-
-var (
-	ErrSystemTimeIncorrect = errors.New("system time incorrect")
 )
 
 func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (keyToken, scopeToken string, err error) {
