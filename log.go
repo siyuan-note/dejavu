@@ -26,6 +26,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/dustin/go-humanize"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/filelock"
 )
 
 type Log struct {
@@ -93,7 +94,7 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 		}
 		var data []byte
 		name := entry.Name()
-		data, err = os.ReadFile(filepath.Join(tags, name))
+		data, err = filelock.ReadFile(filepath.Join(tags, name))
 		if nil != err {
 			return
 		}

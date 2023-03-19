@@ -19,7 +19,6 @@ package cloud
 import (
 	"errors"
 	"io/fs"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"github.com/studio-b12/gowebdav"
 )
@@ -63,7 +63,7 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) {
 	absFilePath := filepath.Join(webdav.Conf.RepoPath, filePath)
-	data, err := os.ReadFile(absFilePath)
+	data, err := filelock.ReadFile(absFilePath)
 	if nil != err {
 		return
 	}

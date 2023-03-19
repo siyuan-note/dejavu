@@ -281,7 +281,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			logging.LogErrorf("checkout ignore file failed: %s", err)
 			return
 		}
-		data, readErr := os.ReadFile(filepath.Join(coDir, cloudUpsertIgnore.Path))
+		data, readErr := filelock.ReadFile(filepath.Join(coDir, cloudUpsertIgnore.Path))
 		if nil != readErr {
 			logging.LogErrorf("read ignore file failed: %s", readErr)
 			err = readErr
@@ -938,7 +938,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 		return
 	}
 
-	data, err := os.ReadFile(latestSync)
+	data, err := filelock.ReadFile(latestSync)
 	if nil != err {
 		logging.LogWarnf("read latest sync index failed: %s", err)
 		return

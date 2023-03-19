@@ -23,6 +23,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/filelock"
 )
 
 var ErrNotFoundIndex = errors.New("not found index")
@@ -34,7 +35,7 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 		return
 	}
 
-	data, err := os.ReadFile(latest)
+	data, err := filelock.ReadFile(latest)
 	if nil != err {
 		return
 	}
@@ -61,7 +62,7 @@ func (repo *Repo) GetTag(tag string) (id string, err error) {
 	if !gulu.File.IsExist(tag) {
 		err = errors.New("tag not found")
 	}
-	data, err := os.ReadFile(tag)
+	data, err := filelock.ReadFile(tag)
 	if nil != err {
 		return
 	}

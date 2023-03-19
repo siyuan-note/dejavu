@@ -26,6 +26,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
+	"github.com/siyuan-note/filelock"
 )
 
 var ErrNotFoundObject = errors.New("not found object")
@@ -89,7 +90,7 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 
 	_, file := store.IndexAbsPath(id)
 	var data []byte
-	data, err = os.ReadFile(file)
+	data, err = filelock.ReadFile(file)
 	if nil != err {
 		return
 	}
@@ -145,7 +146,7 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 	}
 
 	_, file := store.AbsPath(id)
-	data, err := os.ReadFile(file)
+	data, err := filelock.ReadFile(file)
 	if nil != err {
 		return
 	}
@@ -190,7 +191,7 @@ func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 
 func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 	_, file := store.AbsPath(id)
-	data, err := os.ReadFile(file)
+	data, err := filelock.ReadFile(file)
 	if nil != err {
 		return
 	}
