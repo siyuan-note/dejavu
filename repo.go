@@ -383,6 +383,10 @@ func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool,
 			}
 			return true, filepath.SkipDir
 		}
+		if "filesys_status_check" == name {
+			// 数据同步忽略用于文件系统检查的文件 https://github.com/siyuan-note/siyuan/issues/7744
+			return true, filepath.SkipDir
+		}
 		return true, nil
 	} else {
 		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".tmp") {
