@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"github.com/siyuan-note/dejavu/cloud"
 	"os"
 	"path"
 	"strings"
@@ -38,6 +39,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	}
 	downloadFileCount++
 	downloadBytes += length
+	apiGet := 1
 
 	// 计算本地缺失的文件
 	fetchFileIDs, err := repo.localNotFoundFiles(index.Files)
@@ -54,6 +56,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	}
 	downloadBytes += length
 	downloadFileCount = len(fetchFileIDs)
+	apiGet += downloadFileCount
 
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(fetchedFiles)
@@ -69,6 +72,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	downloadBytes += length
 	downloadChunkCount = len(fetchChunkIDs)
+	apiGet += downloadChunkCount
 
 	// 更新本地索引
 	err = repo.store.PutIndex(index)
@@ -85,7 +89,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	}
 
 	// 统计流量
-	go repo.cloud.AddTraffic(0, downloadBytes)
+	go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: downloadBytes, APIGet: apiGet})
 	return
 }
 
@@ -137,11 +141,12 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	}
 
 	// 从云端获取文件列表
-	cloudFileIDs, err := repo.cloud.GetRefsFiles()
+	cloudFileIDs, refs, err := repo.cloud.GetRefsFiles()
 	if nil != err {
 		logging.LogErrorf("get cloud repo refs files failed: %s", err)
 		return
 	}
+	apiGet := len(refs) + 1
 
 	// 计算云端缺失的文件
 	var uploadFiles []*entity.File
@@ -166,6 +171,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 		logging.LogErrorf("get cloud repo upload chunks failed: %s", err)
 		return
 	}
+	apiGet += len(uploadChunkIDs)
 
 	// 上传分块
 	length, err := repo.uploadChunks(uploadChunkIDs, context)
@@ -175,6 +181,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	}
 	uploadChunkCount = len(uploadChunkIDs)
 	uploadBytes += length
+	apiPut := uploadChunkCount
 
 	// 上传文件
 	length, err = repo.uploadFiles(uploadFiles, context)
@@ -184,19 +191,22 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	}
 	uploadFileCount = len(uploadFiles)
 	uploadBytes += length
+	apiPut += uploadFileCount
 
 	// 上传索引
 	length, err = repo.uploadIndex(index, context)
 	uploadFileCount++
 	uploadBytes += length
+	apiPut++
 
 	// 上传标签
 	length, err = repo.updateCloudRef("refs/tags/"+tag, context)
 	uploadFileCount++
 	uploadBytes += length
+	apiPut++
 
 	// 统计流量
-	go repo.cloud.AddTraffic(uploadBytes, 0)
+	go repo.cloud.AddTraffic(&cloud.Traffic{UploadBytes: uploadBytes, APIGet: apiGet, APIPut: apiPut})
 	return
 }
 

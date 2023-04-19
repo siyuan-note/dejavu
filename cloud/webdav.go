@@ -108,8 +108,8 @@ func (webdav *WebDAV) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, err error) {
-	refs, err := webdav.listRepoRefs("")
+func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
+	refs, err = webdav.listRepoRefs("")
 	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
 	var files []string
 	for _, ref := range refs {

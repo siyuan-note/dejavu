@@ -52,6 +52,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += length
+	trafficStat.APIGet++
 
 	if cloudLatest.ID == latest.ID || "" == cloudLatest.ID {
 		// 数据一致或者云端为空，直接返回
@@ -73,6 +74,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 	trafficStat.DownloadFileCount += len(fetchFileIDs)
 	trafficStat.DownloadBytes += length
+	trafficStat.APIGet += trafficStat.DownloadFileCount
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
@@ -95,6 +97,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	trafficStat.DownloadBytes += length
 	trafficStat.DownloadChunkCount += len(fetchChunkIDs)
+	trafficStat.APIGet += trafficStat.DownloadChunkCount
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -207,7 +210,10 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 统计流量
-	go repo.cloud.AddTraffic(0, trafficStat.DownloadBytes)
+	go repo.cloud.AddTraffic(&cloud.Traffic{
+		DownloadBytes: trafficStat.DownloadBytes,
+		APIGet:        trafficStat.APIGet,
+	})
 
 	// 移除空目录
 	err = gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
@@ -240,6 +246,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += length
+	trafficStat.APIPut++
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
@@ -284,6 +291,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 	trafficStat.UploadChunkCount += len(uploadChunkIDs)
 	trafficStat.UploadBytes += length
+	trafficStat.APIPut += trafficStat.UploadChunkCount
 
 	// 上传文件
 	length, err = repo.uploadFiles(uploadFiles, context)
@@ -293,6 +301,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 	trafficStat.UploadChunkCount += len(uploadFiles)
 	trafficStat.UploadBytes += length
+	trafficStat.APIPut += trafficStat.UploadChunkCount
 
 	// 上传索引
 	length, err = repo.uploadIndex(latest, context)
@@ -302,6 +311,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 	//trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
+	trafficStat.APIPut++
 
 	// 更新云端 latest
 	length, err = repo.updateCloudRef("refs/latest", context)
@@ -311,8 +321,12 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 	//trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
+	trafficStat.APIPut++
 
 	// 统计流量
-	go repo.cloud.AddTraffic(trafficStat.UploadBytes, 0)
+	go repo.cloud.AddTraffic(&cloud.Traffic{
+		UploadBytes: trafficStat.UploadBytes,
+		APIPut:      trafficStat.APIPut,
+	})
 	return
 }

@@ -228,7 +228,7 @@ func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-func (siyuan *SiYuan) GetRefsFiles() (fileIDs []string, err error) {
+func (siyuan *SiYuan) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
 	token := siyuan.Conf.Token
 	dir := siyuan.Conf.Dir
 	userId := siyuan.Conf.UserID
@@ -263,6 +263,20 @@ func (siyuan *SiYuan) GetRefsFiles() (fileIDs []string, err error) {
 	retFiles := retData["files"].([]interface{})
 	for _, retFile := range retFiles {
 		fileIDs = append(fileIDs, retFile.(string))
+	}
+	retRefs := retData["refs"].([]interface{})
+	for _, retRef := range retRefs {
+		data, marshalErr := gulu.JSON.MarshalJSON(retRef)
+		if nil != marshalErr {
+			logging.LogErrorf("marshal ref failed: %s", marshalErr)
+			continue
+		}
+		ref := &Ref{}
+		if unmarshalErr := gulu.JSON.UnmarshalJSON(data, ref); nil != unmarshalErr {
+			logging.LogErrorf("unmarshal ref failed: %s", unmarshalErr)
+			continue
+		}
+		refs = append(refs, ref)
 	}
 	return
 }

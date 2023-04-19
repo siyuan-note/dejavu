@@ -123,8 +123,8 @@ func (s3 *S3) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-func (s3 *S3) GetRefsFiles() (fileIDs []string, err error) {
-	refs, err := s3.listRepoRefs("")
+func (s3 *S3) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
+	refs, err = s3.listRepoRefs("")
 	if nil != err {
 		logging.LogErrorf("list repo refs failed: %s", err)
 		return
