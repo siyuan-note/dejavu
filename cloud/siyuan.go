@@ -353,13 +353,19 @@ func (siyuan *SiYuan) GetStat() (stat *Stat, err error) {
 	return
 }
 
-func (siyuan *SiYuan) AddTraffic(uploadBytes, downloadBytes int64) {
+func (siyuan *SiYuan) AddTraffic(traffic *Traffic) {
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
-		SetBody(map[string]interface{}{"token": token, "uploadBytes": uploadBytes, "downloadBytes": downloadBytes}).
+		SetBody(map[string]interface{}{
+			"token":         token,
+			"uploadBytes":   traffic.UploadBytes,
+			"downloadBytes": traffic.DownloadBytes,
+			"apiGet":        traffic.APIGet,
+			"apiPut":        traffic.APIPut,
+		}).
 		Post(server + "/apis/siyuan/dejavu/addTraffic")
 	if nil != err {
 		logging.LogErrorf("add traffic failed: %s", err)

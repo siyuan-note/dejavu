@@ -105,8 +105,16 @@ type Cloud interface {
 	// GetAvailableSize 用于获取云端存储可用空间字节数。
 	GetAvailableSize() (size int64)
 
-	// AddTraffic 用于统计流量上传字节数 uploadBytes 和下载字节数 downloadBytes。
-	AddTraffic(uploadBytes, downloadBytes int64)
+	// AddTraffic 用于统计流量。
+	AddTraffic(traffic *Traffic)
+}
+
+// Traffic 描述了流量信息。
+type Traffic struct {
+	UploadBytes   int64 // 上传字节数
+	DownloadBytes int64 // 下载字节数
+	APIGet        int64 // API GET 请求次数
+	APIPut        int64 // API PUT 请求次数
 }
 
 // Stat 描述了统计信息。
@@ -209,11 +217,11 @@ func (baseCloud *BaseCloud) GetConf() *Conf {
 	return baseCloud.Conf
 }
 
-func (baseCloud *BaseCloud) GetAvailableSize() (size int64) {
+func (baseCloud *BaseCloud) GetAvailableSize() int64 {
 	return baseCloud.Conf.AvailableSize
 }
 
-func (baseCloud *BaseCloud) AddTraffic(uploadBytes, downloadBytes int64) {
+func (baseCloud *BaseCloud) AddTraffic(*Traffic) {
 	return
 }
 

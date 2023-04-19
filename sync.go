@@ -60,6 +60,9 @@ type UploadTrafficStat struct {
 	UploadBytes      int64
 }
 
+type APITrafficStat struct {
+}
+
 type TrafficStat struct {
 	DownloadTrafficStat
 	UploadTrafficStat
