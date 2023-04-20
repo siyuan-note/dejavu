@@ -37,6 +37,20 @@ const (
 	testDataCheckoutPath = "testdata/data-checkout"
 )
 
+func TestPurge(t *testing.T) {
+	clearTestdata(t)
+	subscribeEvents(t)
+
+	repo, _ := initIndex(t)
+	stat, err := repo.Purge()
+	if nil != err {
+		t.Fatalf("purge failed: %s", err)
+		return
+	}
+
+	t.Logf("purge stat: %#v", stat)
+}
+
 func TestIndexCheckout(t *testing.T) {
 	clearTestdata(t)
 	subscribeEvents(t)

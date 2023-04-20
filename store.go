@@ -18,8 +18,10 @@ package dejavu
 
 import (
 	"errors"
+	"github.com/siyuan-note/logging"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/88250/gulu"
 	"github.com/dgraph-io/ristretto"
@@ -52,6 +54,155 @@ func NewStore(path string, aesKey []byte) (ret *Store, err error) {
 	}
 	ret.compressDecoder, err = zstd.NewReader(nil,
 		zstd.WithDecoderMaxMemory(16*1024*1024*1024))
+	return
+}
+
+func (store *Store) Purge() (ret *PurgeStat, err error) {
+	objectsDir := filepath.Join(store.Path, "objects")
+	if !gulu.File.IsDir(objectsDir) {
+		return
+	}
+
+	entries, err := os.ReadDir(objectsDir)
+	if nil != err {
+		return
+	}
+
+	objIDs := map[string]bool{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		dirName := entry.Name()
+		dir := filepath.Join(objectsDir, dirName)
+		objs, readErr := os.ReadDir(dir)
+		if nil != readErr {
+			err = readErr
+			return
+		}
+
+		for _, obj := range objs {
+			id := dirName + obj.Name()
+			objIDs[id] = true
+		}
+	}
+
+	indexIDs := map[string]bool{}
+	indexesDir := filepath.Join(store.Path, "indexes")
+	if gulu.File.IsDir(indexesDir) {
+		entries, err = os.ReadDir(indexesDir)
+		if nil != err {
+			return
+		}
+
+		for _, entry := range entries {
+			id := entry.Name()
+			if 40 != len(id) {
+				continue
+			}
+
+			indexIDs[id] = true
+		}
+	}
+
+	refIndexIDs, err := store.readRefs()
+	if nil != err {
+		return
+	}
+
+	unreferencedIndexIDs := map[string]bool{}
+	for indexID := range indexIDs {
+		if !refIndexIDs[indexID] {
+			unreferencedIndexIDs[indexID] = true
+		}
+	}
+
+	referencedObjIDs := map[string]bool{}
+	for refID := range refIndexIDs {
+		index, getErr := store.GetIndex(refID)
+		if nil != getErr {
+			err = getErr
+			return
+		}
+
+		for _, fileID := range index.Files {
+			referencedObjIDs[fileID] = true
+			file, getFileErr := store.GetFile(fileID)
+			if nil != getFileErr {
+				err = getFileErr
+				return
+			}
+
+			for _, chunkID := range file.Chunks {
+				referencedObjIDs[chunkID] = true
+			}
+		}
+	}
+
+	unreferencedIDs := map[string]bool{}
+	for objID := range objIDs {
+		if !referencedObjIDs[objID] {
+			unreferencedIDs[objID] = true
+		}
+	}
+
+	ret = &PurgeStat{}
+	ret.Indexes = len(unreferencedIndexIDs)
+
+	for unreferencedID := range unreferencedIDs {
+		stat, statErr := store.Stat(unreferencedID)
+		if nil != statErr {
+			err = statErr
+			return
+		}
+
+		ret.Size += stat.Size()
+		ret.Objects++
+
+		logging.LogInfof("removing unreferenced object [%s]", unreferencedID)
+		//if err = store.Remove(unreferencedID); nil != err {
+		//	return
+		//}
+	}
+	return
+}
+
+func (store *Store) readRefs() (ret map[string]bool, err error) {
+	ret = map[string]bool{}
+	refsDir := filepath.Join(store.Path, "refs")
+	if !gulu.File.IsDir(refsDir) {
+		return
+	}
+
+	err = filepath.Walk(refsDir, func(path string, info os.FileInfo, err error) error {
+		if nil != err {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if 42 < info.Size() {
+			logging.LogWarnf("ref file [%s] is invalid", path)
+			return nil
+		}
+
+		data, err := filelock.ReadFile(path)
+		if nil != err {
+			return err
+		}
+
+		content := strings.TrimSpace(string(data))
+		if 40 != len(content) {
+			logging.LogWarnf("ref file [%s] is invalid", path)
+			return nil
+		}
+
+		ret[content] = true
+		return nil
+	})
 	return
 }
 
@@ -204,7 +355,7 @@ func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 
 func (store *Store) Remove(id string) (err error) {
 	_, file := store.AbsPath(id)
-	err = os.Remove(file)
+	err = filelock.Remove(file)
 	return
 }
 

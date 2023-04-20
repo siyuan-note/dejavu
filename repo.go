@@ -82,7 +82,20 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID string, aesKey 
 
 var ErrRepoFatalErr = errors.New("repo fatal error")
 
-var lock = sync.Mutex{} // 仓库锁， Checkout、Index 和 Sync 等不能同时执行
+var lock = sync.Mutex{} // 仓库锁，Checkout、Index 和 Sync 等不能同时执行
+
+type PurgeStat struct {
+	Objects int
+	Indexes int
+	Size    int64
+}
+
+// Purge 清理所有未引用数据。
+func (repo *Repo) Purge() (ret *PurgeStat, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	return repo.store.Purge()
+}
 
 // GetIndex 从仓库根据 id 获取索引。
 func (repo *Repo) GetIndex(id string) (index *entity.Index, err error) {
