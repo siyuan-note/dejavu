@@ -329,7 +329,6 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	} else {
 		ret = &entity.Index{
 			ID:      util.RandHash(),
-			Parent:  latest.ID,
 			Memo:    memo,
 			Created: time.Now().UnixMilli(),
 		}

@@ -19,7 +19,6 @@ package entity
 // Index 描述了快照索引。
 type Index struct {
 	ID      string   `json:"id"`      // Hash
-	Parent  string   `json:"parent"`  // 指向上一个索引
 	Memo    string   `json:"memo"`    // 索引备注
 	Created int64    `json:"created"` // 索引时间
 	Files   []string `json:"files"`   // 文件列表

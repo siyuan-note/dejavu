@@ -31,7 +31,6 @@ import (
 
 type Log struct {
 	ID          string         `json:"id"`          // Hash
-	Parent      string         `json:"parent"`      // 指向上一个索引
 	Memo        string         `json:"memo"`        // 索引备注
 	Created     int64          `json:"created"`     // 索引时间
 	HCreated    string         `json:"hCreated"`    // 索引时间 "2006-01-02 15:04:05"
@@ -124,46 +123,59 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 }
 
 func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, totalCount int, err error) {
-	index, err := repo.Latest()
+	indexesDir := filepath.Join(repo.store.Path, "indexes")
+	if !gulu.File.IsDir(indexesDir) {
+		return
+	}
+
+	entries, err := os.ReadDir(indexesDir)
 	if nil != err {
 		return
 	}
 
-	added := map[string]bool{}
-	var indexes []*entity.Index
-	for {
-		totalCount++
-		pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
-		if page > pageCount {
-			if "" == index.Parent {
-				break
-			}
-			index, err = repo.store.GetIndex(index.Parent)
-			if nil != err {
-				return
-			}
-			continue
+	sort.Slice(entries, func(i, j int) bool {
+		infoI, _ := entries[i].Info()
+		infoJ, _ := entries[j].Info()
+		if nil == infoI || nil == infoJ {
+			return false
 		}
+		return infoI.ModTime().After(infoJ.ModTime())
+	})
 
-		if page == pageCount {
-			indexes = append(indexes, index)
-		}
-		added[index.ID] = true
-		if "" == index.Parent {
-			break
-		}
-		index, _ = repo.store.GetIndex(index.Parent)
-		if nil == index {
-			break
-		}
-		if added[index.ID] {
-			break
+	i := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if 40 == len(name) {
+			entries[i] = entry
+			i++
 		}
 	}
+	for j := i; j < len(entries); j++ {
+		entries[j] = nil
+	}
+	entries = entries[:i]
+	totalCount = i
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
 
-	for _, idx := range indexes {
+	start := (page - 1) * pageSize
+	end := page * pageSize
+
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+
+	for _, entry := range entries[start:end] {
+		index, getErr := repo.GetIndex(entry.Name())
+		if nil != getErr {
+			err = getErr
+			return
+		}
+
 		var log *Log
-		log, err = repo.getLog(idx, true)
+		log, err = repo.getLog(index, true)
 		if nil != err {
 			return
 		}
@@ -179,7 +191,6 @@ func (repo *Repo) getLog(index *entity.Index, fetchFiles bool) (ret *Log, err er
 	}
 	ret = &Log{
 		ID:       index.ID,
-		Parent:   index.Parent,
 		Memo:     index.Memo,
 		Created:  index.Created,
 		HCreated: time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
@@ -189,17 +200,4 @@ func (repo *Repo) getLog(index *entity.Index, fetchFiles bool) (ret *Log, err er
 		HSize:    humanize.Bytes(uint64(index.Size)),
 	}
 	return
-}
-
-func (repo *Repo) getInitIndex(latest *entity.Index) (ret *entity.Index, err error) {
-	for {
-		if "" == latest.Parent {
-			ret = latest
-			return
-		}
-		latest, err = repo.store.GetIndex(latest.Parent)
-		if nil != err {
-			return
-		}
-	}
 }
