@@ -160,10 +160,15 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		ret.Size += stat.Size()
 		ret.Objects++
 
-		logging.LogInfof("removing unreferenced object [%s]", unreferencedID)
-		//if err = store.Remove(unreferencedID); nil != err {
-		//	return
-		//}
+		if err = store.Remove(unreferencedID); nil != err {
+			return
+		}
+	}
+	for unreferencedID := range unreferencedIndexIDs {
+		indexPath := filepath.Join(store.Path, "indexes", unreferencedID)
+		if err = filelock.Remove(indexPath); nil != err {
+			return
+		}
 	}
 	return
 }
