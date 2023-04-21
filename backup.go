@@ -27,10 +27,31 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
+func (repo *Repo) DownloadIndex(id string, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	downloadFileCount, downloadChunkCount, downloadBytes, err = repo.downloadIndex(id, context)
+	return
+}
+
 func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
+	downloadFileCount, downloadChunkCount, downloadBytes, err = repo.downloadIndex(id, context)
+
+	// 更新本地标签
+	err = repo.AddTag(id, tag)
+	if nil != err {
+		logging.LogErrorf("add tag failed: %s", err)
+		return
+	}
+
+	return
+}
+
+func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
 	// 从云端下载标签指向的索引
 	length, index, err := repo.downloadCloudIndex(id, context)
 	if nil != err {
@@ -78,13 +99,6 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	err = repo.store.PutIndex(index)
 	if nil != err {
 		logging.LogErrorf("put index failed: %s", err)
-		return
-	}
-
-	// 更新本地标签
-	err = repo.AddTag(id, tag)
-	if nil != err {
-		logging.LogErrorf("add tag failed: %s", err)
 		return
 	}
 
