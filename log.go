@@ -50,8 +50,8 @@ func (log *Log) String() string {
 	return string(data)
 }
 
-func (repo *Repo) GetCloudRepoLogs(marker string) (ret []*Log, nextMarker string, err error) {
-	cloudIndexes, nextMarker, err := repo.cloud.GetIndexes(marker)
+func (repo *Repo) GetCloudRepoLogs(page int) (ret []*Log, pageCount, totalCount int, err error) {
+	cloudIndexes, pageCount, totalCount, err := repo.cloud.GetIndexes(page)
 	if nil != err {
 		return
 	}

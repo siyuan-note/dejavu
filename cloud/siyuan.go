@@ -229,7 +229,7 @@ func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-func (siyuan *SiYuan) GetIndexes(marker string) (indexes []*entity.Index, nextMarker string, err error) {
+func (siyuan *SiYuan) GetIndexes(page int) (indexes []*entity.Index, pageCount, totalCount int, err error) {
 	token := siyuan.Conf.Token
 	dir := siyuan.Conf.Dir
 	userId := siyuan.Conf.UserID
@@ -239,7 +239,7 @@ func (siyuan *SiYuan) GetIndexes(marker string) (indexes []*entity.Index, nextMa
 	request := httpclient.NewCloudRequest30s()
 	resp, err := request.
 		SetSuccessResult(&result).
-		SetBody(map[string]string{"repo": dir, "token": token, "marker": marker}).
+		SetBody(map[string]interface{}{"repo": dir, "token": token, "page": page}).
 		Post(server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + userId)
 	if nil != err {
 		err = fmt.Errorf("get cloud repo tags failed: %s", err)
@@ -275,6 +275,9 @@ func (siyuan *SiYuan) GetIndexes(marker string) (indexes []*entity.Index, nextMa
 		}
 		indexes = append(indexes, index)
 	}
+
+	pageCount = int(retData["pageCount"].(float64))
+	totalCount = int(retData["totalCount"].(float64))
 	return
 }
 

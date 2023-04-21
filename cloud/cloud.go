@@ -92,7 +92,7 @@ type Cloud interface {
 	GetTags() (tags []*Ref, err error)
 
 	// GetIndexes 用于获取索引列表。
-	GetIndexes(marker string) (indexes []*entity.Index, nextMarker string, err error)
+	GetIndexes(page int) (indexes []*entity.Index, pageCount, totalCount int, err error)
 
 	// GetRefsFiles 用于获取所有引用索引中的文件 ID 列表 fileIDs。
 	GetRefsFiles() (fileIDs []string, refs []*Ref, err error)
@@ -199,7 +199,7 @@ func (baseCloud *BaseCloud) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-func (baseCloud *BaseCloud) GetIndexes(marker string) (indexes []*entity.Index, nextMarker string, err error) {
+func (baseCloud *BaseCloud) GetIndexes(page int) (indexes []*entity.Index, pageCount, totalCount int, err error) {
 	err = ErrUnsupported
 	return
 }
