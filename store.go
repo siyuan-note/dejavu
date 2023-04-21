@@ -18,7 +18,6 @@ package dejavu
 
 import (
 	"errors"
-	"github.com/siyuan-note/logging"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 	"github.com/siyuan-note/filelock"
+	"github.com/siyuan-note/logging"
 )
 
 var ErrNotFoundObject = errors.New("not found object")
