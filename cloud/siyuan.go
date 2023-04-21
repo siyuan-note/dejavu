@@ -29,6 +29,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/qiniu/go-sdk/v7/client"
 	"github.com/qiniu/go-sdk/v7/storage"
+	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
 )
@@ -224,6 +225,55 @@ func (siyuan *SiYuan) GetTags() (tags []*Ref, err error) {
 			continue
 		}
 		tags = append(tags, tag)
+	}
+	return
+}
+
+func (siyuan *SiYuan) GetIndexes(marker string) (indexes []*entity.Index, nextMarker string, err error) {
+	token := siyuan.Conf.Token
+	dir := siyuan.Conf.Dir
+	userId := siyuan.Conf.UserID
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudRequest30s()
+	resp, err := request.
+		SetSuccessResult(&result).
+		SetBody(map[string]string{"repo": dir, "token": token, "marker": marker}).
+		Post(server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + userId)
+	if nil != err {
+		err = fmt.Errorf("get cloud repo tags failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("get cloud repo tags failed: %s", result.Msg)
+		return
+	}
+
+	retData := result.Data.(map[string]interface{})
+	retIndexes := retData["indexes"].([]interface{})
+	for _, retIndex := range retIndexes {
+		data, marshalErr := gulu.JSON.MarshalJSON(retIndex)
+		if nil != marshalErr {
+			logging.LogErrorf("marshal index failed: %s", marshalErr)
+			continue
+		}
+		index := &entity.Index{}
+		if unmarshalErr := gulu.JSON.UnmarshalJSON(data, index); nil != unmarshalErr {
+			logging.LogErrorf("unmarshal index failed: %s", unmarshalErr)
+			continue
+		}
+		indexes = append(indexes, index)
 	}
 	return
 }

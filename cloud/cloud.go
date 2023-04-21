@@ -23,6 +23,7 @@ import (
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/klauspost/compress/zstd"
+	"github.com/siyuan-note/dejavu/entity"
 )
 
 // Conf 用于描述云端存储服务配置信息。
@@ -89,6 +90,9 @@ type Cloud interface {
 
 	// GetTags 用于获取快照标记列表。
 	GetTags() (tags []*Ref, err error)
+
+	// GetIndexes 用于获取索引列表。
+	GetIndexes(marker string) (indexes []*entity.Index, nextMarker string, err error)
 
 	// GetRefsFiles 用于获取所有引用索引中的文件 ID 列表 fileIDs。
 	GetRefsFiles() (fileIDs []string, refs []*Ref, err error)
@@ -191,6 +195,11 @@ func (baseCloud *BaseCloud) RemoveObject(key string) (err error) {
 }
 
 func (baseCloud *BaseCloud) GetTags() (tags []*Ref, err error) {
+	err = ErrUnsupported
+	return
+}
+
+func (baseCloud *BaseCloud) GetIndexes(marker string) (indexes []*entity.Index, nextMarker string, err error) {
 	err = ErrUnsupported
 	return
 }

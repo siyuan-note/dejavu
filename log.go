@@ -50,6 +50,23 @@ func (log *Log) String() string {
 	return string(data)
 }
 
+func (repo *Repo) GetCloudRepoLogs(marker string) (ret []*Log, nextMarker string, err error) {
+	cloudIndexes, nextMarker, err := repo.cloud.GetIndexes(marker)
+	if nil != err {
+		return
+	}
+
+	for _, index := range cloudIndexes {
+		var log *Log
+		log, err = repo.getLog(index, true)
+		if nil != err {
+			return
+		}
+		ret = append(ret, log)
+	}
+	return
+}
+
 func (repo *Repo) GetCloudRepoTagLogs(context map[string]interface{}) (ret []*Log, err error) {
 	cloudTags, err := repo.cloud.GetTags()
 	if nil != err {
