@@ -242,7 +242,7 @@ func (siyuan *SiYuan) GetIndexes(page int) (indexes []*entity.Index, pageCount, 
 		SetBody(map[string]interface{}{"repo": dir, "token": token, "page": page}).
 		Post(server + "/apis/siyuan/dejavu/getRepoIndexes?uid=" + userId)
 	if nil != err {
-		err = fmt.Errorf("get cloud repo tags failed: %s", err)
+		err = fmt.Errorf("get cloud repo indexes failed: %s", err)
 		return
 	}
 
@@ -251,12 +251,12 @@ func (siyuan *SiYuan) GetIndexes(page int) (indexes []*entity.Index, pageCount, 
 			err = ErrCloudAuthFailed
 			return
 		}
-		err = fmt.Errorf("get cloud repo tags failed [%d]", resp.StatusCode)
+		err = fmt.Errorf("get cloud repo indexes failed [%d]", resp.StatusCode)
 		return
 	}
 
 	if 0 != result.Code {
-		err = fmt.Errorf("get cloud repo tags failed: %s", result.Msg)
+		err = fmt.Errorf("get cloud repo indexes failed: %s", result.Msg)
 		return
 	}
 
