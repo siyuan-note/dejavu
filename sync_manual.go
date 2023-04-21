@@ -32,6 +32,13 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	lock.Lock()
 	defer lock.Unlock()
 
+	// 锁定云端，防止其他设备并发上传数据
+	err = repo.tryLockCloud(context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
 	mergeResult = &MergeResult{Time: time.Now()}
 	trafficStat = &TrafficStat{}
 
@@ -228,6 +235,13 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	lock.Lock()
 	defer lock.Unlock()
 
+	// 锁定云端，防止其他设备并发上传数据
+	err = repo.tryLockCloud(context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
 	trafficStat = &TrafficStat{}
 
 	latest, err := repo.Latest()
@@ -309,7 +323,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 		logging.LogErrorf("upload indexes failed: %s", err)
 		return
 	}
-	//trafficStat.UploadFileCount++
+	trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
 	trafficStat.APIPut++
 
@@ -319,8 +333,19 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
 		return
 	}
-	//trafficStat.UploadFileCount++
+	trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
+	trafficStat.APIPut++
+
+	// 更新云端索引列表
+	downloadBytes, uploadBytes, err := repo.updateCloudIndexes(latest.ID, context)
+	if nil != err {
+		logging.LogErrorf("update cloud indexes failed: %s", err)
+		return
+	}
+	trafficStat.DownloadBytes += downloadBytes
+	trafficStat.UploadBytes += uploadBytes
+	trafficStat.APIGet++
 	trafficStat.APIPut++
 
 	// 统计流量

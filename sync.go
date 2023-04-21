@@ -391,17 +391,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("upload indexes failed: %s", err)
 		return
 	}
-	//trafficStat.UploadFileCount++
-	trafficStat.UploadBytes += length
-	trafficStat.APIPut++
-
-	// 更新云端 latest
-	length, err = repo.updateCloudRef("refs/latest", context)
-	if nil != err {
-		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
-		return
-	}
-	//trafficStat.UploadFileCount++
+	trafficStat.UploadFileCount++
 	trafficStat.UploadBytes += length
 	trafficStat.APIPut++
 
@@ -411,6 +401,27 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
+
+	// 更新云端 latest
+	length, err = repo.updateCloudRef("refs/latest", context)
+	if nil != err {
+		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
+		return
+	}
+	trafficStat.UploadFileCount++
+	trafficStat.UploadBytes += length
+	trafficStat.APIPut++
+
+	// 更新云端索引列表
+	downloadBytes, uploadBytes, err := repo.updateCloudIndexes(latest.ID, context)
+	if nil != err {
+		logging.LogErrorf("update cloud indexes failed: %s", err)
+		return
+	}
+	trafficStat.DownloadBytes += downloadBytes
+	trafficStat.UploadBytes += uploadBytes
+	trafficStat.APIGet++
+	trafficStat.APIPut++
 
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest.ID)
@@ -697,6 +708,48 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	}
 	uploadBytes = info.Size()
 	err = repo.cloud.UploadObject(ref, true)
+	return
+}
+
+type IndexesJSON struct {
+	Indexes []string `json:"indexes"`
+}
+
+func (repo *Repo) updateCloudIndexes(latestID string, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
+	data, err := repo.cloud.DownloadObject("indexes.json")
+	if nil != err {
+		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			return
+		}
+		err = nil
+	}
+	downloadBytes = int64(len(data))
+
+	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
+	if nil != err {
+		return
+	}
+
+	indexes := &IndexesJSON{}
+	if 0 < len(data) {
+		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
+			return
+		}
+	}
+
+	indexes.Indexes = append([]string{latestID}, indexes.Indexes...)
+	if data, err = gulu.JSON.MarshalIndentJSON(indexes, "", "\t"); nil != err {
+		return
+	}
+
+	data = repo.store.compressEncoder.EncodeAll(data, nil)
+	uploadBytes = int64(len(data))
+
+	if err = gulu.File.WriteFileSafer(filepath.Join(repo.Path, "indexes.json"), data, 0644); nil != err {
+		return
+	}
+
+	err = repo.cloud.UploadObject("indexes.json", true)
 	return
 }
 
