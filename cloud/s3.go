@@ -19,6 +19,7 @@ package cloud
 import (
 	"context"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -119,6 +120,53 @@ func (s3 *S3) GetTags() (tags []*Ref, err error) {
 	}
 	if 1 > len(tags) {
 		tags = []*Ref{}
+	}
+	return
+}
+
+type IndexesJSON struct {
+	Indexes []string `json:"indexes"`
+}
+
+const pageSize = 32
+
+func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount int, err error) {
+	ret = []*entity.Index{}
+	data, err := s3.DownloadObject("indexes.json")
+	if nil != err {
+		if s3.isErrNotFound(err) {
+			err = nil
+		}
+		return
+	}
+
+	data, err = compressDecoder.DecodeAll(data, nil)
+	if nil != err {
+		return
+	}
+
+	indexesJSON := &IndexesJSON{}
+	if err = gulu.JSON.UnmarshalJSON(data, indexesJSON); nil != err {
+		return
+	}
+
+	totalCount = len(indexesJSON.Indexes)
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+
+	start := (page - 1) * pageSize
+	end := page * pageSize
+	if end > totalCount {
+		end = totalCount
+	}
+
+	for i := start; i < end; i++ {
+		index, getErr := s3.repoIndex(indexesJSON.Indexes[i])
+		if nil != err {
+			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
+			continue
+		}
+
+		ret = append(ret, index)
 	}
 	return
 }

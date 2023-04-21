@@ -19,6 +19,7 @@ package cloud
 import (
 	"errors"
 	"io/fs"
+	"math"
 	"path"
 	"path/filepath"
 	"sort"
@@ -104,6 +105,49 @@ func (webdav *WebDAV) GetTags() (tags []*Ref, err error) {
 	}
 	if 1 > len(tags) {
 		tags = []*Ref{}
+	}
+	return
+}
+
+func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount int, err error) {
+	ret = []*entity.Index{}
+	data, err := webdav.DownloadObject("indexes.json")
+	if nil != err {
+		err = webdav.parseErr(err)
+		if ErrCloudObjectNotFound == err {
+			err = nil
+		}
+		return
+	}
+
+	data, err = compressDecoder.DecodeAll(data, nil)
+	if nil != err {
+		return
+	}
+
+	indexesJSON := &IndexesJSON{}
+	if err = gulu.JSON.UnmarshalJSON(data, indexesJSON); nil != err {
+		return
+	}
+
+	totalCount = len(indexesJSON.Indexes)
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+
+	start := (page - 1) * pageSize
+	end := page * pageSize
+	if end > totalCount {
+		end = totalCount
+	}
+
+	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
+	for i := start; i < end; i++ {
+		index, getErr := webdav.repoIndex(repoKey, indexesJSON.Indexes[i])
+		if nil != err {
+			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
+			continue
+		}
+
+		ret = append(ret, index)
 	}
 	return
 }
