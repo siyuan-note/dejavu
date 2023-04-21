@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/88250/gulu"
 	"github.com/dgraph-io/ristretto"
@@ -231,6 +232,11 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 	err = gulu.File.WriteFileSafer(file, data, 0644)
 	if nil != err {
 		return errors.New("put index failed: " + err.Error())
+	}
+
+	created := time.UnixMilli(index.Created)
+	if err = os.Chtimes(file, created, created); nil != err {
+		logging.LogWarnf("change index [%s] time failed: %s", index.ID, err.Error())
 	}
 
 	indexCache.Set(index.ID, index, int64(len(data)))
