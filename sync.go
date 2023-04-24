@@ -711,19 +711,8 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	return
 }
 
-type CloudIndexes struct {
-	Indexes []*CloudIndex `json:"indexes"`
-}
-
-type CloudIndex struct {
-	ID         string `json:"id"`
-	SystemID   string `json:"systemID"`
-	SystemName string `json:"systemName"`
-	SystemOS   string `json:"systemOS"`
-}
-
 func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
-	data, err := repo.cloud.DownloadObject("indexes.json")
+	data, err := repo.cloud.DownloadObject("indexes-v2.json")
 	if nil != err {
 		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			return
@@ -737,14 +726,14 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]in
 		return
 	}
 
-	indexes := &CloudIndexes{}
+	indexes := &cloud.Indexes{}
 	if 0 < len(data) {
 		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
-			logging.LogWarnf("unmarshal cloud indexes.json failed: %s", err)
+			logging.LogWarnf("unmarshal cloud indexes-v2.json failed: %s", err)
 		}
 	}
 
-	indexes.Indexes = append([]*CloudIndex{
+	indexes.Indexes = append([]*cloud.Index{
 		{
 			ID:         latest.ID,
 			SystemID:   latest.SystemID,
@@ -759,11 +748,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]in
 	data = repo.store.compressEncoder.EncodeAll(data, nil)
 	uploadBytes = int64(len(data))
 
-	if err = gulu.File.WriteFileSafer(filepath.Join(repo.Path, "indexes.json"), data, 0644); nil != err {
+	if err = gulu.File.WriteFileSafer(filepath.Join(repo.Path, "indexes-v2.json"), data, 0644); nil != err {
 		return
 	}
 
-	err = repo.cloud.UploadObject("indexes.json", true)
+	err = repo.cloud.UploadObject("indexes-v2.json", true)
 	return
 }
 

@@ -111,7 +111,7 @@ func (webdav *WebDAV) GetTags() (tags []*Ref, err error) {
 
 func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount int, err error) {
 	ret = []*entity.Index{}
-	data, err := webdav.DownloadObject("indexes.json")
+	data, err := webdav.DownloadObject("indexes-v2.json")
 	if nil != err {
 		err = webdav.parseErr(err)
 		if ErrCloudObjectNotFound == err {
@@ -125,7 +125,7 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 		return
 	}
 
-	indexesJSON := &IndexesJSON{}
+	indexesJSON := &Indexes{}
 	if err = gulu.JSON.UnmarshalJSON(data, indexesJSON); nil != err {
 		return
 	}
@@ -141,7 +141,7 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 
 	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
 	for i := start; i < end; i++ {
-		index, getErr := webdav.repoIndex(repoKey, indexesJSON.Indexes[i])
+		index, getErr := webdav.repoIndex(repoKey, indexesJSON.Indexes[i].ID)
 		if nil != err {
 			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
 			continue

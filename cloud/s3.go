@@ -124,15 +124,11 @@ func (s3 *S3) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-type IndexesJSON struct {
-	Indexes []string `json:"indexes"`
-}
-
 const pageSize = 32
 
 func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount int, err error) {
 	ret = []*entity.Index{}
-	data, err := s3.DownloadObject("indexes.json")
+	data, err := s3.DownloadObject("indexes-v2.json")
 	if nil != err {
 		if s3.isErrNotFound(err) {
 			err = nil
@@ -145,7 +141,7 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 		return
 	}
 
-	indexesJSON := &IndexesJSON{}
+	indexesJSON := &Indexes{}
 	if err = gulu.JSON.UnmarshalJSON(data, indexesJSON); nil != err {
 		return
 	}
@@ -160,7 +156,7 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 	}
 
 	for i := start; i < end; i++ {
-		index, getErr := s3.repoIndex(indexesJSON.Indexes[i])
+		index, getErr := s3.repoIndex(indexesJSON.Indexes[i].ID)
 		if nil != err {
 			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
 			continue

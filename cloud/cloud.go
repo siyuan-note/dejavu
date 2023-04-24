@@ -158,6 +158,19 @@ type StatBackup struct {
 	Updated   string `json:"updated"`   // 最近更新时间
 }
 
+// Indexes 描述了云端索引列表。
+type Indexes struct {
+	Indexes []*Index `json:"indexes"`
+}
+
+// Index 描述了云端索引。
+type Index struct {
+	ID         string `json:"id"`
+	SystemID   string `json:"systemID"`
+	SystemName string `json:"systemName"`
+	SystemOS   string `json:"systemOS"`
+}
+
 // BaseCloud 描述了云端存储服务的基础实现。
 type BaseCloud struct {
 	*Conf
