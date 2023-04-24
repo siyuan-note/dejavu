@@ -37,6 +37,11 @@ const (
 	testDataCheckoutPath = "testdata/data-checkout"
 )
 
+var (
+	deviceID      = "device-id-0"
+	deviceName, _ = os.Hostname()
+)
+
 func TestPurge(t *testing.T) {
 	clearTestdata(t)
 	subscribeEvents(t)
@@ -67,7 +72,7 @@ func TestIndexCheckout(t *testing.T) {
 	}
 
 	aesKey := repo.store.AesKey
-	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, testHistoryPath, testTempPath, "", aesKey, ignoreLines(), nil)
+	repo, err = NewRepo(testDataCheckoutPath, testRepoPath, testHistoryPath, testTempPath, deviceID, deviceName, aesKey, ignoreLines(), nil)
 	if nil != err {
 		t.Fatalf("new repo failed: %s", err)
 		return
@@ -132,7 +137,7 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		return
 	}
 
-	repo, err = NewRepo(testDataPath, testRepoPath, testHistoryPath, testTempPath, "", aesKey, ignoreLines(), nil)
+	repo, err = NewRepo(testDataPath, testRepoPath, testHistoryPath, testTempPath, deviceID, deviceName, aesKey, ignoreLines(), nil)
 	if nil != err {
 		t.Fatalf("new repo failed: %s", err)
 		return

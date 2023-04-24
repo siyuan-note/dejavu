@@ -26,4 +26,5 @@ type Index struct {
 	Size       int64    `json:"size"`       // 文件总大小
 	SystemID   string   `json:"systemID"`   // 系统 ID
 	SystemName string   `json:"systemName"` // 系统名称
+	SystemOS   string   `json:"systemOS"`   // 系统操作系统
 }

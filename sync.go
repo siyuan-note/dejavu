@@ -719,6 +719,7 @@ type CloudIndex struct {
 	ID         string `json:"id"`
 	SystemID   string `json:"systemID"`
 	SystemName string `json:"systemName"`
+	SystemOS   string `json:"systemOS"`
 }
 
 func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
@@ -748,6 +749,7 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]in
 			ID:         latest.ID,
 			SystemID:   latest.SystemID,
 			SystemName: latest.SystemName,
+			SystemOS:   latest.SystemOS,
 		},
 	}, indexes.Indexes...)
 	if data, err = gulu.JSON.MarshalIndentJSON(indexes, "", "\t"); nil != err {
