@@ -38,6 +38,9 @@ type Log struct {
 	Count       int            `json:"count"`       // 文件总数
 	Size        int64          `json:"size"`        // 文件总大小
 	HSize       string         `json:"hSize"`       // 格式化好的文件总大小 "10.00 MB"
+	SystemID    string         `json:"systemID"`    // 设备 ID
+	SystemName  string         `json:"systemName"`  // 设备名称
+	SystemOS    string         `json:"systemOS"`    // 设备操作系统
 	Tag         string         `json:"tag"`         // 索引标记名称
 	HTagUpdated string         `json:"hTagUpdated"` // 标记时间 "2006-01-02 15:04:05"
 }
@@ -207,14 +210,17 @@ func (repo *Repo) getLog(index *entity.Index, fetchFiles bool) (ret *Log, err er
 		files, _ = repo.getFiles(index.Files)
 	}
 	ret = &Log{
-		ID:       index.ID,
-		Memo:     index.Memo,
-		Created:  index.Created,
-		HCreated: time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
-		Files:    files,
-		Count:    index.Count,
-		Size:     index.Size,
-		HSize:    humanize.Bytes(uint64(index.Size)),
+		ID:         index.ID,
+		Memo:       index.Memo,
+		Created:    index.Created,
+		HCreated:   time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"),
+		Files:      files,
+		Count:      index.Count,
+		Size:       index.Size,
+		HSize:      humanize.Bytes(uint64(index.Size)),
+		SystemID:   index.SystemID,
+		SystemName: index.SystemName,
+		SystemOS:   index.SystemOS,
 	}
 	return
 }
