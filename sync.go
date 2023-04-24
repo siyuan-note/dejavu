@@ -413,7 +413,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	trafficStat.APIPut++
 
 	// 更新云端索引列表
-	downloadBytes, uploadBytes, err := repo.updateCloudIndexes(latest.ID, context)
+	downloadBytes, uploadBytes, err := repo.updateCloudIndexes(latest, context)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return
@@ -711,11 +711,17 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	return
 }
 
-type IndexesJSON struct {
-	Indexes []string `json:"indexes"`
+type CloudIndexes struct {
+	Indexes []*CloudIndex `json:"indexes"`
 }
 
-func (repo *Repo) updateCloudIndexes(latestID string, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
+type CloudIndex struct {
+	ID         string `json:"id"`
+	SystemID   string `json:"systemID"`
+	SystemName string `json:"systemName"`
+}
+
+func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
 	data, err := repo.cloud.DownloadObject("indexes.json")
 	if nil != err {
 		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
@@ -730,14 +736,20 @@ func (repo *Repo) updateCloudIndexes(latestID string, context map[string]interfa
 		return
 	}
 
-	indexes := &IndexesJSON{}
+	indexes := &CloudIndexes{}
 	if 0 < len(data) {
 		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
-			return
+			logging.LogWarnf("unmarshal cloud indexes.json failed: %s", err)
 		}
 	}
 
-	indexes.Indexes = append([]string{latestID}, indexes.Indexes...)
+	indexes.Indexes = append([]*CloudIndex{
+		{
+			ID:         latest.ID,
+			SystemID:   latest.SystemID,
+			SystemName: latest.SystemName,
+		},
+	}, indexes.Indexes...)
 	if data, err = gulu.JSON.MarshalIndentJSON(indexes, "", "\t"); nil != err {
 		return
 	}

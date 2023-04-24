@@ -44,6 +44,7 @@ type Repo struct {
 	HistoryPath string   // 数据历史文件夹的绝对路径，如：F:\\SiYuan\\history\\
 	TempPath    string   // 临时文件夹的绝对路径，如：F:\\SiYuan\\temp\\
 	DeviceID    string   // 设备 ID
+	DeviceName  string   // 设备名称
 	IgnoreLines []string // 忽略配置文件内容行，是用 .gitignore 语法
 
 	store    *Store      // 仓库的存储
@@ -52,7 +53,7 @@ type Repo struct {
 }
 
 // NewRepo 创建一个新的仓库。
-func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID string, aesKey []byte, ignoreLines []string, cloud cloud.Cloud) (ret *Repo, err error) {
+func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName string, aesKey []byte, ignoreLines []string, cloud cloud.Cloud) (ret *Repo, err error) {
 	if nil != cloud {
 		cloud.GetConf().RepoPath = repoPath
 	}
@@ -62,6 +63,7 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID string, aesKey 
 		HistoryPath: filepath.Clean(historyPath),
 		TempPath:    filepath.Clean(tempPath),
 		DeviceID:    deviceID,
+		DeviceName:  deviceName,
 		cloud:       cloud,
 		chunkPol:    chunker.Pol(0x3DA3358B4DC173), // 固定分块多项式值
 	}
