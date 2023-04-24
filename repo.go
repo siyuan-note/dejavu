@@ -317,7 +317,14 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 
 		// 如果没有索引，则创建第一个索引
-		latest = &entity.Index{ID: util.RandHash(), Memo: memo, Created: time.Now().UnixMilli()}
+		latest = &entity.Index{
+			ID:         util.RandHash(),
+			Memo:       memo,
+			Created:    time.Now().UnixMilli(),
+			SystemID:   repo.DeviceID,
+			SystemName: repo.DeviceName,
+			SystemOS:   repo.DeviceOS,
+		}
 		init = true
 	}
 	var upserts, removes, latestFiles []*entity.File
@@ -345,9 +352,12 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		ret = latest
 	} else {
 		ret = &entity.Index{
-			ID:      util.RandHash(),
-			Memo:    memo,
-			Created: time.Now().UnixMilli(),
+			ID:         util.RandHash(),
+			Memo:       memo,
+			Created:    time.Now().UnixMilli(),
+			SystemID:   repo.DeviceID,
+			SystemName: repo.DeviceName,
+			SystemOS:   repo.DeviceOS,
 		}
 	}
 
