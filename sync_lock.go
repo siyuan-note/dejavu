@@ -43,6 +43,10 @@ func (repo *Repo) unlockCloud(context map[string]interface{}) {
 		}
 	}
 
+	if errors.Is(err, cloud.ErrCloudAuthFailed) {
+		return
+	}
+
 	logging.LogErrorf("unlock cloud repo failed: %s", err)
 	return
 }
@@ -69,8 +73,8 @@ func (repo *Repo) tryLockCloud(context map[string]interface{}) (err error) {
 				case <-endRefreshLock:
 					return
 				case <-time.After(30 * time.Second):
-					if err := repo.lockCloud0(); nil != err {
-						logging.LogErrorf("refresh cloud repo lock failed: %s", err)
+					if refershErr := repo.lockCloud0(); nil != refershErr {
+						logging.LogErrorf("refresh cloud repo lock failed: %s", refershErr)
 					}
 				}
 			}
@@ -131,9 +135,10 @@ func (repo *Repo) lockCloud0() (err error) {
 
 	err = repo.cloud.UploadObject("lock-sync", true)
 	if nil != err {
-		if errors.Is(err, cloud.ErrSystemTimeIncorrect) {
+		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) {
 			return
 		}
+
 		logging.LogErrorf("upload lock sync failed: %s", err)
 		err = ErrLockCloudFailed
 	}
