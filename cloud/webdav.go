@@ -147,6 +147,7 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 			continue
 		}
 
+		index.Files = nil // Optimize the performance of obtaining cloud snapshots https://github.com/siyuan-note/siyuan/issues/8387
 		ret = append(ret, index)
 	}
 	return

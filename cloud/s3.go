@@ -162,6 +162,7 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 			continue
 		}
 
+		index.Files = nil // Optimize the performance of obtaining cloud snapshots https://github.com/siyuan-note/siyuan/issues/8387
 		ret = append(ret, index)
 	}
 	return
