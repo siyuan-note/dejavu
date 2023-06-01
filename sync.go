@@ -731,6 +731,25 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]in
 		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
 			logging.LogWarnf("unmarshal cloud indexes-v2.json failed: %s", err)
 		}
+
+		// Deduplication when uploading cloud snapshot indexes https://github.com/siyuan-note/siyuan/issues/8424
+		found := false
+		tmp := &cloud.Indexes{}
+		added := map[string]bool{}
+		for _, index := range indexes.Indexes {
+			if index.ID == latest.ID {
+				found = true
+			}
+
+			if !added[index.ID] {
+				tmp.Indexes = append(tmp.Indexes, index)
+				added[index.ID] = true
+			}
+		}
+		if found {
+			return
+		}
+		indexes = tmp
 	}
 
 	indexes.Indexes = append([]*cloud.Index{
