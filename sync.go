@@ -48,6 +48,10 @@ type MergeResult struct {
 	Upserts, Removes, Conflicts []*entity.File
 }
 
+func (mr *MergeResult) DataChanged() bool {
+	return len(mr.Upserts) > 0 || len(mr.Removes) > 0 || len(mr.Conflicts) > 0
+}
+
 type DownloadTrafficStat struct {
 	DownloadFileCount  int
 	DownloadChunkCount int
