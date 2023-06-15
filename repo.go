@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
-	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/cloud"
@@ -167,75 +166,30 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	waitGroup := &sync.WaitGroup{}
-	var errs []error
-	errLock := &sync.Mutex{}
-	p, _ := ants.NewPoolWithFunc(2, func(arg interface{}) {
-		defer waitGroup.Done()
-		file := arg.(*entity.File)
-		file, getErr := repo.store.GetFile(file.ID)
-		if nil != getErr {
-			errLock.Lock()
-			errs = append(errs, getErr)
-			errLock.Unlock()
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, upserts)
+	for _, file := range upserts {
+		var data []byte
+		data, err = repo.openFile(file)
+		if nil != err {
 			return
 		}
 
-		data, openErr := repo.openFile(file)
-		if nil != openErr {
-			errLock.Lock()
-			errs = append(errs, getErr)
-			errLock.Unlock()
-			return
-		}
-
-		absPath := filepath.Join(repo.DataPath, file.Path)
+		absPath := repo.absPath(file.Path)
 		dir := filepath.Dir(absPath)
-
 		if mkErr := os.MkdirAll(dir, 0755); nil != mkErr {
-			errLock.Lock()
-			errs = append(errs, mkErr)
-			errLock.Unlock()
 			return
 		}
 
-		if writeErr := filelock.WriteFile(absPath, data); nil != writeErr {
-			errLock.Lock()
-			errs = append(errs, writeErr)
-			errLock.Unlock()
+		if err = filelock.WriteFile(absPath, data); nil != err {
 			return
 		}
 
 		updated := time.UnixMilli(file.Updated)
-		if chtErr := os.Chtimes(absPath, updated, updated); nil != chtErr {
-			logging.LogErrorf("change [%s] time failed: %s", absPath, chtErr)
-			errLock.Lock()
-			errs = append(errs, chtErr)
-			errLock.Unlock()
+		if err = os.Chtimes(absPath, updated, updated); nil != err {
+			logging.LogErrorf("change [%s] time failed: %s", absPath, err)
 			return
 		}
 		eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
-	})
-
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, upserts)
-	for _, f := range upserts {
-		waitGroup.Add(1)
-		err = p.Invoke(f)
-		if nil != err {
-			return
-		}
-		if 0 < len(errs) {
-			err = errs[0]
-			return
-		}
-	}
-
-	waitGroup.Wait()
-	p.Release()
-
-	if 0 < len(errs) {
-		err = errs[0]
-		return
 	}
 
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, removes)

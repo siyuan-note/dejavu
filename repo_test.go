@@ -97,6 +97,12 @@ func clearTestdata(t *testing.T) {
 		t.Fatalf("remove failed: %s", err)
 		return
 	}
+
+	err = os.RemoveAll(testDataCheckoutPath)
+	if nil != err {
+		t.Fatalf("remove failed: %s", err)
+		return
+	}
 }
 
 func subscribeEvents(t *testing.T) {
