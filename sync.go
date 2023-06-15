@@ -290,7 +290,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			// 本地 syncignore 存在变更，则临时迁出
 			coDir = filepath.Join(repo.TempPath, "repo", "sync", "ignore")
 		}
-		if err = repo.checkoutFile(cloudUpsertIgnore, coDir, context); nil != err {
+		if err = repo.checkoutFile(cloudUpsertIgnore, coDir, 1, 1, context); nil != err {
 			logging.LogErrorf("checkout ignore file failed: %s", err)
 			return
 		}
@@ -321,7 +321,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	if 0 < len(tmpMergeConflicts) {
 		now := mergeResult.Time.Format("2006-01-02-150405")
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
-		for _, file := range tmpMergeConflicts {
+		for i, file := range tmpMergeConflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
@@ -329,7 +329,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				return
 			}
 
-			err = repo.checkoutFile(checkoutTmp, temp, context)
+			err = repo.checkoutFile(checkoutTmp, temp, i+1, len(tmpMergeConflicts), context)
 			if nil != err {
 				logging.LogErrorf("checkout file failed: %s", err)
 				return
@@ -648,13 +648,14 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 }
 
 func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, files)
-	for _, file := range files {
+	total := len(files)
+	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, total)
+	for i, file := range files {
 		absPath := repo.absPath(file.Path)
 		if err = filelock.Remove(absPath); nil != err {
 			return
 		}
-		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, file.Path)
+		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, i+1, total)
 	}
 	return
 }

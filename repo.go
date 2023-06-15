@@ -166,20 +166,23 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, upserts)
+	count, total := 0, len(upserts)
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
 	for _, file := range upserts {
-		if err = repo.checkoutFile(file, repo.DataPath, context); nil != err {
+		count++
+		if err = repo.checkoutFile(file, repo.DataPath, count, total, context); nil != err {
 			return
 		}
 	}
 
-	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, removes)
-	for _, f := range removes {
+	total = len(removes)
+	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, total)
+	for i, f := range removes {
 		absPath := repo.absPath(f.Path)
 		if err = filelock.Remove(absPath); nil != err {
 			return
 		}
-		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, f.Path)
+		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, i+1, total)
 	}
 	return
 }
@@ -460,9 +463,10 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 }
 
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, files)
-	for _, file := range files {
-		err = repo.checkoutFile(file, repo.DataPath, context)
+	total := len(files)
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
+	for i, file := range files {
+		err = repo.checkoutFile(file, repo.DataPath, i+1, total, context)
 		if nil != err {
 			return
 		}
@@ -470,7 +474,7 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	return
 }
 
-func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context map[string]interface{}) (err error) {
+func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, total int, context map[string]interface{}) (err error) {
 	absPath := filepath.Join(checkoutDir, file.Path)
 	dir, name := filepath.Split(absPath)
 	if err = os.MkdirAll(dir, 0755); nil != err {
@@ -530,6 +534,6 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context ma
 		logging.LogErrorf("change [%s] time failed: %s", absPath, err)
 		return
 	}
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, count, total)
 	return
 }

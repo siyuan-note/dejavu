@@ -131,11 +131,17 @@ func subscribeEvents(t *testing.T) {
 	eventbus.Subscribe(eventbus.EvtCheckoutWalkData, func(context map[string]interface{}, path string) {
 		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutWalkData, path)
 	})
-	eventbus.Subscribe(eventbus.EvtCheckoutUpsertFile, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutUpsertFile, path)
+	eventbus.Subscribe(eventbus.EvtCheckoutUpsertFiles, func(context map[string]interface{}, total int) {
+		t.Logf("[%s]: [%d/%d]", eventbus.EvtCheckoutUpsertFiles, 0, total)
 	})
-	eventbus.Subscribe(eventbus.EvtCheckoutRemoveFile, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", eventbus.EvtCheckoutRemoveFile, path)
+	eventbus.Subscribe(eventbus.EvtCheckoutUpsertFile, func(context map[string]interface{}, count, total int) {
+		t.Logf("[%s]: [%d/%d]", eventbus.EvtCheckoutUpsertFile, count, total)
+	})
+	eventbus.Subscribe(eventbus.EvtCheckoutRemoveFiles, func(context map[string]interface{}, total int) {
+		t.Logf("[%s]: [%d/%d]", eventbus.EvtCheckoutRemoveFiles, 0, total)
+	})
+	eventbus.Subscribe(eventbus.EvtCheckoutRemoveFile, func(context map[string]interface{}, count, total int) {
+		t.Logf("[%s]: [%d/%d]", eventbus.EvtCheckoutRemoveFile, count, total)
 	})
 }
 

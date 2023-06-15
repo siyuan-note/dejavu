@@ -141,7 +141,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	if 0 < len(mergeResult.Conflicts) {
 		now := mergeResult.Time.Format("2006-01-02-150405")
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
-		for _, file := range mergeResult.Conflicts {
+		for i, file := range mergeResult.Conflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
@@ -149,7 +149,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 				return
 			}
 
-			err = repo.checkoutFile(checkoutTmp, temp, context)
+			err = repo.checkoutFile(checkoutTmp, temp, i+1, len(mergeResult.Conflicts), context)
 			if nil != err {
 				logging.LogErrorf("checkout file failed: %s", err)
 				return
