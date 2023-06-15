@@ -543,6 +543,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 	if poolSize > len(chunkIDs) {
 		poolSize = len(chunkIDs)
 	}
+	count, total := 0, len(chunkIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != downloadErr {
@@ -550,7 +551,8 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 		}
 
 		chunkID := arg.(string)
-		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, chunkIDs, context)
+		count++
+		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, count, total, context)
 		if nil != dccErr {
 			downloadErr = dccErr
 			return
@@ -565,7 +567,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunks, context, chunkIDs)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunks, context, total)
 	for _, chunkID := range chunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(chunkID); nil != err {
@@ -597,6 +599,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	if poolSize > len(fileIDs) {
 		poolSize = len(fileIDs)
 	}
+	count, total := 0, len(fileIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != downloadErr {
@@ -604,7 +607,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		}
 
 		fileID := arg.(string)
-		length, file, dcfErr := repo.downloadCloudFile(fileID, fileIDs, context)
+		length, file, dcfErr := repo.downloadCloudFile(fileID, count, total, context)
 		if nil != dcfErr {
 			downloadErr = dcfErr
 			return
@@ -623,7 +626,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFiles, context, fileIDs)
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFiles, context, total)
 	for _, fileID := range fileIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(fileID); nil != err {
@@ -776,6 +779,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
 	}
+	count, total := 0, len(upsertFiles)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -784,7 +788,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID, upsertFiles)
+		count++
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
@@ -794,7 +799,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeUploadFiles, context, upsertFiles)
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadFiles, context, total)
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertFile.ID); nil != err {
@@ -831,6 +836,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
 	}
+	count, total := 0, len(upsertChunkIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -839,7 +845,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID, upsertChunkIDs)
+		count++
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
@@ -849,7 +856,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeUploadChunks, context, upsertChunkIDs)
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadChunks, context, total)
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertChunkID); nil != err {
@@ -1023,8 +1030,8 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 	return
 }
 
-func (repo *Repo) downloadCloudChunk(id string, ids []string, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id, ids)
+func (repo *Repo) downloadCloudChunk(id string, count, total int, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, count, total)
 
 	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
@@ -1037,8 +1044,8 @@ func (repo *Repo) downloadCloudChunk(id string, ids []string, context map[string
 	return
 }
 
-func (repo *Repo) downloadCloudFile(id string, ids []string, context map[string]interface{}) (length int64, ret *entity.File, err error) {
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id, ids)
+func (repo *Repo) downloadCloudFile(id string, count, total int, context map[string]interface{}) (length int64, ret *entity.File, err error) {
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, count, total)
 
 	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
