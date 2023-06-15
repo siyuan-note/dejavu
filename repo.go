@@ -496,21 +496,10 @@ func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashe
 		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: chnk.Data})
 		chunkHashes = append(chunkHashes, chnkHash)
 	}
-
 	if nil != err {
 		logging.LogErrorf("chunk file [%s] failed: %s", absPath, err)
-		if closeErr := reader.Sync(); nil != closeErr {
-			logging.LogErrorf("sync file [%s] failed: %s", absPath, closeErr)
-		}
-		if closeErr := reader.Close(); nil != closeErr {
-			logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
-		}
-		return
 	}
 
-	if closeErr := reader.Sync(); nil != closeErr {
-		logging.LogErrorf("sync file [%s] failed: %s", absPath, closeErr)
-	}
 	if closeErr := reader.Close(); nil != closeErr {
 		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 	}
