@@ -550,7 +550,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 		}
 
 		chunkID := arg.(string)
-		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, context)
+		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, chunkIDs, context)
 		if nil != dccErr {
 			downloadErr = dccErr
 			return
@@ -604,7 +604,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		}
 
 		fileID := arg.(string)
-		length, file, dcfErr := repo.downloadCloudFile(fileID, context)
+		length, file, dcfErr := repo.downloadCloudFile(fileID, fileIDs, context)
 		if nil != dcfErr {
 			downloadErr = dcfErr
 			return
@@ -784,7 +784,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, upsertFileID, upsertFiles)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
@@ -839,7 +839,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, upsertChunkID, upsertChunkIDs)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
@@ -1023,8 +1023,8 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 	return
 }
 
-func (repo *Repo) downloadCloudChunk(id string, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id)
+func (repo *Repo) downloadCloudChunk(id string, ids []string, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, id, ids)
 
 	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
@@ -1037,8 +1037,8 @@ func (repo *Repo) downloadCloudChunk(id string, context map[string]interface{}) 
 	return
 }
 
-func (repo *Repo) downloadCloudFile(id string, context map[string]interface{}) (length int64, ret *entity.File, err error) {
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id)
+func (repo *Repo) downloadCloudFile(id string, ids []string, context map[string]interface{}) (length int64, ret *entity.File, err error) {
+	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, id, ids)
 
 	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
