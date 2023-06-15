@@ -607,6 +607,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		}
 
 		fileID := arg.(string)
+		count++
 		length, file, dcfErr := repo.downloadCloudFile(fileID, count, total, context)
 		if nil != dcfErr {
 			downloadErr = dcfErr
