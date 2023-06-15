@@ -471,20 +471,58 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 }
 
 func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context map[string]interface{}) (err error) {
-	data, err := repo.openFile(file)
-	if nil != err {
-		return
-	}
-
 	absPath := filepath.Join(checkoutDir, file.Path)
-	dir := filepath.Dir(absPath)
+	dir, name := filepath.Split(absPath)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return
 	}
 
-	if err = filelock.WriteFile(absPath, data); nil != err {
+	tmp := filepath.Join(dir, name+gulu.Rand.String(7)+".tmp")
+	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	if nil != err {
+		return
+	}
+
+	for _, c := range file.Chunks {
+		var chunk *entity.Chunk
+		chunk, err = repo.store.GetChunk(c)
+		if nil != err {
+			return
+		}
+
+		if _, err = f.Write(chunk.Data); nil != err {
+			logging.LogErrorf("write file [%s] failed: %s", absPath, err)
+			return
+		}
+	}
+
+	if err = f.Sync(); nil != err {
 		logging.LogErrorf("write file [%s] failed: %s", absPath, err)
 		return
+	}
+	if err = f.Close(); nil != err {
+		logging.LogErrorf("write file [%s] failed: %s", absPath, err)
+		return
+	}
+
+	filelock.RWLock.Lock()
+	defer filelock.RWLock.Unlock()
+
+	for i := 0; i < 3; i++ {
+		err = os.Rename(f.Name(), absPath) // Windows 上重命名是非原子的
+		if nil == err {
+			os.Remove(f.Name())
+			break
+		}
+
+		if errMsg := strings.ToLower(err.Error()); strings.Contains(errMsg, "access is denied") || strings.Contains(errMsg, "used by another process") { // 文件可能是被锁定
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		break
+	}
+	if nil != err {
+		logging.LogFatalf(logging.ExitCodeFileSysErr, "write file [%s] failed: %s", absPath, err)
 	}
 
 	updated := time.UnixMilli(file.Updated)
