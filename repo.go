@@ -464,59 +464,6 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	return
 }
 
-func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashes []string, err error) {
-	info, statErr := os.Stat(absPath)
-	if nil != statErr {
-		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
-		err = statErr
-		return
-	}
-
-	if chunker.MinSize > info.Size() {
-		data, readErr := filelock.ReadFile(absPath)
-		if nil != readErr {
-			logging.LogErrorf("read file [%s] failed: %s", absPath, readErr)
-			err = readErr
-			return
-		}
-		chnkHash := util.Hash(data)
-		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: data})
-		chunkHashes = append(chunkHashes, chnkHash)
-		return
-	}
-
-	reader, err := os.OpenFile(absPath, os.O_RDWR, 0644)
-	if nil != err {
-		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
-		return
-	}
-
-	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
-	for {
-		buf := make([]byte, chunker.MaxSize)
-		chnk, chnkErr := chnkr.Next(buf)
-		if io.EOF == chnkErr {
-			break
-		}
-		if nil != chnkErr {
-			err = chnkErr
-			break
-		}
-
-		chnkHash := util.Hash(chnk.Data)
-		chunks = append(chunks, &entity.Chunk{ID: chnkHash, Data: chnk.Data})
-		chunkHashes = append(chunkHashes, chnkHash)
-	}
-	if nil != err {
-		logging.LogErrorf("chunk file [%s] failed: %s", absPath, err)
-	}
-
-	if closeErr := reader.Close(); nil != closeErr {
-		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
-	}
-	return
-}
-
 func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
 	for _, fileID := range fileIDs {
 		file, getErr := repo.store.GetFile(fileID)
