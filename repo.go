@@ -363,23 +363,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, upserts)
 	for _, file := range upserts {
-		absPath := repo.absPath(file.Path)
-		chunks, hashes, chunkErr := repo.fileChunks(absPath)
-		if nil != chunkErr {
-			err = chunkErr
-			return
-		}
-		file.Chunks = hashes
-
-		for _, chunk := range chunks {
-			err = repo.store.PutChunk(chunk)
-			if nil != err {
-				return
-			}
-		}
-
-		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, file.Path)
-		err = repo.store.PutFile(file)
+		err = repo.putFileChunks(file, context)
 		if nil != err {
 			return
 		}
@@ -451,6 +435,79 @@ func (repo *Repo) absPath(relPath string) string {
 func (repo *Repo) relPath(absPath string) string {
 	absPath = filepath.Clean(absPath)
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
+}
+
+func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}) (err error) {
+	absPath := repo.absPath(file.Path)
+
+	info, err := os.Stat(absPath)
+	if nil != err {
+		logging.LogErrorf("stat file [%s] failed: %s", absPath, err)
+		return
+	}
+
+	if chunker.MinSize > info.Size() {
+		var data []byte
+		data, err = filelock.ReadFile(absPath)
+		if nil != err {
+			logging.LogErrorf("read file [%s] failed: %s", absPath, err)
+			return
+		}
+
+		chunkHash := util.Hash(data)
+		file.Chunks = append(file.Chunks, chunkHash)
+		chunk := &entity.Chunk{ID: chunkHash, Data: data}
+		if err = repo.store.PutChunk(chunk); nil != err {
+			logging.LogErrorf("put chunk [%s] failed: %s", chunkHash, err)
+			return
+		}
+
+		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, file.Path)
+		err = repo.store.PutFile(file)
+		if nil != err {
+			return
+		}
+		return
+	}
+
+	reader, err := os.OpenFile(absPath, os.O_RDWR, 0644)
+	if nil != err {
+		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
+		return
+	}
+
+	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
+	for {
+		buf := make([]byte, chunker.MaxSize)
+		var chnk chunker.Chunk
+		chnk, err = chnkr.Next(buf)
+		if io.EOF == err {
+			break
+		}
+		if nil != err {
+			logging.LogErrorf("chunk file [%s] failed: %s", absPath, err)
+			return
+		}
+
+		chunkHash := util.Hash(chnk.Data)
+		file.Chunks = append(file.Chunks, chunkHash)
+		chunk := &entity.Chunk{ID: chunkHash, Data: chnk.Data}
+		if err = repo.store.PutChunk(chunk); nil != err {
+			logging.LogErrorf("put chunk [%s] failed: %s", chunkHash, err)
+			return
+		}
+	}
+
+	if closeErr := reader.Close(); nil != closeErr {
+		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
+	}
+
+	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, file.Path)
+	err = repo.store.PutFile(file)
+	if nil != err {
+		return
+	}
+	return
 }
 
 func (repo *Repo) fileChunks(absPath string) (chunks []*entity.Chunk, chunkHashes []string, err error) {
