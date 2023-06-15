@@ -655,44 +655,6 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 	return
 }
 
-func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, files)
-	for _, file := range files {
-		err = repo.checkoutFile(file, repo.DataPath, context)
-		if nil != err {
-			return
-		}
-	}
-	return
-}
-
-func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context map[string]interface{}) (err error) {
-	data, err := repo.openFile(file)
-	if nil != err {
-		return
-	}
-
-	absPath := filepath.Join(checkoutDir, file.Path)
-	dir := filepath.Dir(absPath)
-
-	if err = os.MkdirAll(dir, 0755); nil != err {
-		return
-	}
-
-	if err = filelock.WriteFile(absPath, data); nil != err {
-		logging.LogErrorf("write file [%s] failed: %s", absPath, err)
-		return
-	}
-
-	updated := time.UnixMilli(file.Updated)
-	if err = os.Chtimes(absPath, updated, updated); nil != err {
-		logging.LogErrorf("change [%s] time failed: %s", absPath, err)
-		return
-	}
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
-	return
-}
-
 func (repo *Repo) existDataFile(files []*entity.File, file *entity.File) bool {
 	for _, f := range files {
 		if f.ID == file.ID || f.Path == file.Path {

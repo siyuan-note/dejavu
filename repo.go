@@ -168,28 +168,9 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, upserts)
 	for _, file := range upserts {
-		var data []byte
-		data, err = repo.openFile(file)
-		if nil != err {
+		if err = repo.checkoutFile(file, repo.DataPath, context); nil != err {
 			return
 		}
-
-		absPath := repo.absPath(file.Path)
-		dir := filepath.Dir(absPath)
-		if mkErr := os.MkdirAll(dir, 0755); nil != mkErr {
-			return
-		}
-
-		if err = filelock.WriteFile(absPath, data); nil != err {
-			return
-		}
-
-		updated := time.UnixMilli(file.Updated)
-		if err = os.Chtimes(absPath, updated, updated); nil != err {
-			logging.LogErrorf("change [%s] time failed: %s", absPath, err)
-			return
-		}
-		eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
 	}
 
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, removes)
@@ -225,16 +206,6 @@ func (repo *Repo) GetFile(fileID string) (ret *entity.File, err error) {
 
 func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 	ret, err = repo.openFile(file)
-	return
-}
-
-func (repo *Repo) OpenFileByID(fileID string) (ret []byte, err error) {
-	f, err := repo.store.GetFile(fileID)
-	if nil != err {
-		return
-	}
-
-	ret, err = repo.openFile(f)
 	return
 }
 
@@ -485,5 +456,42 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 		}
 		ret = append(ret, chunk.Data...)
 	}
+	return
+}
+
+func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, files)
+	for _, file := range files {
+		err = repo.checkoutFile(file, repo.DataPath, context)
+		if nil != err {
+			return
+		}
+	}
+	return
+}
+
+func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, context map[string]interface{}) (err error) {
+	data, err := repo.openFile(file)
+	if nil != err {
+		return
+	}
+
+	absPath := filepath.Join(checkoutDir, file.Path)
+	dir := filepath.Dir(absPath)
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return
+	}
+
+	if err = filelock.WriteFile(absPath, data); nil != err {
+		logging.LogErrorf("write file [%s] failed: %s", absPath, err)
+		return
+	}
+
+	updated := time.UnixMilli(file.Updated)
+	if err = os.Chtimes(absPath, updated, updated); nil != err {
+		logging.LogErrorf("change [%s] time failed: %s", absPath, err)
+		return
+	}
+	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, file.Path)
 	return
 }
