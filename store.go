@@ -308,7 +308,7 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 	}
 
 	_, file := store.AbsPath(id)
-	data, err := filelock.ReadFile(file)
+	data, err := os.ReadFile(file)
 	if nil != err {
 		return
 	}
@@ -353,7 +353,7 @@ func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 
 func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 	_, file := store.AbsPath(id)
-	data, err := filelock.ReadFile(file)
+	data, err := os.ReadFile(file)
 	if nil != err {
 		return
 	}

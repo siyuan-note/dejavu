@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/cloud"
@@ -255,22 +256,41 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 		init = true
 	}
+
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
 		count, total := 0, len(files)
 		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
-		for _, f := range latest.Files {
+		lock := &sync.Mutex{}
+		waitGroup := &sync.WaitGroup{}
+		p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
+			defer waitGroup.Done()
+
 			count++
 			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, count, total)
-			var file *entity.File
-			file, err = repo.store.GetFile(f)
-			if nil != err {
-				logging.LogErrorf("get file [%s] failed: %s", f, err)
+
+			fileID := arg.(string)
+			file, getErr := repo.store.GetFile(fileID)
+			if nil != getErr {
+				logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
 				err = ErrNotFoundObject
 				return
 			}
+
+			lock.Lock()
 			latestFiles = append(latestFiles, file)
+			lock.Unlock()
+		})
+
+		for _, f := range latest.Files {
+			waitGroup.Add(1)
+			err = p.Invoke(f)
+			if nil != err {
+				return
+			}
 		}
+		waitGroup.Wait()
+		p.Release()
 	}
 	upserts, removes = repo.DiffUpsertRemove(files, latestFiles)
 	if 1 > len(upserts) && 1 > len(removes) {
