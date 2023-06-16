@@ -257,9 +257,11 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	}
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
-		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, latest.Files)
+		count, total := 0, len(files)
+		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
 		for _, f := range latest.Files {
-			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, f)
+			count++
+			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, count, total)
 			var file *entity.File
 			file, err = repo.store.GetFile(f)
 			if nil != err {
