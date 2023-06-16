@@ -313,13 +313,27 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 	count, total := 0, len(upserts)
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
-	for _, file := range upserts {
+	waitGroup := &sync.WaitGroup{}
+	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
+		defer waitGroup.Done()
+
 		count++
+		file := arg.(*entity.File)
 		err = repo.putFileChunks(file, context, count, total)
 		if nil != err {
 			return
 		}
+	})
+
+	for _, file := range upserts {
+		waitGroup.Add(1)
+		err = p.Invoke(file)
+		if nil != err {
+			return
+		}
 	}
+	waitGroup.Wait()
+	p.Release()
 
 	for _, file := range files {
 		ret.Files = append(ret.Files, file.ID)
