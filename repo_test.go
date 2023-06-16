@@ -118,11 +118,11 @@ func subscribeEvents(t *testing.T) {
 	eventbus.Subscribe(eventbus.EvtIndexGetLatestFile, func(context map[string]interface{}, count int, total int) {
 		t.Logf("[%s]: [%v/%v]", eventbus.EvtIndexGetLatestFile, count, total)
 	})
-	eventbus.Subscribe(eventbus.EvtIndexUpsertFiles, func(context map[string]interface{}, files []*entity.File) {
-		t.Logf("[%s]: [%v]", eventbus.EvtIndexUpsertFiles, files)
+	eventbus.Subscribe(eventbus.EvtIndexUpsertFiles, func(context map[string]interface{}, total int) {
+		t.Logf("[%s]: [%v/%v]", eventbus.EvtIndexUpsertFiles, 0, total)
 	})
-	eventbus.Subscribe(eventbus.EvtIndexUpsertFile, func(context map[string]interface{}, path string) {
-		t.Logf("[%s]: [%s]", eventbus.EvtIndexUpsertFile, path)
+	eventbus.Subscribe(eventbus.EvtIndexUpsertFile, func(context map[string]interface{}, count int, total int) {
+		t.Logf("[%s]: [%v/%v]", eventbus.EvtIndexUpsertFile, count, total)
 	})
 
 	eventbus.Subscribe(eventbus.EvtCheckoutBeforeWalkData, func(context map[string]interface{}, path string) {

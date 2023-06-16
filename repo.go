@@ -311,9 +311,11 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 	}
 
-	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, upserts)
+	count, total := 0, len(upserts)
+	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
 	for _, file := range upserts {
-		err = repo.putFileChunks(file, context)
+		count++
+		err = repo.putFileChunks(file, context, count, total)
 		if nil != err {
 			return
 		}
@@ -387,7 +389,7 @@ func (repo *Repo) relPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
-func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}) (err error) {
+func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	absPath := repo.absPath(file.Path)
 
 	info, err := os.Stat(absPath)
@@ -412,7 +414,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 			return
 		}
 
-		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, file.Path)
+		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
 		err = repo.store.PutFile(file)
 		if nil != err {
 			return
@@ -452,7 +454,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 	}
 
-	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, file.Path)
+	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
 	err = repo.store.PutFile(file)
 	if nil != err {
 		return
@@ -484,15 +486,50 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 	return
 }
 
+//func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
+//	now := time.Now()
+//
+//	total := len(files)
+//	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
+//	for i, file := range files {
+//		err = repo.checkoutFile(file, repo.DataPath, i+1, total, context)
+//		if nil != err {
+//			return
+//		}
+//	}
+//
+//	logging.LogInfof("checkout files done, total: %d, cost: %s", total, time.Since(now))
+//	return
+//}
+
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	total := len(files)
+	now := time.Now()
+
+	count, total := 0, len(files)
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
-	for i, file := range files {
-		err = repo.checkoutFile(file, repo.DataPath, i+1, total, context)
+	waitGroup := &sync.WaitGroup{}
+	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
+		defer waitGroup.Done()
+
+		file := arg.(*entity.File)
+		count++
+		err = repo.checkoutFile(file, repo.DataPath, count, total, context)
+		if nil != err {
+			return
+		}
+	})
+
+	for _, f := range files {
+		waitGroup.Add(1)
+		err = p.Invoke(f)
 		if nil != err {
 			return
 		}
 	}
+	waitGroup.Wait()
+	p.Release()
+
+	logging.LogInfof("checkout files done, total: %d, cost: %s", total, time.Since(now))
 	return
 }
 
