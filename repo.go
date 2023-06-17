@@ -517,7 +517,7 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 //}
 
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	now := time.Now()
+	//now := time.Now()
 
 	count, total := 0, len(files)
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
@@ -543,7 +543,7 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	waitGroup.Wait()
 	p.Release()
 
-	logging.LogInfof("checkout files done, total: %d, cost: %s", total, time.Since(now))
+	//logging.LogInfof("checkout files done, total: %d, cost: %s", total, time.Since(now))
 	return
 }
 
