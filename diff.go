@@ -37,7 +37,7 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 			upserts = append(upserts, l[lPath])
 			continue
 		}
-		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
+		if !equalFile(lFile, rFile) {
 			upserts = append(upserts, l[lPath])
 			continue
 		}
@@ -102,7 +102,7 @@ func (repo *Repo) DiffIndex(leftIndexID, rightIndexID string) (ret *LeftRightDif
 			ret.AddsLeft = append(ret.AddsLeft, l[lPath])
 			continue
 		}
-		if lFile.Updated != rFile.Updated || lFile.Path != rFile.Path {
+		if !equalFile(lFile, rFile) {
 			ret.UpdatesLeft = append(ret.UpdatesLeft, l[lPath])
 			ret.UpdatesRight = append(ret.UpdatesRight, r[lPath])
 			continue
@@ -117,4 +117,14 @@ func (repo *Repo) DiffIndex(leftIndexID, rightIndexID string) (ret *LeftRightDif
 		}
 	}
 	return
+}
+
+func equalFile(left, right *entity.File) bool {
+	if left.Path != right.Path {
+		return false
+	}
+	if left.Updated/1000 != right.Updated/1000 { // Improve data sync file timestamp comparison https://github.com/siyuan-note/siyuan/issues/8573
+		return false
+	}
+	return true
 }
