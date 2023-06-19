@@ -191,7 +191,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 	defer repo.unlockCloud(context)
 
 	// 上传数据
-	logging.LogInfof("uploadCloud1")
 	err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 	if nil != err {
 		logging.LogErrorf("upload cloud failed: %s", err)
@@ -383,7 +382,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 
 		// 索引后的 upserts 需要上传到云端
-		logging.LogInfof("uploadCloud2")
 		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 		if nil != err {
 			logging.LogErrorf("upload cloud failed: %s", err)
@@ -979,10 +977,6 @@ func (repo *Repo) uploadCloud(context map[string]interface{},
 
 	if 1 > len(upsertFiles) {
 		return
-	}
-
-	for _, upsert := range upsertFiles {
-		logging.LogInfof("upload file [%+v]", upsert)
 	}
 
 	// 计算待上传云端的分块
