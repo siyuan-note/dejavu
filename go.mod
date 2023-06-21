@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20230501031728-4d62370997cd
-	github.com/aws/aws-sdk-go v1.44.284
+	github.com/aws/aws-sdk-go v1.44.286
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/klauspost/compress v1.16.6
