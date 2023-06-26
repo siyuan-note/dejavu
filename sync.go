@@ -417,7 +417,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	trafficStat.APIPut++
 
 	// 更新云端索引列表
-	downloadBytes, uploadBytes, err := repo.updateCloudIndexes(latest, context)
+	downloadBytes, uploadBytes, err := repo.updateCloudIndex(latest, context)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return
@@ -682,7 +682,7 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	return
 }
 
-func (repo *Repo) updateCloudIndexes(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
+func (repo *Repo) updateCloudIndex(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
 	data, err := repo.cloud.DownloadObject("indexes-v2.json")
 	if nil != err {
 		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
