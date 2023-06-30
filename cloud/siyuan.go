@@ -126,9 +126,6 @@ func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
 	}
 	if 200 != resp.StatusCode {
 		if 404 == resp.StatusCode {
-			if !strings.HasSuffix(key, "/refs/latest") && !strings.HasSuffix(key, "/lock-sync") {
-				logging.LogErrorf("download object [%s] failed: %s", key, ErrCloudObjectNotFound)
-			}
 			err = ErrCloudObjectNotFound
 			return
 		}

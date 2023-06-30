@@ -53,10 +53,9 @@ func (repo *Repo) unlockCloud(context map[string]interface{}) {
 
 var endRefreshLock = make(chan bool)
 
-func (repo *Repo) tryLockCloud(context map[string]interface{}) (err error) {
+func (repo *Repo) tryLockCloud(currentDeviceID string, context map[string]interface{}) (err error) {
 	for i := 0; i < 3; i++ {
-		eventbus.Publish(eventbus.EvtCloudLock, context)
-		err = repo.lockCloud()
+		err = repo.lockCloud(currentDeviceID, context)
 		if nil != err {
 			if errors.Is(err, ErrCloudLocked) {
 				logging.LogInfof("cloud repo is locked, retry after 5s")
@@ -66,14 +65,14 @@ func (repo *Repo) tryLockCloud(context map[string]interface{}) (err error) {
 			return
 		}
 
-		// 锁定成功，定时刷新所
+		// 锁定成功，定时刷新锁
 		go func() {
 			for {
 				select {
 				case <-endRefreshLock:
 					return
 				case <-time.After(30 * time.Second):
-					if refershErr := repo.lockCloud0(); nil != refershErr {
+					if refershErr := repo.lockCloud0(currentDeviceID); nil != refershErr {
 						logging.LogErrorf("refresh cloud repo lock failed: %s", refershErr)
 					}
 				}
@@ -85,10 +84,12 @@ func (repo *Repo) tryLockCloud(context map[string]interface{}) (err error) {
 	return
 }
 
-func (repo *Repo) lockCloud() (err error) {
+// lockCloud 锁定云端仓库，不要单独调用，应该调用 tryLockCloud，否则解锁时 endRefreshLock 会阻塞。
+func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface{}) (err error) {
+	eventbus.Publish(eventbus.EvtCloudLock, context)
 	data, err := repo.cloud.DownloadObject("lock-sync")
 	if errors.Is(err, cloud.ErrCloudObjectNotFound) {
-		err = repo.lockCloud0()
+		err = repo.lockCloud0(currentDeviceID)
 		return
 	}
 
@@ -103,9 +104,9 @@ func (repo *Repo) lockCloud() (err error) {
 	t := int64(content["time"].(float64))
 	now := time.Now()
 	lockTime := time.UnixMilli(t)
-	if now.After(lockTime.Add(65*time.Second)) || deviceID == repo.DeviceID {
+	if now.After(lockTime.Add(65*time.Second)) || deviceID == currentDeviceID {
 		// 云端锁超时过期或者就是当前设备锁的，那么当前设备可以继续直接锁
-		err = repo.lockCloud0()
+		err = repo.lockCloud0(currentDeviceID)
 		return
 	}
 
@@ -114,10 +115,10 @@ func (repo *Repo) lockCloud() (err error) {
 	return
 }
 
-func (repo *Repo) lockCloud0() (err error) {
+func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 	lockSync := filepath.Join(repo.Path, "lock-sync")
 	content := map[string]interface{}{
-		"deviceID": repo.DeviceID,
+		"deviceID": currentDeviceID,
 		"time":     time.Now().UnixMilli(),
 	}
 	data, err := gulu.JSON.MarshalJSON(content)

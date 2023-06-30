@@ -87,6 +87,13 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 	lock.Lock()
 	defer lock.Unlock()
 
+	// 锁定云端，防止其他设备并发上传数据
+	err = repo.tryLockCloud(repo.DeviceID, context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
 	mergeResult, trafficStat, err = repo.sync(context)
 	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
 		p := e.Path
@@ -182,13 +189,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get local not found chunks failed: %s", err)
 		return
 	}
-
-	// 锁定云端，防止其他设备并发上传数据
-	err = repo.tryLockCloud(context)
-	if nil != err {
-		return
-	}
-	defer repo.unlockCloud(context)
 
 	// 上传数据
 	err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
@@ -1181,10 +1181,30 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, context map[strin
 }
 
 func (repo *Repo) RemoveCloudRepo(name string) (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToStatusBar}
+	err = repo.tryLockCloud("remove", context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
 	return repo.cloud.RemoveRepo(name)
 }
 
 func (repo *Repo) CreateCloudRepo(name string) (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToStatusBar}
+	err = repo.tryLockCloud("create", context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
 	return repo.cloud.CreateRepo(name)
 }
 

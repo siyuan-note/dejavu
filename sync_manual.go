@@ -33,7 +33,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	defer lock.Unlock()
 
 	// 锁定云端，防止其他设备并发上传数据
-	err = repo.tryLockCloud(context)
+	err = repo.tryLockCloud(repo.DeviceID, context)
 	if nil != err {
 		return
 	}
@@ -236,7 +236,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	defer lock.Unlock()
 
 	// 锁定云端，防止其他设备并发上传数据
-	err = repo.tryLockCloud(context)
+	err = repo.tryLockCloud(repo.DeviceID, context)
 	if nil != err {
 		return
 	}
