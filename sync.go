@@ -31,6 +31,7 @@ import (
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
@@ -428,12 +429,28 @@ func (repo *Repo) sync0(context map[string]interface{},
 }
 
 func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+	// 生成校验索引
+	files, getErr := repo.getFiles(latest.Files)
+	if nil != getErr {
+		logging.LogErrorf("get files failed: %s", getErr)
+		err = getErr
+		return
+	}
+
+	checkIndex := entity.CheckIndex{ID: util.RandHash(), IndexID: latest.ID}
+	for _, file := range files {
+		checkIndex.Files = append(checkIndex.Files, &entity.CheckIndexFile{ID: file.ID, Chunks: file.Chunks})
+	}
+	latest.CheckIndexID = checkIndex.IndexID
+
+	// 以下步骤是更新云端相关索引数据
+
 	waitGroup := &sync.WaitGroup{}
+	// 上传索引
 	waitGroup.Add(1)
 	go func() {
 		defer waitGroup.Done()
 
-		// 上传索引
 		length, uploadErr := repo.uploadIndex(latest, context)
 		if nil != uploadErr {
 			logging.LogErrorf("upload indexes failed: %s", uploadErr)
@@ -445,11 +462,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		trafficStat.APIPut++
 	}()
 
+	// 更新云端 latest
 	waitGroup.Add(1)
 	go func() {
 		defer waitGroup.Done()
 
-		// 更新云端 latest
 		length, uploadErr := repo.updateCloudRef("refs/latest", context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
@@ -461,11 +478,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		trafficStat.APIPut++
 	}()
 
+	// 更新云端索引列表
 	waitGroup.Add(1)
 	go func() {
 		defer waitGroup.Done()
 
-		// 更新云端索引列表
 		downloadBytes, uploadBytes, uploadErr := repo.updateCloudIndexesV2(latest, context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud indexes failed: %s", uploadErr)
@@ -479,6 +496,38 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		trafficStat.APIGet++
 		trafficStat.APIPut++
 	}()
+
+	// 上传校验索引
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		data, marshalErr := gulu.JSON.MarshalIndentJSON(checkIndex, "", "\t")
+		if nil != marshalErr {
+			logging.LogErrorf("marshal check index failed: %s", marshalErr)
+			err = marshalErr
+			return
+		}
+
+		data = repo.store.compressEncoder.EncodeAll(data, nil)
+
+		dir := filepath.Join(repo.Path, "check", "indexes")
+		if err = os.MkdirAll(dir, 0755); nil != err {
+			return
+		}
+
+		if err = gulu.File.WriteFileSafer(filepath.Join(dir, checkIndex.ID), data, 0644); nil != err {
+			logging.LogErrorf("write check index failed: %s", err)
+			return
+		}
+
+		if err = repo.cloud.UploadObject("check/indexes/"+checkIndex.ID, false); nil != err {
+			logging.LogErrorf("upload check index failed: %s", err)
+			return
+		}
+		trafficStat.UploadBytes += int64(len(data))
+	}()
+
 	waitGroup.Wait()
 	return
 }
@@ -768,13 +817,13 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 	}
 
 	data = repo.store.compressEncoder.EncodeAll(data, nil)
-	uploadBytes = int64(len(data))
 
 	if err = gulu.File.WriteFileSafer(filepath.Join(repo.Path, "indexes-v2.json"), data, 0644); nil != err {
 		return
 	}
 
 	err = repo.cloud.UploadObject("indexes-v2.json", true)
+	uploadBytes = int64(len(data))
 	return
 }
 
