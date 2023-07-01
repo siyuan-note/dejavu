@@ -389,55 +389,12 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 	}
 
-	waitGroup := &sync.WaitGroup{}
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-
-		// 上传索引
-		length, err = repo.uploadIndex(latest, context)
-		if nil != err {
-			logging.LogErrorf("upload indexes failed: %s", err)
-			return
-		}
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += length
-		trafficStat.APIPut++
-	}()
-
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-
-		// 更新云端 latest
-		length, err = repo.updateCloudRef("refs/latest", context)
-		if nil != err {
-			logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
-			return
-		}
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += length
-		trafficStat.APIPut++
-	}()
-
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-
-		// 更新云端索引列表
-		downloadBytes, uploadBytes, err := repo.updateCloudIndexesV2(latest, context)
-		if nil != err {
-			logging.LogErrorf("update cloud indexes failed: %s", err)
-			return
-		}
-		trafficStat.DownloadFileCount++
-		trafficStat.DownloadBytes += downloadBytes
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += uploadBytes
-		trafficStat.APIGet++
-		trafficStat.APIPut++
-	}()
-	waitGroup.Wait()
+	// 更新云端索引信息
+	err = repo.updateCloudIndexes(latest, trafficStat, context)
+	if nil != err {
+		logging.LogErrorf("update cloud indexes failed: %s", err)
+		return
+	}
 
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
@@ -467,6 +424,62 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("remove empty dirs failed: %s", err)
 		return
 	}
+	return
+}
+
+func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		// 上传索引
+		length, uploadErr := repo.uploadIndex(latest, context)
+		if nil != uploadErr {
+			logging.LogErrorf("upload indexes failed: %s", uploadErr)
+			err = uploadErr
+			return
+		}
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += length
+		trafficStat.APIPut++
+	}()
+
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		// 更新云端 latest
+		length, uploadErr := repo.updateCloudRef("refs/latest", context)
+		if nil != uploadErr {
+			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
+			err = uploadErr
+			return
+		}
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += length
+		trafficStat.APIPut++
+	}()
+
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		// 更新云端索引列表
+		downloadBytes, uploadBytes, uploadErr := repo.updateCloudIndexesV2(latest, context)
+		if nil != uploadErr {
+			logging.LogErrorf("update cloud indexes failed: %s", uploadErr)
+			err = uploadErr
+			return
+		}
+		trafficStat.DownloadFileCount++
+		trafficStat.DownloadBytes += downloadBytes
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += uploadBytes
+		trafficStat.APIGet++
+		trafficStat.APIPut++
+	}()
+	waitGroup.Wait()
 	return
 }
 

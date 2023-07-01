@@ -317,36 +317,12 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	trafficStat.UploadBytes += length
 	trafficStat.APIPut += trafficStat.UploadChunkCount
 
-	// 上传索引
-	length, err = repo.uploadIndex(latest, context)
-	if nil != err {
-		logging.LogErrorf("upload indexes failed: %s", err)
-		return
-	}
-	trafficStat.UploadFileCount++
-	trafficStat.UploadBytes += length
-	trafficStat.APIPut++
-
-	// 更新云端 latest
-	length, err = repo.updateCloudRef("refs/latest", context)
-	if nil != err {
-		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
-		return
-	}
-	trafficStat.UploadFileCount++
-	trafficStat.UploadBytes += length
-	trafficStat.APIPut++
-
-	// 更新云端索引列表
-	downloadBytes, uploadBytes, err := repo.updateCloudIndexesV2(latest, context)
+	// 更新云端索引信息
+	err = repo.updateCloudIndexes(latest, trafficStat, context)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return
 	}
-	trafficStat.DownloadBytes += downloadBytes
-	trafficStat.UploadBytes += uploadBytes
-	trafficStat.APIGet++
-	trafficStat.APIPut++
 
 	// 统计流量
 	go repo.cloud.AddTraffic(&cloud.Traffic{
