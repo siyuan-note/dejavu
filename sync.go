@@ -397,7 +397,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 
-	// 更新本地 latest
+	// 更新本地 latest 引用
 	err = repo.UpdateLatest(latest.ID)
 	if nil != err {
 		logging.LogErrorf("update latest failed: %s", err)
@@ -441,7 +441,13 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	for _, file := range files {
 		checkIndex.Files = append(checkIndex.Files, &entity.CheckIndexFile{ID: file.ID, Chunks: file.Chunks})
 	}
-	latest.CheckIndexID = checkIndex.IndexID
+
+	// 更新本地 latest 的关联的 checkIndexID，后续会将本地 latest 上传到云端
+	latest.CheckIndexID = checkIndex.ID
+	if err = repo.store.PutIndex(latest); nil != err {
+		logging.LogErrorf("put index failed: %s", err)
+		return
+	}
 
 	// 以下步骤是更新云端相关索引数据
 

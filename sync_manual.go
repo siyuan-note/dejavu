@@ -202,7 +202,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		return
 	}
 
-	// 更新本地 latest
+	// 更新本地 latest 引用
 	err = repo.UpdateLatest(latest.ID)
 	if nil != err {
 		logging.LogErrorf("update latest failed: %s", err)
