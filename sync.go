@@ -389,15 +389,55 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 	}
 
-	// 上传索引
-	length, err = repo.uploadIndex(latest, context)
-	if nil != err {
-		logging.LogErrorf("upload indexes failed: %s", err)
-		return
-	}
-	trafficStat.UploadFileCount++
-	trafficStat.UploadBytes += length
-	trafficStat.APIPut++
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		// 上传索引
+		length, err = repo.uploadIndex(latest, context)
+		if nil != err {
+			logging.LogErrorf("upload indexes failed: %s", err)
+			return
+		}
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += length
+		trafficStat.APIPut++
+	}()
+
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		// 更新云端 latest
+		length, err = repo.updateCloudRef("refs/latest", context)
+		if nil != err {
+			logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
+			return
+		}
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += length
+		trafficStat.APIPut++
+	}()
+
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		// 更新云端索引列表
+		downloadBytes, uploadBytes, err := repo.updateCloudIndexesV2(latest, context)
+		if nil != err {
+			logging.LogErrorf("update cloud indexes failed: %s", err)
+			return
+		}
+		trafficStat.DownloadFileCount++
+		trafficStat.DownloadBytes += downloadBytes
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += uploadBytes
+		trafficStat.APIGet++
+		trafficStat.APIPut++
+	}()
+	waitGroup.Wait()
 
 	// 更新本地 latest
 	err = repo.UpdateLatest(latest.ID)
@@ -405,27 +445,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
-
-	// 更新云端 latest
-	length, err = repo.updateCloudRef("refs/latest", context)
-	if nil != err {
-		logging.LogErrorf("update cloud [refs/latest] failed: %s", err)
-		return
-	}
-	trafficStat.UploadFileCount++
-	trafficStat.UploadBytes += length
-	trafficStat.APIPut++
-
-	// 更新云端索引列表
-	downloadBytes, uploadBytes, err := repo.updateCloudIndexesV2(latest, context)
-	if nil != err {
-		logging.LogErrorf("update cloud indexes failed: %s", err)
-		return
-	}
-	trafficStat.DownloadBytes += downloadBytes
-	trafficStat.UploadBytes += uploadBytes
-	trafficStat.APIGet++
-	trafficStat.APIPut++
 
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest.ID)
