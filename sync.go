@@ -523,12 +523,7 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	go func() {
 		defer waitGroup.Done()
 
-		uploadErr := repo.uploadCloudMissingObjects(trafficStat, context)
-		if nil != uploadErr {
-			logging.LogErrorf("upload cloud missing objects failed: %s", uploadErr)
-			err = uploadErr
-			return
-		}
+		repo.uploadCloudMissingObjects(trafficStat, context)
 	}()
 
 	waitGroup.Wait()
@@ -768,7 +763,7 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 
 var uploadedCloudMissingObjects = false
 
-func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context map[string]interface{}) {
 	if uploadedCloudMissingObjects {
 		return
 	}
@@ -778,11 +773,16 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		return
 	}
 
+	eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context)
+	defer eventbus.Publish(eventbus.EvtCloudAfterFixObjects, context)
+
 	data, err := repo.cloud.DownloadObject("check/indexes-report")
 	if nil != err {
 		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			return
 		}
+
+		logging.LogErrorf("download check report failed: %s", err)
 		return
 	}
 	trafficStat.DownloadFileCount++
@@ -790,31 +790,84 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 
 	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
 	if nil != err {
+		logging.LogErrorf("decompress check report failed: %s", err)
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, trafficStat)
 	checkReport := &entity.CheckReport{}
 	if err = gulu.JSON.UnmarshalJSON(data, checkReport); nil != err {
-		logging.LogErrorf("unmarshal check index failed: %s", err)
+		logging.LogErrorf("unmarshal check report failed: %s", err)
 		return
 	}
 
-	for i, missingObject := range checkReport.MissingObjects {
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, i, len(checkReport.MissingObjects))
-		logging.LogInfof("upload missing object [%s]", missingObject)
-		//if err = repo.cloud.UploadObject("objects/"+missingObject, true); nil != err {
-		//	return
-		//}
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += int64(len(missingObject))
+	if 1 > len(checkReport.MissingObjects) {
+		return
 	}
-	eventbus.Publish(eventbus.EvtCloudAfterFixObjects, context, trafficStat)
+
+	var missingObjects []string
+	for _, missingObject := range checkReport.MissingObjects {
+		absFilePath := filepath.Join(repo.Path, "objects", missingObject)
+		info, statErr := os.Stat(absFilePath)
+		if nil != statErr {
+			// 本地没有该文件，忽略
+			continue
+		}
+
+		length := info.Size()
+		trafficStat.UploadBytes += length
+		trafficStat.UploadFileCount++
+		missingObjects = append(missingObjects, missingObject)
+	}
+	missingObjects = gulu.Str.RemoveDuplicatedElem(missingObjects)
+
+	waitGroup := &sync.WaitGroup{}
+	var uploadErr error
+	poolSize := 8
+	if poolSize > len(missingObjects) {
+		poolSize = len(missingObjects)
+	}
+	count, total := 0, len(missingObjects)
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != uploadErr {
+			return // 快速失败
+		}
+
+		filePath := arg.(string)
+		filePath = "objects/" + filePath
+		count++
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
+		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
+			uploadErr = uoErr
+			return
+		}
+	})
+	if nil != err {
+		return
+	}
+
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadChunks, context, total)
+	for _, missingObject := range missingObjects {
+		waitGroup.Add(1)
+		if err = p.Invoke(missingObject); nil != err {
+			return
+		}
+		if nil != uploadErr {
+			err = uploadErr
+			return
+		}
+	}
+	waitGroup.Wait()
+	p.Release()
+
+	if nil != err {
+		logging.LogWarnf("upload cloud missing objects failed: %s", err)
+	}
 	return
 }
 
 func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context map[string]interface{}) (uploadBytes int64, err error) {
-	eventbus.Publish(eventbus.EvtCloudBeforeUploadCheckIndex, context, checkIndex)
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadCheckIndex, context)
 
 	data, marshalErr := gulu.JSON.MarshalIndentJSON(checkIndex, "", "\t")
 	if nil != marshalErr {
