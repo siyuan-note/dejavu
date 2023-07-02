@@ -773,7 +773,6 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context)
 	defer eventbus.Publish(eventbus.EvtCloudAfterFixObjects, context)
 
 	checkReportKey := "check/indexes-report"
@@ -838,7 +837,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		objectPath := arg.(string)
 		filePath := "objects/" + objectPath
 		count++
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
+		eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
@@ -850,7 +849,6 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		return
 	}
 
-	eventbus.Publish(eventbus.EvtCloudBeforeUploadChunks, context, total)
 	for _, missingObject := range missingObjects {
 		waitGroup.Add(1)
 		if err = p.Invoke(missingObject); nil != err {
