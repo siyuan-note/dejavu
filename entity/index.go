@@ -47,3 +47,10 @@ type CheckIndexFile struct {
 	ID     string   `json:"id"`     // File ID
 	Chunks []string `json:"chunks"` // Chunk IDs
 }
+
+type CheckReport struct {
+	CheckTime      int64    `json:"checkTime"`
+	CheckCount     int      `json:"checkCount"`
+	FixCount       int      `json:"fixCount"`
+	MissingObjects []string `json:"missingObjects"`
+}

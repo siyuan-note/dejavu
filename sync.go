@@ -437,7 +437,7 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		return
 	}
 
-	checkIndex := entity.CheckIndex{ID: util.RandHash(), IndexID: latest.ID}
+	checkIndex := &entity.CheckIndex{ID: util.RandHash(), IndexID: latest.ID}
 	for _, file := range files {
 		checkIndex.Files = append(checkIndex.Files, &entity.CheckIndexFile{ID: file.ID, Chunks: file.Chunks})
 	}
@@ -508,30 +508,27 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	go func() {
 		defer waitGroup.Done()
 
-		data, marshalErr := gulu.JSON.MarshalIndentJSON(checkIndex, "", "\t")
-		if nil != marshalErr {
-			logging.LogErrorf("marshal check index failed: %s", marshalErr)
-			err = marshalErr
+		uploadBytes, uploadErr := repo.updateCloudCheckIndex(checkIndex, context)
+		if nil != uploadErr {
+			logging.LogErrorf("update cloud check index failed: %s", uploadErr)
+			err = uploadErr
 			return
 		}
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += uploadBytes
+	}()
 
-		data = repo.store.compressEncoder.EncodeAll(data, nil)
+	// 尝试上传修复云端缺失的数据对象
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
 
-		dir := filepath.Join(repo.Path, "check", "indexes")
-		if err = os.MkdirAll(dir, 0755); nil != err {
+		uploadErr := repo.uploadCloudMissingObjects(trafficStat, context)
+		if nil != uploadErr {
+			logging.LogErrorf("upload cloud missing objects failed: %s", uploadErr)
+			err = uploadErr
 			return
 		}
-
-		if err = gulu.File.WriteFileSafer(filepath.Join(dir, checkIndex.ID), data, 0644); nil != err {
-			logging.LogErrorf("write check index failed: %s", err)
-			return
-		}
-
-		if err = repo.cloud.UploadObject("check/indexes/"+checkIndex.ID, false); nil != err {
-			logging.LogErrorf("upload check index failed: %s", err)
-			return
-		}
-		trafficStat.UploadBytes += int64(len(data))
 	}()
 
 	waitGroup.Wait()
@@ -769,7 +766,85 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	return
 }
 
+var uploadedCloudMissingObjects = false
+
+func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+	if uploadedCloudMissingObjects {
+		return
+	}
+	uploadedCloudMissingObjects = true
+
+	if _, ok := repo.cloud.(*cloud.SiYuan); !ok {
+		return
+	}
+
+	data, err := repo.cloud.DownloadObject("check/indexes-report")
+	if nil != err {
+		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			return
+		}
+		return
+	}
+	trafficStat.DownloadFileCount++
+	trafficStat.DownloadBytes += int64(len(data))
+
+	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
+	if nil != err {
+		return
+	}
+
+	eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, trafficStat)
+	checkReport := &entity.CheckReport{}
+	if err = gulu.JSON.UnmarshalJSON(data, checkReport); nil != err {
+		logging.LogErrorf("unmarshal check index failed: %s", err)
+		return
+	}
+
+	for i, missingObject := range checkReport.MissingObjects {
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, i, len(checkReport.MissingObjects))
+		logging.LogInfof("upload missing object [%s]", missingObject)
+		//if err = repo.cloud.UploadObject("objects/"+missingObject, true); nil != err {
+		//	return
+		//}
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += int64(len(missingObject))
+	}
+	eventbus.Publish(eventbus.EvtCloudAfterFixObjects, context, trafficStat)
+	return
+}
+
+func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context map[string]interface{}) (uploadBytes int64, err error) {
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadCheckIndex, context, checkIndex)
+
+	data, marshalErr := gulu.JSON.MarshalIndentJSON(checkIndex, "", "\t")
+	if nil != marshalErr {
+		logging.LogErrorf("marshal check index failed: %s", marshalErr)
+		err = marshalErr
+		return
+	}
+
+	data = repo.store.compressEncoder.EncodeAll(data, nil)
+
+	dir := filepath.Join(repo.Path, "check", "indexes")
+	if err = os.MkdirAll(dir, 0755); nil != err {
+		return
+	}
+
+	if err = gulu.File.WriteFileSafer(filepath.Join(dir, checkIndex.ID), data, 0644); nil != err {
+		logging.LogErrorf("write check index failed: %s", err)
+		return
+	}
+
+	if err = repo.cloud.UploadObject("check/indexes/"+checkIndex.ID, false); nil != err {
+		logging.LogErrorf("upload check index failed: %s", err)
+		return
+	}
+	return
+}
+
 func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
+	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndexes, context)
+
 	data, err := repo.cloud.DownloadObject("indexes-v2.json")
 	if nil != err {
 		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
