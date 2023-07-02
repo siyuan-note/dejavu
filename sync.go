@@ -776,7 +776,8 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context)
 	defer eventbus.Publish(eventbus.EvtCloudAfterFixObjects, context)
 
-	data, err := repo.cloud.DownloadObject("check/indexes-report")
+	checkReportKey := "check/indexes-report"
+	data, err := repo.cloud.DownloadObject(checkReportKey)
 	if nil != err {
 		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			return
@@ -827,20 +828,23 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		poolSize = len(missingObjects)
 	}
 	count, total := 0, len(missingObjects)
+	var fixed []string
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
 			return // 快速失败
 		}
 
-		filePath := arg.(string)
-		filePath = "objects/" + filePath
+		objectPath := arg.(string)
+		filePath := "objects/" + objectPath
 		count++
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
 			return
 		}
+
+		fixed = append(fixed, objectPath)
 	})
 	if nil != err {
 		return
@@ -862,6 +866,39 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 
 	if nil != err {
 		logging.LogWarnf("upload cloud missing objects failed: %s", err)
+		return
+	}
+
+	checkReport.FixCount++
+	missings := map[string]bool{}
+	for _, missingObject := range missingObjects {
+		missings[missingObject] = true
+	}
+
+	for _, objectPath := range fixed {
+		delete(missings, objectPath)
+	}
+	checkReport.MissingObjects = nil
+	for missingObject := range missings {
+		checkReport.MissingObjects = append(checkReport.MissingObjects, missingObject)
+	}
+
+	data, err = gulu.JSON.MarshalJSON(checkReport)
+	if nil != err {
+		logging.LogErrorf("marshal check report failed: %s", err)
+		return
+	}
+
+	data = repo.store.compressEncoder.EncodeAll(data, nil)
+
+	absPath := filepath.Join(repo.Path, checkReportKey)
+	if err = gulu.File.WriteFileSafer(absPath, data, 0644); nil != err {
+		logging.LogErrorf("write check report failed: %s", err)
+		return
+	}
+
+	if err = repo.cloud.UploadObject(checkReportKey, true); nil != err {
+		logging.LogErrorf("upload check report failed: %s", err)
 	}
 	return
 }
