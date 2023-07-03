@@ -94,6 +94,20 @@ type PurgeStat struct {
 	Size    int64
 }
 
+// Reset 重置仓库，清空所有数据。
+func (repo *Repo) Reset() (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	if err = os.RemoveAll(repo.Path); nil != err {
+		return
+	}
+	if err = os.MkdirAll(repo.Path, 0755); nil != err {
+		return
+	}
+	return
+}
+
 // Purge 清理所有未引用数据。
 func (repo *Repo) Purge() (ret *PurgeStat, err error) {
 	lock.Lock()
