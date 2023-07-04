@@ -136,7 +136,8 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 
 	err = repo.cloud.UploadObject("lock-sync", true)
 	if nil != err {
-		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) || errors.Is(err, cloud.ErrDeprecatedVersion) {
+		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) || errors.Is(err, cloud.ErrDeprecatedVersion) ||
+			errors.Is(err, cloud.ErrCloudCheckFailed) {
 			return
 		}
 

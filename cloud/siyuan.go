@@ -630,6 +630,8 @@ func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (ke
 			err = ErrSystemTimeIncorrect
 		case 2:
 			err = ErrDeprecatedVersion
+		case -1:
+			err = ErrCloudCheckFailed
 		}
 		return
 	}
