@@ -253,6 +253,7 @@ var (
 	ErrCloudAuthFailed         = errors.New("cloud account auth failed") // ErrCloudAuthFailed 描述了云端存储服务鉴权失败的错误
 	ErrCloudServiceUnavailable = errors.New("cloud service unavailable") // ErrCloudServiceUnavailable 描述了云端存储服务不可用的错误
 	ErrSystemTimeIncorrect     = errors.New("system time incorrect")     // ErrSystemTimeIncorrect 描述了系统时间不正确的错误
+	ErrDeprecatedVersion       = errors.New("deprecated version")        // ErrDeprecatedVersion 描述了版本过低的错误
 )
 
 func IsValidCloudDirName(cloudDirName string) bool {

@@ -625,8 +625,11 @@ func (siyuan *SiYuan) requestScopeKeyUploadToken(key string, overwrite bool) (ke
 	if 0 != code {
 		msg := result["msg"].(string)
 		err = fmt.Errorf("request repo upload token failed: %s", msg)
-		if 1 == code { // 系统时间不一致
+		switch code {
+		case 1:
 			err = ErrSystemTimeIncorrect
+		case 2:
+			err = ErrDeprecatedVersion
 		}
 		return
 	}
