@@ -233,6 +233,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
+			logging.LogErrorf("walk data failed: %s", err)
 			return io.EOF
 		}
 		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
