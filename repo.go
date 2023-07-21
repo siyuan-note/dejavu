@@ -150,7 +150,8 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	eventbus.Publish(eventbus.EvtCheckoutBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
-			return io.EOF
+			logging.LogErrorf("walk data failed: %s", err)
+			return err
 		}
 		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
 			return ignoreResult
@@ -234,7 +235,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			logging.LogErrorf("walk data failed: %s", err)
-			return io.EOF
+			return err
 		}
 		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
 			return ignoreResult
