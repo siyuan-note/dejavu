@@ -328,6 +328,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	}
 
 	count, total := 0, len(upserts)
+	errLock := sync.Mutex{}
+	var chunkErrs []error
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
 	waitGroup := &sync.WaitGroup{}
 	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
@@ -337,6 +339,9 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		file := arg.(*entity.File)
 		err = repo.putFileChunks(file, context, count, total)
 		if nil != err {
+			errLock.Lock()
+			chunkErrs = append(chunkErrs, err)
+			errLock.Unlock()
 			return
 		}
 	})
@@ -350,6 +355,11 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	}
 	waitGroup.Wait()
 	p.Release()
+
+	if 0 < len(chunkErrs) {
+		err = chunkErrs[0]
+		return
+	}
 
 	for _, file := range files {
 		ret.Files = append(ret.Files, file.ID)
@@ -452,7 +462,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		return
 	}
 
-	reader, err := os.OpenFile(absPath, os.O_RDWR, 0644)
+	reader, err := os.OpenFile(absPath, os.O_RDONLY, 0644)
 	if nil != err {
 		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
 		return
