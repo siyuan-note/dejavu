@@ -348,6 +348,7 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 		waitGroup.Add(1)
 		err = p.Invoke(key)
 		if nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 	}

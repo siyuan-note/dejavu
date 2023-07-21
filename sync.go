@@ -650,6 +650,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 	for _, chunkID := range chunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(chunkID); nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 		if nil != downloadErr {
@@ -710,6 +711,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	for _, fileID := range fileIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(fileID); nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 		if nil != downloadErr {
@@ -852,6 +854,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	for _, missingObject := range missingObjects {
 		waitGroup.Add(1)
 		if err = p.Invoke(missingObject); nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 		if nil != uploadErr {
@@ -1055,6 +1058,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertFile.ID); nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 		if nil != uploadErr {
@@ -1112,6 +1116,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertChunkID); nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 		if nil != uploadErr {

@@ -273,6 +273,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		init = true
 	}
 
+	var workerErrs []error
+	workerErrLock := sync.Mutex{}
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
 		count, total := 0, len(files)
@@ -289,7 +291,9 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			file, getErr := repo.store.GetFile(fileID)
 			if nil != getErr {
 				logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
-				err = ErrNotFoundObject
+				workerErrLock.Lock()
+				workerErrs = append(workerErrs, ErrNotFoundObject)
+				workerErrLock.Unlock()
 				return
 			}
 
@@ -302,11 +306,17 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			waitGroup.Add(1)
 			err = p.Invoke(f)
 			if nil != err {
+				logging.LogErrorf("invoke failed: %s", err)
 				return
 			}
 		}
 		waitGroup.Wait()
 		p.Release()
+
+		if 0 < len(workerErrs) {
+			err = workerErrs[0]
+			return
+		}
 	}
 	upserts, removes = repo.DiffUpsertRemove(files, latestFiles)
 	if 1 > len(upserts) && 1 > len(removes) {
@@ -328,8 +338,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	}
 
 	count, total := 0, len(upserts)
-	errLock := sync.Mutex{}
-	var chunkErrs []error
+	workerErrs = nil
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
 	waitGroup := &sync.WaitGroup{}
 	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
@@ -339,9 +348,9 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		file := arg.(*entity.File)
 		err = repo.putFileChunks(file, context, count, total)
 		if nil != err {
-			errLock.Lock()
-			chunkErrs = append(chunkErrs, err)
-			errLock.Unlock()
+			workerErrLock.Lock()
+			workerErrs = append(workerErrs, err)
+			workerErrLock.Unlock()
 			return
 		}
 	})
@@ -350,14 +359,15 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		waitGroup.Add(1)
 		err = p.Invoke(file)
 		if nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 	}
 	waitGroup.Wait()
 	p.Release()
 
-	if 0 < len(chunkErrs) {
-		err = chunkErrs[0]
+	if 0 < len(workerErrs) {
+		err = workerErrs[0]
 		return
 	}
 
@@ -563,6 +573,7 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 		waitGroup.Add(1)
 		err = p.Invoke(f)
 		if nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 	}
