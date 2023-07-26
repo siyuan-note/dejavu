@@ -33,7 +33,7 @@ var (
 )
 
 const (
-	lockSync = "lock-sync"
+	lockSyncKey = "lock-sync"
 )
 
 func (repo *Repo) unlockCloud(context map[string]interface{}) {
@@ -41,7 +41,7 @@ func (repo *Repo) unlockCloud(context map[string]interface{}) {
 	var err error
 	for i := 0; i < 3; i++ {
 		eventbus.Publish(eventbus.EvtCloudUnlock, context)
-		err = repo.cloud.RemoveObject(lockSync)
+		err = repo.cloud.RemoveObject(lockSyncKey)
 		if nil == err {
 			return
 		}
@@ -91,7 +91,7 @@ func (repo *Repo) tryLockCloud(currentDeviceID string, context map[string]interf
 // lockCloud 锁定云端仓库，不要单独调用，应该调用 tryLockCloud，否则解锁时 endRefreshLock 会阻塞。
 func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface{}) (err error) {
 	eventbus.Publish(eventbus.EvtCloudLock, context)
-	data, err := repo.cloud.DownloadObject(lockSync)
+	data, err := repo.cloud.DownloadObject(lockSyncKey)
 	if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 		err = repo.lockCloud0(currentDeviceID)
 		return
@@ -101,7 +101,7 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 	err = gulu.JSON.UnmarshalJSON(data, &content)
 	if nil != err {
 		logging.LogErrorf("unmarshal lock sync failed: %s", err)
-		err = repo.cloud.RemoveObject(lockSync)
+		err = repo.cloud.RemoveObject(lockSyncKey)
 		if nil != err {
 			logging.LogErrorf("remove unmarshalled lock sync failed: %s", err)
 		} else {
@@ -126,7 +126,7 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 }
 
 func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
-	lockSync := filepath.Join(repo.Path, lockSync)
+	lockSync := filepath.Join(repo.Path, lockSyncKey)
 	content := map[string]interface{}{
 		"deviceID": currentDeviceID,
 		"time":     time.Now().UnixMilli(),
