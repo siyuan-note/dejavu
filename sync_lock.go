@@ -126,7 +126,7 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 }
 
 func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
-	lockSync := filepath.Join(repo.Path, lockSyncKey)
+	lockSyncPath := filepath.Join(repo.Path, lockSyncKey)
 	content := map[string]interface{}{
 		"deviceID": currentDeviceID,
 		"time":     time.Now().UnixMilli(),
@@ -137,14 +137,14 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 		err = ErrLockCloudFailed
 		return
 	}
-	err = gulu.File.WriteFileSafer(lockSync, data, 0644)
+	err = gulu.File.WriteFileSafer(lockSyncPath, data, 0644)
 	if nil != err {
 		logging.LogErrorf("write lock sync failed: %s", err)
 		err = ErrCloudLocked
 		return
 	}
 
-	err = repo.cloud.UploadObject(lockSync, true)
+	err = repo.cloud.UploadObject(lockSyncPath, true)
 	if nil != err {
 		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) || errors.Is(err, cloud.ErrDeprecatedVersion) ||
 			errors.Is(err, cloud.ErrCloudCheckFailed) {
