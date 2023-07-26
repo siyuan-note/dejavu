@@ -32,12 +32,16 @@ var (
 	ErrCloudLocked     = errors.New("cloud repo is locked")
 )
 
+const (
+	lockSync = "lock-sync"
+)
+
 func (repo *Repo) unlockCloud(context map[string]interface{}) {
 	endRefreshLock <- true
 	var err error
 	for i := 0; i < 3; i++ {
 		eventbus.Publish(eventbus.EvtCloudUnlock, context)
-		err = repo.cloud.RemoveObject("lock-sync")
+		err = repo.cloud.RemoveObject(lockSync)
 		if nil == err {
 			return
 		}
@@ -87,7 +91,7 @@ func (repo *Repo) tryLockCloud(currentDeviceID string, context map[string]interf
 // lockCloud 锁定云端仓库，不要单独调用，应该调用 tryLockCloud，否则解锁时 endRefreshLock 会阻塞。
 func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface{}) (err error) {
 	eventbus.Publish(eventbus.EvtCloudLock, context)
-	data, err := repo.cloud.DownloadObject("lock-sync")
+	data, err := repo.cloud.DownloadObject(lockSync)
 	if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 		err = repo.lockCloud0(currentDeviceID)
 		return
@@ -97,6 +101,12 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 	err = gulu.JSON.UnmarshalJSON(data, &content)
 	if nil != err {
 		logging.LogErrorf("unmarshal lock sync failed: %s", err)
+		err = repo.cloud.RemoveObject(lockSync)
+		if nil != err {
+			logging.LogErrorf("remove unmarshalled lock sync failed: %s", err)
+		} else {
+			err = repo.lockCloud0(currentDeviceID)
+		}
 		return
 	}
 
@@ -116,7 +126,7 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 }
 
 func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
-	lockSync := filepath.Join(repo.Path, "lock-sync")
+	lockSync := filepath.Join(repo.Path, lockSync)
 	content := map[string]interface{}{
 		"deviceID": currentDeviceID,
 		"time":     time.Now().UnixMilli(),
@@ -134,7 +144,7 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 		return
 	}
 
-	err = repo.cloud.UploadObject("lock-sync", true)
+	err = repo.cloud.UploadObject(lockSync, true)
 	if nil != err {
 		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) || errors.Is(err, cloud.ErrDeprecatedVersion) ||
 			errors.Is(err, cloud.ErrCloudCheckFailed) {
