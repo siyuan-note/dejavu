@@ -1383,6 +1383,10 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		return
 	}
 	latestID := string(data)
+	if "" == latestID {
+		return
+	}
+
 	key = path.Join("indexes", latestID)
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, latestID)
 	data, err = repo.downloadCloudObject(key)
