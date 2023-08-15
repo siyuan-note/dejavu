@@ -15,7 +15,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20230702081350-6dde667e7112
 	github.com/siyuan-note/filelock v0.0.0-20230615140405-d05a21d49524
-	github.com/siyuan-note/httpclient v0.0.0-20230812061352-e125bafc2f44
+	github.com/siyuan-note/httpclient v0.0.0-20230815124340-3f39fa55402b
 	github.com/siyuan-note/logging v0.0.0-20230327073243-ebe83aec1493
 	github.com/studio-b12/gowebdav v0.9.0
 )
@@ -32,7 +32,7 @@ require (
 	github.com/google/pprof v0.0.0-20230811205829-9131a7e9cc17 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/imroc/req/v3 v3.41.3 // indirect
+	github.com/imroc/req/v3 v3.41.4 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.11.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
