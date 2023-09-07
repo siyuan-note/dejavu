@@ -19,7 +19,6 @@ package cloud
 import (
 	"errors"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/klauspost/compress/zstd"
@@ -258,7 +257,7 @@ var (
 )
 
 func IsValidCloudDirName(cloudDirName string) bool {
-	if 16 < utf8.RuneCountInString(cloudDirName) || 1 > utf8.RuneCountInString(cloudDirName) {
+	if 63 < len(cloudDirName) || 3 > len(cloudDirName) {
 		return false
 	}
 
