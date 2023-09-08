@@ -257,7 +257,7 @@ var (
 )
 
 func IsValidCloudDirName(cloudDirName string) bool {
-	if 63 < len(cloudDirName) || 3 > len(cloudDirName) {
+	if 63 < len(cloudDirName) || 1 > len(cloudDirName) {
 		return false
 	}
 
