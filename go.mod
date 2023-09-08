@@ -15,7 +15,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20230804030110-cf250f838c80
 	github.com/siyuan-note/filelock v0.0.0-20230615140405-d05a21d49524
-	github.com/siyuan-note/httpclient v0.0.0-20230907033738-6e93eb0c15a1
+	github.com/siyuan-note/httpclient v0.0.0-20230908014917-f63abd3164c8
 	github.com/siyuan-note/logging v0.0.0-20230327073243-ebe83aec1493
 	github.com/studio-b12/gowebdav v0.9.0
 )
@@ -30,10 +30,10 @@ require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/glog v1.1.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
-	github.com/google/pprof v0.0.0-20230906154834-20cde9067b3b // indirect
+	github.com/google/pprof v0.0.0-20230907193218-d3ddc7976beb // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/imroc/req/v3 v3.41.11 // indirect
+	github.com/imroc/req/v3 v3.41.12 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.12.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
