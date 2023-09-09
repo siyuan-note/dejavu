@@ -508,14 +508,12 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	go func() {
 		defer waitGroup.Done()
 
-		uploadBytes, uploadErr := repo.updateCloudCheckIndex(checkIndex, context)
+		uploadErr := repo.updateCloudCheckIndex(checkIndex, context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud check index failed: %s", uploadErr)
 			err = uploadErr
 			return
 		}
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += uploadBytes
 	}()
 
 	// 尝试上传修复云端缺失的数据对象
@@ -752,15 +750,8 @@ func (repo *Repo) existDataFile(files []*entity.File, file *entity.File) bool {
 
 func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, ref)
-
-	absFilePath := filepath.Join(repo.Path, ref)
-	info, err := os.Stat(absFilePath)
-	if nil != err {
-		logging.LogErrorf("stat failed: %s", err)
-		return
-	}
-	uploadBytes = info.Size()
-	err = repo.cloud.UploadObject(ref, true)
+	length, err := repo.cloud.UploadObject(ref, true)
+	uploadBytes += length
 	return
 }
 
@@ -841,7 +832,8 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		filePath := "objects/" + objectPath
 		count++
 		eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, count, total)
-		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
+		_, uoErr := repo.cloud.UploadObject(filePath, false)
+		if nil != uoErr {
 			uploadErr = uoErr
 			err = uploadErr
 			return
@@ -900,13 +892,13 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		return
 	}
 
-	if err = repo.cloud.UploadObject(checkReportKey, true); nil != err {
+	if _, err = repo.cloud.UploadObject(checkReportKey, true); nil != err {
 		logging.LogErrorf("upload check report failed: %s", err)
 	}
 	return
 }
 
-func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context map[string]interface{}) (err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadCheckIndex, context)
 
 	data, marshalErr := gulu.JSON.MarshalIndentJSON(checkIndex, "", "\t")
@@ -928,7 +920,7 @@ func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context m
 		return
 	}
 
-	if err = repo.cloud.UploadObject("check/indexes/"+checkIndex.ID, false); nil != err {
+	if _, err = repo.cloud.UploadObject("check/indexes/"+checkIndex.ID, false); nil != err {
 		logging.LogErrorf("upload check index failed: %s", err)
 		return
 	}
@@ -996,41 +988,21 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 		return
 	}
 
-	err = repo.cloud.UploadObject("indexes-v2.json", true)
-	uploadBytes = int64(len(data))
+	length, err := repo.cloud.UploadObject("indexes-v2.json", true)
+	uploadBytes = length
 	return
 }
 
 func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{}) (uploadBytes int64, err error) {
-	absFilePath := filepath.Join(repo.Path, "indexes", index.ID)
-	info, err := os.Stat(absFilePath)
-	if nil != err {
-		logging.LogErrorf("stat failed: %s", err)
-		return
-	}
-	length := info.Size()
-	uploadBytes += length
-
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, index.ID)
-	err = repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
+	length, err := repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
+	uploadBytes += length
 	return
 }
 
 func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]interface{}) (uploadBytes int64, err error) {
 	if 1 > len(upsertFiles) {
 		return
-	}
-
-	for _, upsertFile := range upsertFiles {
-		absFilePath := filepath.Join(repo.Path, "objects", upsertFile.ID[:2], upsertFile.ID[2:])
-		info, statErr := os.Stat(absFilePath)
-		if nil != statErr {
-			err = statErr
-			logging.LogErrorf("stat failed: %s", err)
-			return
-		}
-		length := info.Size()
-		uploadBytes += length
 	}
 
 	waitGroup := &sync.WaitGroup{}
@@ -1050,11 +1022,13 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
 		count++
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, count, total)
-		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
+		length, uoErr := repo.cloud.UploadObject(filePath, false)
+		if nil != uoErr {
 			uploadErr = uoErr
 			err = uploadErr
 			return
 		}
+		uploadBytes += length
 	})
 	if nil != err {
 		return
@@ -1082,18 +1056,6 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		return
 	}
 
-	for _, upsertChunkID := range upsertChunkIDs {
-		absFilePath := filepath.Join(repo.Path, "objects", upsertChunkID[:2], upsertChunkID[2:])
-		info, statErr := os.Stat(absFilePath)
-		if nil != statErr {
-			err = statErr
-			logging.LogErrorf("stat failed: %s", err)
-			return
-		}
-		length := info.Size()
-		uploadBytes += length
-	}
-
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
 	poolSize := 8
@@ -1111,11 +1073,13 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
 		count++
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
-		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
+		length, uoErr := repo.cloud.UploadObject(filePath, false)
+		if nil != uoErr {
 			uploadErr = uoErr
 			err = uploadErr
 			return
 		}
+		uploadBytes += length
 	})
 	if nil != err {
 		return

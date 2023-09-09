@@ -62,11 +62,19 @@ func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (s3 *S3) UploadObject(filePath string, overwrite bool) (err error) {
+func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	svc := s3.getService()
 	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
+
 	absFilePath := filepath.Join(s3.Conf.RepoPath, filePath)
+	info, err := os.Stat(absFilePath)
+	if nil != err {
+		logging.LogErrorf("stat failed: %s", err)
+		return
+	}
+	length = info.Size()
+
 	file, err := os.Open(absFilePath)
 	if nil != err {
 		return

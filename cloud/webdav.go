@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io/fs"
 	"math"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"github.com/studio-b12/gowebdav"
 )
@@ -62,9 +62,16 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (err error) {
+func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	absFilePath := filepath.Join(webdav.Conf.RepoPath, filePath)
-	data, err := filelock.ReadFile(absFilePath)
+	info, err := os.Stat(absFilePath)
+	if nil != err {
+		logging.LogErrorf("stat failed: %s", err)
+		return
+	}
+	length = info.Size()
+
+	data, err := os.ReadFile(absFilePath)
 	if nil != err {
 		return
 	}

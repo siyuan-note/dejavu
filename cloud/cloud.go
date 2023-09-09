@@ -79,7 +79,7 @@ type Cloud interface {
 	GetRepos() (repos []*Repo, size int64, err error)
 
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
-	UploadObject(filePath string, overwrite bool) (err error)
+	UploadObject(filePath string, overwrite bool) (length int64, err error)
 
 	// DownloadObject 用于下载对象数据 data。
 	DownloadObject(filePath string) (data []byte, err error)

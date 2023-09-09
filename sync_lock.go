@@ -144,7 +144,7 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 		return
 	}
 
-	err = repo.cloud.UploadObject(lockSyncKey, true)
+	_, err = repo.cloud.UploadObject(lockSyncKey, true)
 	if nil != err {
 		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) || errors.Is(err, cloud.ErrDeprecatedVersion) ||
 			errors.Is(err, cloud.ErrCloudCheckFailed) {

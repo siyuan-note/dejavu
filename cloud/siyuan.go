@@ -19,6 +19,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -49,8 +50,14 @@ func NewSiYuan(baseCloud *BaseCloud) *SiYuan {
 	return &SiYuan{BaseCloud: baseCloud}
 }
 
-func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (err error) {
+func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	absFilePath := filepath.Join(siyuan.Conf.RepoPath, filePath)
+	info, err := os.Stat(absFilePath)
+	if nil != err {
+		logging.LogErrorf("stat failed: %s", err)
+		return
+	}
+	length = info.Size()
 
 	key := path.Join("siyuan", siyuan.Conf.UserID, "repo", siyuan.Conf.Dir, filePath)
 	keyUploadToken, scopeUploadToken, err := siyuan.requestScopeKeyUploadToken(key, overwrite)
