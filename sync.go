@@ -756,6 +756,7 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	absFilePath := filepath.Join(repo.Path, ref)
 	info, err := os.Stat(absFilePath)
 	if nil != err {
+		logging.LogErrorf("stat failed: %s", err)
 		return
 	}
 	uploadBytes = info.Size()
@@ -842,6 +843,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
+			err = uploadErr
 			return
 		}
 
@@ -1001,8 +1003,9 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 
 func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{}) (uploadBytes int64, err error) {
 	absFilePath := filepath.Join(repo.Path, "indexes", index.ID)
-	info, statErr := os.Stat(absFilePath)
-	if nil != statErr {
+	info, err := os.Stat(absFilePath)
+	if nil != err {
+		logging.LogErrorf("stat failed: %s", err)
 		return
 	}
 	length := info.Size()
@@ -1022,6 +1025,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		absFilePath := filepath.Join(repo.Path, "objects", upsertFile.ID[:2], upsertFile.ID[2:])
 		info, statErr := os.Stat(absFilePath)
 		if nil != statErr {
+			err = statErr
+			logging.LogErrorf("stat failed: %s", err)
 			return
 		}
 		length := info.Size()
@@ -1047,6 +1052,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
+			err = uploadErr
 			return
 		}
 	})
@@ -1080,6 +1086,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		absFilePath := filepath.Join(repo.Path, "objects", upsertChunkID[:2], upsertChunkID[2:])
 		info, statErr := os.Stat(absFilePath)
 		if nil != statErr {
+			err = statErr
+			logging.LogErrorf("stat failed: %s", err)
 			return
 		}
 		length := info.Size()
@@ -1105,6 +1113,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
 		if uoErr := repo.cloud.UploadObject(filePath, false); nil != uoErr {
 			uploadErr = uoErr
+			err = uploadErr
 			return
 		}
 	})
