@@ -118,11 +118,11 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	localUpserts, _ := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
+	localUpserts, _ := repo.DiffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	// 在单向同步的情况下该结果可直接作为合并结果
-	mergeResult.Upserts, mergeResult.Removes = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
+	mergeResult.Upserts, mergeResult.Removes = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles, false)
 
 	var fetchedFileIDs []string
 	for _, fetchedFile := range fetchedFiles {

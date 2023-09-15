@@ -18,10 +18,11 @@ package dejavu
 
 import (
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/logging"
 )
 
 // DiffUpsertRemove 比较 left 多于/变动 right 的文件以及 left 少于 right 的文件。
-func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes []*entity.File) {
+func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, log bool) (upserts, removes []*entity.File) {
 	l := map[string]*entity.File{}
 	r := map[string]*entity.File{}
 	for _, f := range left {
@@ -35,10 +36,17 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 		rFile := r[lPath]
 		if nil == rFile {
 			upserts = append(upserts, l[lPath])
+			if log {
+				logging.LogInfof("upsert [path=%s, updated=%d]", l[lPath].Path, l[lPath].Updated)
+			}
+
 			continue
 		}
 		if !equalFile(lFile, rFile) {
 			upserts = append(upserts, l[lPath])
+			if log {
+				logging.LogInfof("upsert [lPath=%s, lUpdated=%d, rPath=%s, rUpdated=%d]", l[lPath].Path, l[lPath].Updated, rFile.Path, rFile.Updated)
+			}
 			continue
 		}
 	}
@@ -47,6 +55,9 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File) (upserts, removes
 		lFile := l[rPath]
 		if nil == lFile {
 			removes = append(removes, r[rPath])
+			if log {
+				logging.LogInfof("remove [path=%s, updated=%d]", r[rPath].Path, r[rPath].Updated)
+			}
 			continue
 		}
 	}

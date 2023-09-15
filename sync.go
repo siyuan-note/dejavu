@@ -220,12 +220,12 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles)
+	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
-		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles)
+		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles, true)
 	}
 
 	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
@@ -273,6 +273,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				continue
 			}
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
+			logging.LogInfof("sync merge upsert [path=%s, updated=%d]", cloudUpsert.Path, cloudUpsertIgnore.Updated)
 		}
 	}
 
