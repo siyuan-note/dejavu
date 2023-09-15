@@ -273,7 +273,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				continue
 			}
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-			logging.LogInfof("sync merge upsert [path=%s, updated=%d]", cloudUpsert.Path, cloudUpsertIgnore.Updated)
+			logging.LogInfof("sync merge upsert [path=%s, updated=%d]", cloudUpsert.Path, cloudUpsert.Updated)
 		}
 	}
 
