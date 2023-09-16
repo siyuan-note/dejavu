@@ -460,7 +460,7 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 
 		length, uploadErr := repo.uploadIndex(latest, context)
 		if nil != uploadErr {
-			logging.LogErrorf("upload indexes failed: %s", uploadErr)
+			logging.LogErrorf("upload latest index failed: %s", uploadErr)
 			err = uploadErr
 			return
 		}
