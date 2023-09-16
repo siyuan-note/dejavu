@@ -308,7 +308,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 			// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
 			for _, chunk := range file.Chunks {
-				if _, statErr := repo.store.Stat(chunk); nil != statErr && os.IsNotExist(statErr) {
+				if _, statErr := repo.store.Stat(chunk); nil != statErr {
 					logging.LogErrorf("chunk [%s] not exist", chunk)
 					workerErrLock.Lock()
 					workerErrs = append(workerErrs, ErrNotFoundObject)
