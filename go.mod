@@ -4,11 +4,11 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20230501031728-4d62370997cd
-	github.com/aws/aws-sdk-go v1.45.11
+	github.com/aws/aws-sdk-go v1.45.13
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
-	github.com/klauspost/compress v1.16.7
-	github.com/panjf2000/ants/v2 v2.8.1
+	github.com/klauspost/compress v1.17.0
+	github.com/panjf2000/ants/v2 v2.8.2
 	github.com/qiniu/go-sdk/v7 v7.17.1
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
@@ -35,7 +35,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.42.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/onsi/ginkgo/v2 v2.12.0 // indirect
+	github.com/onsi/ginkgo/v2 v2.12.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/qtls-go1-20 v0.3.4 // indirect
