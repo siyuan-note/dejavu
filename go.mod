@@ -4,12 +4,12 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20230501031728-4d62370997cd
-	github.com/aws/aws-sdk-go v1.45.13
+	github.com/aws/aws-sdk-go v1.45.25
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
-	github.com/klauspost/compress v1.17.0
+	github.com/klauspost/compress v1.17.1
 	github.com/panjf2000/ants/v2 v2.8.2
-	github.com/qiniu/go-sdk/v7 v7.17.1
+	github.com/qiniu/go-sdk/v7 v7.18.0
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
@@ -21,12 +21,12 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
-	github.com/getsentry/sentry-go v0.24.1 // indirect
+	github.com/getsentry/sentry-go v0.25.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/glog v1.1.2 // indirect
 	github.com/google/pprof v0.0.0-20230926050212-f7f687d19a98 // indirect
