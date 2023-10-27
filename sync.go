@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -541,6 +542,8 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 		if cloudUpsert := cloudUpsertsMap[localUpsert.Path]; nil != cloudUpsert {
 			if localUpsert.Updated < cloudUpsert.Updated-1000*60*7 { // 本地早于云端 7 分钟
 				toRemoveLocalUpsertPaths = append(toRemoveLocalUpsertPaths, localUpsert.Path) // 使用云端数据覆盖本地数据
+				logging.LogWarnf("ignored local upsert [%s, %d] because it is older than cloud upsert [%s, %d]",
+					localUpsert.Path, localUpsert.Updated, cloudUpsert.Path, cloudUpsert.Updated)
 			}
 		}
 	}
@@ -549,6 +552,22 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 		if !gulu.Str.Contains(localUpsert.Path, toRemoveLocalUpsertPaths) {
 			ret = append(ret, localUpsert)
 		}
+	}
+
+	if len(localUpserts) != len(ret) {
+		buf := bytes.Buffer{}
+		buf.WriteString("filtered local upserts from:\n")
+		for _, localUpsert := range localUpserts {
+			buf.WriteString(fmt.Sprintf("  [%s, %d]\n", localUpsert.Path, localUpsert.Updated))
+		}
+		buf.WriteString("to:\n")
+		for _, localUpsert := range ret {
+			buf.WriteString(fmt.Sprintf("  [%s, %d]\n", localUpsert.Path, localUpsert.Updated))
+		}
+		if 1 > len(ret) {
+			buf.WriteString("  []")
+		}
+		logging.LogWarnf(buf.String())
 	}
 	return
 }
@@ -1242,6 +1261,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
 	if !gulu.File.IsExist(latestSync) {
+		logging.LogInfof("latest sync index not found, return an empty index")
 		return
 	}
 
