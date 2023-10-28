@@ -824,6 +824,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		info, statErr := os.Stat(absFilePath)
 		if nil != statErr {
 			// 本地没有该文件，忽略
+			logging.LogWarnf("cloud missing object [%s] not found: %s", missingObject, statErr)
 			continue
 		}
 
@@ -856,12 +857,15 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		if nil != uoErr {
 			uploadErr = uoErr
 			err = uploadErr
+			logging.LogErrorf("upload cloud missing object [%s] failed: %s", filePath, uploadErr)
 			return
 		}
 
 		fixed = append(fixed, objectPath)
+		logging.LogInfof("upload cloud missing object [%s] success", filePath)
 	})
 	if nil != err {
+		logging.LogWarnf("upload cloud missing objects failed: %s", err)
 		return
 	}
 
