@@ -97,7 +97,7 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 	defer repo.unlockCloud(context)
 
 	mergeResult, trafficStat, err = repo.sync(context)
-	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
+	if e, ok := err.(*os.PathError); ok && isNoSuchFileOrDirErr(err) {
 		p := e.Path
 		if !strings.Contains(p, "objects") {
 			return
@@ -1129,7 +1129,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err error) {
 	for _, chunkID := range chunkIDs {
 		if _, getChunkErr := repo.store.Stat(chunkID); nil != getChunkErr {
-			if os.IsNotExist(getChunkErr) {
+			if isNoSuchFileOrDirErr(err) {
 				ret = append(ret, chunkID)
 				continue
 			}
@@ -1144,7 +1144,7 @@ func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err erro
 func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error) {
 	for _, fileID := range fileIDs {
 		if _, getFileErr := repo.store.Stat(fileID); nil != getFileErr {
-			if os.IsNotExist(getFileErr) {
+			if isNoSuchFileOrDirErr(err) {
 				ret = append(ret, fileID)
 				continue
 			}

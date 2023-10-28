@@ -234,11 +234,12 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
-			logging.LogErrorf("walk data failed: %s", err)
-			if os.IsNotExist(err) || strings.Contains(err.Error(), "no such file or directory") {
+			if isNoSuchFileOrDirErr(err) {
 				// An error `Failed to create data snapshot` is occasionally reported during automatic data sync https://github.com/siyuan-note/siyuan/issues/8998
+				logging.LogInfof("ignore not exist err [%s]", err)
 				return nil
 			}
+			logging.LogErrorf("walk data failed: %s", err)
 			return err
 		}
 		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
@@ -669,4 +670,12 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 	}
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, count, total)
 	return
+}
+
+func isNoSuchFileOrDirErr(err error) bool {
+	if nil == err {
+		return false
+	}
+
+	return os.IsNotExist(err) || strings.Contains(err.Error(), "no such file or directory")
 }
