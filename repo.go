@@ -235,7 +235,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			logging.LogErrorf("walk data failed: %s", err)
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || strings.Contains(err.Error(), "no such file or directory") {
 				// An error `Failed to create data snapshot` is occasionally reported during automatic data sync https://github.com/siyuan-note/siyuan/issues/8998
 				return nil
 			}
