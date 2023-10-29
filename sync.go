@@ -1129,7 +1129,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err error) {
 	for _, chunkID := range chunkIDs {
 		if _, getChunkErr := repo.store.Stat(chunkID); nil != getChunkErr {
-			if isNoSuchFileOrDirErr(err) {
+			if isNoSuchFileOrDirErr(getChunkErr) {
 				ret = append(ret, chunkID)
 				continue
 			}
@@ -1144,7 +1144,7 @@ func (repo *Repo) localNotFoundChunks(chunkIDs []string) (ret []string, err erro
 func (repo *Repo) localNotFoundFiles(fileIDs []string) (ret []string, err error) {
 	for _, fileID := range fileIDs {
 		if _, getFileErr := repo.store.Stat(fileID); nil != getFileErr {
-			if isNoSuchFileOrDirErr(err) {
+			if isNoSuchFileOrDirErr(getFileErr) {
 				ret = append(ret, fileID)
 				continue
 			}
