@@ -383,6 +383,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 
 		// 创建 merge 快照
+		logging.LogInfof("creating merge index [%s]", latest.ID)
 		mergeStart := time.Now()
 		latest, err = repo.index("[Sync] Cloud sync merge", context)
 		if nil != err {
@@ -397,6 +398,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			logging.LogErrorf("put merge index failed: %s", err)
 			return
 		}
+		logging.LogInfof("created merge index [%s]", latest.ID)
 
 		// 索引后的 upserts 需要上传到云端
 		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
@@ -1187,6 +1189,8 @@ func (repo *Repo) getChunks(files []*entity.File) (chunkIDs []string) {
 func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs []string) (ret []string, err error) {
 	chunks := map[string]bool{}
 	for _, file := range localFiles {
+		logging.LogInfof("upsert file [%s, %s, %s] chunk [%s]",
+			file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), strings.Join(file.Chunks, ","))
 		for _, chunkID := range file.Chunks {
 			chunks[chunkID] = true
 		}
@@ -1198,6 +1202,10 @@ func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs [
 
 	for chunkID := range chunks {
 		ret = append(ret, chunkID)
+	}
+
+	for _, c := range ret {
+		logging.LogInfof("upsert chunk [%s]", c)
 	}
 	return
 }
