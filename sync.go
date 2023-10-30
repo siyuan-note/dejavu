@@ -229,6 +229,20 @@ func (repo *Repo) sync0(context map[string]interface{},
 		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles, true)
 	}
 
+	// 增加一些诊断日志 https://ld246.com/article/1698370932077
+	for _, c := range cloudUpserts {
+		logging.LogInfof("cloud upsert [%s, %d]", c.Path, c.Updated)
+	}
+	for _, r := range cloudRemoves {
+		logging.LogInfof("cloud remove [%s, %d]", r.Path, r.Updated)
+	}
+	for _, c := range localUpserts {
+		logging.LogInfof("local upsert [%s, %d]", c.Path, c.Updated)
+	}
+	for _, r := range localRemoves {
+		logging.LogInfof("local remove [%s, %d", r.Path, r.Updated)
+	}
+
 	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
 	localUpserts = repo.filterLocalUpserts(localUpserts, cloudUpserts)
 
