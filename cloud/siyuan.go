@@ -81,16 +81,10 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 
 		logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
 		if e, ok := err.(*client.ErrorInfo); ok {
-			if 614 == e.Code {
-				// file exists
+			if 614 == e.Code || strings.Contains(e.Err, "file exists") {
 				err = nil
 				return
 			}
-			if strings.Contains(e.Err, "file exists") {
-				err = nil
-				return
-			}
-
 			logging.LogErrorf("error detail: %s", e.ErrorDetail())
 		}
 
@@ -104,12 +98,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 
 			logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
 			if e, ok := err.(*client.ErrorInfo); ok {
-				if 614 == e.Code {
-					// file exists
-					err = nil
-					return
-				}
-				if strings.Contains(e.Err, "file exists") {
+				if 614 == e.Code || strings.Contains(e.Err, "file exists") {
 					err = nil
 					return
 				}
@@ -120,7 +109,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 		return
 	}
 
-	//logging.LogInfof("uploaded object [%s]", key)
+	logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -145,7 +134,8 @@ func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
 		err = fmt.Errorf("download read data failed: %s", err)
 		return
 	}
-	//logging.LogInfof("downloaded object [%s]", key)
+
+	logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -179,6 +169,8 @@ func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 		err = fmt.Errorf("remove cloud repo object failed: %s", result.Msg)
 		return
 	}
+
+	logging.LogInfof("removed object [%s]", key)
 	return
 }
 

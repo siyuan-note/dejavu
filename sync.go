@@ -876,7 +876,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		}
 
 		fixed = append(fixed, objectPath)
-		logging.LogInfof("upload cloud missing object [%s] success", filePath)
+		logging.LogInfof("uploaded cloud missing object [%s]", filePath)
 	})
 	if nil != err {
 		logging.LogWarnf("upload cloud missing objects failed: %s", err)
@@ -1049,7 +1049,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
 	}
-	count, total := 0, len(upsertFiles)
+	count, total, uploadedCount := 0, len(upsertFiles), 0
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -1067,6 +1067,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 			return
 		}
 		uploadBytes += length
+		uploadedCount++
+		logging.LogInfof("uploaded file [%s, %d/%d]", filePath, uploadedCount, total)
 	})
 	if nil != err {
 		return
@@ -1100,7 +1102,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
 	}
-	count, total := 0, len(upsertChunkIDs)
+	count, total, uploadedCount := 0, len(upsertChunkIDs), 0
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -1118,6 +1120,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 			return
 		}
 		uploadBytes += length
+		uploadedCount++
+		logging.LogInfof("uploaded chunk [%s, %d/%d]", filePath, uploadedCount, total)
 	})
 	if nil != err {
 		return
