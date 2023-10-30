@@ -39,7 +39,7 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, log bool) (upsert
 		if nil == rFile {
 			upserts = append(upserts, l[lPath])
 			if log {
-				logging.LogInfof("upsert [path=%s, updated=%s]", l[lPath].Path, time.UnixMilli(l[lPath].Updated).Format("2006-01-02 15:04:05"))
+				logging.LogInfof("upsert [%s, %s, %s]", l[lPath].ID, l[lPath].Path, time.UnixMilli(l[lPath].Updated).Format("2006-01-02 15:04:05"))
 			}
 
 			continue
@@ -47,9 +47,9 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, log bool) (upsert
 		if !equalFile(lFile, rFile) {
 			upserts = append(upserts, l[lPath])
 			if log {
-				logging.LogInfof("upsert [lPath=%s, lUpdated=%s, rPath=%s, rUpdated=%s]",
-					l[lPath].Path, time.UnixMilli(l[lPath].Updated).Format("2006-01-02 15:04:05"),
-					rFile.Path, time.UnixMilli(rFile.Updated).Format("2006-01-02 15:04:05"))
+				logging.LogInfof("upsert [lID=%s, lPath=%s, lUpdated=%s, rID=%s, rPath=%s, rUpdated=%s]",
+					l[lPath].ID, l[lPath].Path, time.UnixMilli(l[lPath].Updated).Format("2006-01-02 15:04:05"),
+					rFile.ID, rFile.Path, time.UnixMilli(rFile.Updated).Format("2006-01-02 15:04:05"))
 			}
 			continue
 		}
@@ -60,7 +60,7 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, log bool) (upsert
 		if nil == lFile {
 			removes = append(removes, r[rPath])
 			if log {
-				logging.LogInfof("remove [path=%s, updated=%s]", r[rPath].Path, time.UnixMilli(r[rPath].Updated).Format("2006-01-02 15:04:05"))
+				logging.LogInfof("remove [%s, %s, %s]", r[rPath].ID, r[rPath].Path, time.UnixMilli(r[rPath].Updated).Format("2006-01-02 15:04:05"))
 			}
 			continue
 		}
