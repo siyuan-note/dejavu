@@ -835,6 +835,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 
 	var missingObjects []string
 	for _, missingObject := range checkReport.MissingObjects {
+		logging.LogInfof("cloud missing object [%s]", missingObject)
 		absFilePath := filepath.Join(repo.Path, "objects", missingObject)
 		info, statErr := os.Stat(absFilePath)
 		if nil != statErr {
