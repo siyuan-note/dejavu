@@ -647,7 +647,7 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 	defer filelock.RWLock.Unlock()
 
 	for i := 0; i < 3; i++ {
-		err = filelock.Rename(f.Name(), absPath) // Windows 上重命名是非原子的
+		err = os.Rename(f.Name(), absPath) // Windows 上重命名是非原子的
 		if nil == err {
 			os.Remove(f.Name())
 			break
