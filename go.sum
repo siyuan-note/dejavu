@@ -100,8 +100,8 @@ github.com/siyuan-note/filelock v0.0.0-20230615140405-d05a21d49524 h1:ZuxN5gwqtU
 github.com/siyuan-note/filelock v0.0.0-20230615140405-d05a21d49524/go.mod h1:jK5lCYfPbFOrW23/HMeU7kmpLdEd5GkennF+kUpy7Vs=
 github.com/siyuan-note/httpclient v0.0.0-20231028070852-3c2c5a151c13 h1:DQwiRQa63wsjSKQN5TvTWI2Dd5XSulhnXvxIdOG8/x8=
 github.com/siyuan-note/httpclient v0.0.0-20231028070852-3c2c5a151c13/go.mod h1:mS0nX5fX99R/5HLnKqG40kpbathSCXxL/oxe88rURNI=
-github.com/siyuan-note/logging v0.0.0-20230327073243-ebe83aec1493 h1:oaN5b0WDFkjdBgGxmmBnMrtZxaJ76LZLwhQSZnznJMI=
-github.com/siyuan-note/logging v0.0.0-20230327073243-ebe83aec1493/go.mod h1:6mRFtAAvYPn3cDzqvyv+t8BVPGqpONDMMb5ywOhY1D4=
+github.com/siyuan-note/logging v0.0.0-20231030034701-8265764f00ff h1:5GcxrTOJTsusXOLhg4GuHWbEa4M5gu+CNfL0giwNjDM=
+github.com/siyuan-note/logging v0.0.0-20231030034701-8265764f00ff/go.mod h1:6mRFtAAvYPn3cDzqvyv+t8BVPGqpONDMMb5ywOhY1D4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=
