@@ -309,8 +309,8 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 			// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
 			for _, chunk := range file.Chunks {
 				if _, statErr := repo.store.Stat(chunk); nil != statErr {
-					logging.LogErrorf("stat file [path=%s, size=%d, updated=%d] chunk [%s] failed: %s",
-						file.Path, file.Size, file.Updated, chunk, statErr)
+					logging.LogErrorf("stat file [path=%s, size=%d, updated=%s] chunk [%s] failed: %s",
+						file.Path, file.Size, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), chunk, statErr)
 					workerErrLock.Lock()
 					workerErrs = append(workerErrs, ErrNotFoundObject)
 					workerErrLock.Unlock()

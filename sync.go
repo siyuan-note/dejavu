@@ -231,16 +231,16 @@ func (repo *Repo) sync0(context map[string]interface{},
 
 	// 增加一些诊断日志 https://ld246.com/article/1698370932077
 	for _, c := range cloudUpserts {
-		logging.LogInfof("cloud upsert [%s, %d]", c.Path, c.Updated)
+		logging.LogInfof("cloud upsert [%s, %s]", c.Path, time.UnixMilli(c.Updated).Format("2006-01-02 15:04:05"))
 	}
 	for _, r := range cloudRemoves {
-		logging.LogInfof("cloud remove [%s, %d]", r.Path, r.Updated)
+		logging.LogInfof("cloud remove [%s, %s]", r.Path, time.UnixMilli(r.Updated).Format("2006-01-02 15:04:05"))
 	}
 	for _, c := range localUpserts {
-		logging.LogInfof("local upsert [%s, %d]", c.Path, c.Updated)
+		logging.LogInfof("local upsert [%s, %s]", c.Path, time.UnixMilli(c.Updated).Format("2006-01-02 15:04:05"))
 	}
 	for _, r := range localRemoves {
-		logging.LogInfof("local remove [%s, %d]", r.Path, r.Updated)
+		logging.LogInfof("local remove [%s, %s]", r.Path, time.UnixMilli(r.Updated).Format("2006-01-02 15:04:05"))
 	}
 
 	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
@@ -288,7 +288,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				continue
 			}
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-			logging.LogInfof("sync merge upsert [path=%s, updated=%d]", cloudUpsert.Path, cloudUpsert.Updated)
+			logging.LogInfof("sync merge upsert [path=%s, updated=%s]", cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
 	}
 
@@ -556,8 +556,8 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 		if cloudUpsert := cloudUpsertsMap[localUpsert.Path]; nil != cloudUpsert {
 			if localUpsert.Updated < cloudUpsert.Updated-1000*60*7 { // 本地早于云端 7 分钟
 				toRemoveLocalUpsertPaths = append(toRemoveLocalUpsertPaths, localUpsert.Path) // 使用云端数据覆盖本地数据
-				logging.LogWarnf("ignored local upsert [%s, %d] because it is older than cloud upsert [%s, %d]",
-					localUpsert.Path, localUpsert.Updated, cloudUpsert.Path, cloudUpsert.Updated)
+				logging.LogWarnf("ignored local upsert [%s, %s] because it is older than cloud upsert [%s, %s]",
+					localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"), cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 			}
 		}
 	}
@@ -572,11 +572,11 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 		buf := bytes.Buffer{}
 		buf.WriteString("filtered local upserts from:\n")
 		for _, localUpsert := range localUpserts {
-			buf.WriteString(fmt.Sprintf("  [%s, %d]\n", localUpsert.Path, localUpsert.Updated))
+			buf.WriteString(fmt.Sprintf("  [%s, %s]\n", localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05")))
 		}
 		buf.WriteString("to:\n")
 		for _, localUpsert := range ret {
-			buf.WriteString(fmt.Sprintf("  [%s, %d]\n", localUpsert.Path, localUpsert.Updated))
+			buf.WriteString(fmt.Sprintf("  [%s, %s]\n", localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05")))
 		}
 		if 1 > len(ret) {
 			buf.WriteString("  []")
