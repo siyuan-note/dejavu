@@ -240,7 +240,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogInfof("local upsert [%s, %d]", c.Path, c.Updated)
 	}
 	for _, r := range localRemoves {
-		logging.LogInfof("local remove [%s, %d", r.Path, r.Updated)
+		logging.LogInfof("local remove [%s, %d]", r.Path, r.Updated)
 	}
 
 	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
