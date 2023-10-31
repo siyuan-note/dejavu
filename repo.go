@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -366,6 +367,14 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		err = repo.putFileChunks(file, context, count, total)
 		if nil != err {
 			workerErrLock.Lock()
+			workerErrs = append(workerErrs, err)
+			workerErrLock.Unlock()
+			return
+		}
+
+		if 1 > len(file.Chunks) {
+			workerErrLock.Lock()
+			err = fmt.Errorf("file [%s, %s, %s, %d] has no chunks", file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size)
 			workerErrs = append(workerErrs, err)
 			workerErrLock.Unlock()
 			return
