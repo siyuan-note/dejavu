@@ -416,14 +416,14 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	// 更新本地 latest 引用
-	err = repo.UpdateLatest(latest.ID)
+	err = repo.UpdateLatest(latest)
 	if nil != err {
 		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
 
 	// 更新本地同步点
-	err = repo.UpdateLatestSync(latest.ID)
+	err = repo.UpdateLatestSync(latest)
 	if nil != err {
 		logging.LogErrorf("update latest sync failed: %s", err)
 		return
@@ -1236,13 +1236,17 @@ func (repo *Repo) localUpsertFiles(latest *entity.Index, cloudLatest *entity.Ind
 	return
 }
 
-func (repo *Repo) UpdateLatestSync(id string) (err error) {
+func (repo *Repo) UpdateLatestSync(index *entity.Index) (err error) {
 	refs := filepath.Join(repo.Path, "refs")
 	err = os.MkdirAll(refs, 0755)
 	if nil != err {
 		return
 	}
-	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest-sync"), []byte(id), 0644)
+	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest-sync"), []byte(index.ID), 0644)
+	if nil != err {
+		return
+	}
+	logging.LogInfof("updated latest sync [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1292,12 +1296,12 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 	ret = &entity.Index{} // 构造一个空的索引表示没有同步点
 
 	latestSync := filepath.Join(repo.Path, "refs", "latest-sync")
-	if !gulu.File.IsExist(latestSync) {
+	if !filelock.IsExist(latestSync) {
 		logging.LogInfof("latest sync index not found, return an empty index")
 		return
 	}
 
-	data, err := os.ReadFile(latestSync)
+	data, err := filelock.ReadFile(latestSync)
 	if nil != err {
 		logging.LogWarnf("read latest sync index failed: %s", err)
 		return
@@ -1314,6 +1318,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 		logging.LogWarnf("get latest sync index failed: %s", err)
 		return
 	}
+	logging.LogInfof("got latest sync [%s, %s]", ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 

@@ -408,7 +408,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		return
 	}
 
-	err = repo.UpdateLatest(ret.ID)
+	err = repo.UpdateLatest(ret)
 	return
 }
 

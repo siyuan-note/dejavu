@@ -20,10 +20,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
+	"github.com/siyuan-note/logging"
 )
 
 var ErrNotFoundIndex = errors.New("not found index")
@@ -41,16 +43,24 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	}
 	hash := string(data)
 	ret, err = repo.store.GetIndex(hash)
+	if nil != err {
+		return
+	}
+	logging.LogInfof("got latest [%s, %s]", ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
-func (repo *Repo) UpdateLatest(id string) (err error) {
+func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
 	refs := filepath.Join(repo.Path, "refs")
 	err = os.MkdirAll(refs, 0755)
 	if nil != err {
 		return
 	}
-	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest"), []byte(id), 0644)
+	err = gulu.File.WriteFileSafer(filepath.Join(refs, "latest"), []byte(index.ID), 0644)
+	if nil != err {
+		return
+	}
+	logging.LogInfof("updated latest to [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
