@@ -30,7 +30,7 @@ var ErrNotFoundIndex = errors.New("not found index")
 
 func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	latest := filepath.Join(repo.Path, "refs", "latest")
-	if !gulu.File.IsExist(latest) {
+	if !filelock.IsExist(latest) {
 		err = ErrNotFoundIndex
 		return
 	}
@@ -59,7 +59,7 @@ func (repo *Repo) GetTag(tag string) (id string, err error) {
 		err = errors.New("invalid tag name")
 	}
 	tag = filepath.Join(repo.Path, "refs", "tags", tag)
-	if !gulu.File.IsExist(tag) {
+	if !filelock.IsExist(tag) {
 		err = errors.New("tag not found")
 	}
 	data, err := filelock.ReadFile(tag)
