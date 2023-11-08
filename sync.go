@@ -221,12 +221,12 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles, false)
+	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles, false, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
-		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles, true)
+		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles, true, true)
 	}
 
 	// 增加一些诊断日志 https://ld246.com/article/1698370932077

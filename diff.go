@@ -24,7 +24,7 @@ import (
 )
 
 // DiffUpsertRemove 比较 left 多于/变动 right 的文件以及 left 少于 right 的文件。
-func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, log bool) (upserts, removes []*entity.File) {
+func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, preventOldUpsertsLeftOverwriteRight, log bool) (upserts, removes []*entity.File) {
 	l := map[string]*entity.File{}
 	r := map[string]*entity.File{}
 	for _, f := range left {
@@ -45,12 +45,20 @@ func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, log bool) (upsert
 			continue
 		}
 		if !equalFile(lFile, rFile) {
-			upserts = append(upserts, l[lPath])
 			if log {
 				logging.LogInfof("upsert [lID=%s, lPath=%s, lUpdated=%s, rID=%s, rPath=%s, rUpdated=%s]",
 					l[lPath].ID, l[lPath].Path, time.UnixMilli(l[lPath].Updated).Format("2006-01-02 15:04:05"),
 					rFile.ID, rFile.Path, time.UnixMilli(rFile.Updated).Format("2006-01-02 15:04:05"))
 			}
+			if preventOldUpsertsLeftOverwriteRight && l[lPath].Updated < rFile.Updated {
+				// 在云端和本地都存在同一文件的情况下，避免旧的云端数据覆盖新的本地数据
+				// Automatic synchronization mode prevents old cloud data from overwriting new local data https://github.com/siyuan-note/siyuan/issues/9601
+				logging.LogWarnf("prevent old upsert left [%s, %s, %s] overwrite right [%s, %s, %s]",
+					l[lPath].ID, l[lPath].Path, time.UnixMilli(l[lPath].Updated).Format("2006-01-02 15:04:05"),
+					rFile.ID, rFile.Path, time.UnixMilli(rFile.Updated).Format("2006-01-02 15:04:05"))
+				continue
+			}
+			upserts = append(upserts, l[lPath])
 			continue
 		}
 	}
