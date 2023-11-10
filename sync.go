@@ -1039,6 +1039,7 @@ func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, index.ID)
 	length, err := repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
 	uploadBytes += length
+	logging.LogInfof("uploaded index [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
