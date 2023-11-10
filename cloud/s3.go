@@ -86,6 +86,9 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 		Key:    aws.String(key),
 		Body:   file,
 	})
+	if nil != err {
+		return
+	}
 
 	logging.LogInfof("uploaded object [%s]", key)
 	return
