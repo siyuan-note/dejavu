@@ -19,6 +19,7 @@ package dejavu
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/88250/gulu"
@@ -152,6 +153,17 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 		}
 
 		logging.LogErrorf("upload lock sync failed: %s", err)
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "requesttimetooskewed") || strings.Contains(msg, "request time and the current time is too large") {
+			err = cloud.ErrSystemTimeIncorrect
+			return
+		}
+
+		if strings.Contains(msg, "unavailable") {
+			err = cloud.ErrCloudServiceUnavailable
+			return
+		}
+
 		err = ErrLockCloudFailed
 	}
 	return
