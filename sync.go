@@ -1429,6 +1429,8 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		return
 	}
 	downloadBytes += int64(len(data))
+
+	logging.LogInfof("got cloud latest [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 

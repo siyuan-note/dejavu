@@ -80,11 +80,14 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 		return
 	}
 	defer file.Close()
+	key := path.Join("repo", filePath)
 	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(path.Join("repo", filePath)),
+		Key:    aws.String(key),
 		Body:   file,
 	})
+
+	logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -92,9 +95,10 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	svc := s3.getService()
 	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
+	key := path.Join("repo", filePath)
 	input := &as3.GetObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(path.Join("repo", filePath)),
+		Key:    aws.String(key),
 	}
 	resp, err := svc.GetObjectWithContext(ctx, input)
 	if nil != err {
@@ -105,6 +109,11 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	}
 	defer resp.Body.Close()
 	data, err = io.ReadAll(resp.Body)
+	if nil != err {
+		return
+	}
+
+	logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -117,6 +126,11 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 		Bucket: aws.String(s3.Conf.S3.Bucket),
 		Key:    aws.String(key),
 	})
+	if nil != err {
+		return
+	}
+
+	logging.LogInfof("removed object [%s]", key)
 	return
 }
 

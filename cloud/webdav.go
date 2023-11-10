@@ -88,12 +88,19 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 	if nil != err {
 		logging.LogErrorf("upload object [%s] failed: %s", key, err)
 	}
+	logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
 func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
-	data, err = webdav.Client.Read(path.Join(webdav.Dir, "siyuan", "repo", filePath))
+	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
+	data, err = webdav.Client.Read(key)
 	err = webdav.parseErr(err)
+	if nil != err {
+		return
+	}
+
+	logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -101,6 +108,11 @@ func (webdav *WebDAV) RemoveObject(filePath string) (err error) {
 	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
 	err = webdav.Client.Remove(key)
 	err = webdav.parseErr(err)
+	if nil != err {
+		return
+	}
+
+	logging.LogInfof("removed object [%s]", key)
 	return
 }
 
