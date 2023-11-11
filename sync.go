@@ -415,13 +415,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 
-	// 更新本地 latest 引用
-	err = repo.UpdateLatest(latest)
-	if nil != err {
-		logging.LogErrorf("update latest failed: %s", err)
-		return
-	}
-
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest)
 	if nil != err {
@@ -1039,7 +1032,7 @@ func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, index.ID)
 	length, err := repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
 	uploadBytes += length
-	logging.LogInfof("uploaded index [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("uploaded index [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1247,7 +1240,7 @@ func (repo *Repo) UpdateLatestSync(index *entity.Index) (err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("updated latest sync [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("updated latest sync [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1319,7 +1312,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 		logging.LogWarnf("get latest sync index failed: %s", err)
 		return
 	}
-	logging.LogInfof("got latest sync [%s, %s]", ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("got latest sync [device=%s/%s, id=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1431,7 +1424,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	}
 	downloadBytes += int64(len(data))
 
-	logging.LogInfof("got cloud latest [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("got cloud latest [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 

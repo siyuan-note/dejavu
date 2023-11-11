@@ -46,7 +46,7 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("got latest [%s, %s]", ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("got local latest [device=%s/%s, id=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -60,7 +60,7 @@ func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("updated latest to [%s, %s]", index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("updated local latest to [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
