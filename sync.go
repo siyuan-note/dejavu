@@ -462,6 +462,8 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 
 	// 以下步骤是更新云端相关索引数据
 
+	var errs []error
+	errLock := sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
 	// 上传索引
 	waitGroup.Add(1)
@@ -471,7 +473,9 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		length, uploadErr := repo.uploadIndex(latest, context)
 		if nil != uploadErr {
 			logging.LogErrorf("upload latest index failed: %s", uploadErr)
-			err = uploadErr
+			errLock.Lock()
+			errs = append(errs, uploadErr)
+			errLock.Unlock()
 			return
 		}
 		trafficStat.UploadFileCount++
@@ -484,12 +488,48 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	go func() {
 		defer waitGroup.Done()
 
-		length, uploadErr := repo.updateCloudRef("refs/latest", context)
+		latestData, length, uploadErr := repo.updateCloudRef("refs/latest", context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
-			err = uploadErr
+			errLock.Lock()
+			errs = append(errs, uploadErr)
+			errLock.Unlock()
 			return
 		}
+
+		// 确认上传 refs/latest 成功，因为路径不变，存储可能会有缓存，导致后续下载 refs/latest 时返回的是旧数据
+		// Data synchronization accidentally deletes local files https://github.com/siyuan-note/siyuan/issues/9631
+		confirmed := false
+		for i := 0; i < 32; i++ {
+			downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
+			if nil != downloadErr {
+				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed: %s", i, downloadErr)
+				continue
+			}
+			if !bytes.Equal(latestData, downloadedData) {
+				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed [local=%s, downloaded=%s]", i, latestData, downloadedData)
+				latestData, length, uploadErr = repo.updateCloudRef("refs/latest", context)
+				if nil != uploadErr {
+					logging.LogWarnf("fix [%d] uploaded cloud [refs/latest, %s] failed: %s", i, latestData, uploadErr)
+				} else {
+					logging.LogWarnf("fix [%d] uploaded cloud [refs/latest, %s]", i, latestData)
+				}
+				continue
+			}
+			confirmed = true
+			if 0 < i {
+				logging.LogInfof("confirmed [%d] uploaded cloud [refs/latest]", i)
+			}
+			break
+		}
+		if !confirmed {
+			logging.LogErrorf("final confirm uploaded cloud [refs/latest] failed: data not equal [local=%s, downloaded=%s]", latestData, latestData)
+			errLock.Lock()
+			errs = append(errs, errors.New("confirm uploaded cloud [refs/latest] failed"))
+			errLock.Unlock()
+			return
+		}
+
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += length
 		trafficStat.APIPut++
@@ -503,7 +543,9 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		downloadBytes, uploadBytes, uploadErr := repo.updateCloudIndexesV2(latest, context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud indexes failed: %s", uploadErr)
-			err = uploadErr
+			errLock.Lock()
+			errs = append(errs, uploadErr)
+			errLock.Unlock()
 			return
 		}
 		trafficStat.DownloadFileCount++
@@ -522,7 +564,9 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		uploadErr := repo.updateCloudCheckIndex(checkIndex, context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud check index failed: %s", uploadErr)
-			err = uploadErr
+			errLock.Lock()
+			errs = append(errs, uploadErr)
+			errLock.Unlock()
 			return
 		}
 	}()
@@ -536,6 +580,10 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	}()
 
 	waitGroup.Wait()
+
+	if 0 < len(errs) {
+		err = errs[0]
+	}
 	return
 }
 
@@ -778,8 +826,15 @@ func (repo *Repo) existDataFile(files []*entity.File, file *entity.File) bool {
 	return false
 }
 
-func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (uploadBytes int64, err error) {
+func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (data []byte, uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, ref)
+	absFilePath := filepath.Join(repo.cloud.GetConf().RepoPath, ref)
+	data, err = os.ReadFile(absFilePath)
+	if nil != err {
+		logging.LogErrorf("read ref [%s] failed: %s", ref, err)
+		return
+	}
+
 	length, err := repo.cloud.UploadObject(ref, true)
 	uploadBytes += length
 	return
