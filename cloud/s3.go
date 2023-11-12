@@ -82,9 +82,10 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 	defer file.Close()
 	key := path.Join("repo", filePath)
 	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
-		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(key),
-		Body:   file,
+		Bucket:       aws.String(s3.Conf.S3.Bucket),
+		Key:          aws.String(key),
+		CacheControl: aws.String("no-cache"),
+		Body:         file,
 	})
 	if nil != err {
 		return
@@ -100,8 +101,9 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	defer cancelFn()
 	key := path.Join("repo", filePath)
 	input := &as3.GetObjectInput{
-		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(key),
+		Bucket:               aws.String(s3.Conf.S3.Bucket),
+		Key:                  aws.String(key),
+		ResponseCacheControl: aws.String("no-cache"),
 	}
 	resp, err := svc.GetObjectWithContext(ctx, input)
 	if nil != err {

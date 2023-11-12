@@ -115,6 +115,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 
 func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
 	key := path.Join("siyuan", siyuan.Conf.UserID, "repo", siyuan.Conf.Dir, filePath)
+	key += "?r=" + gulu.Rand.String(7)
 	resp, err := httpclient.NewCloudFileRequest2m().Get(siyuan.Endpoint + key)
 	if nil != err {
 		err = fmt.Errorf("download object [%s] failed: %s", key, err)
