@@ -108,6 +108,10 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 		} else {
 			err = repo.lockCloud0(currentDeviceID)
 		}
+
+		if ok, retErr := parseErr(err); ok {
+			return retErr
+		}
 		return
 	}
 
@@ -153,18 +157,27 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 		}
 
 		logging.LogErrorf("upload lock sync failed: %s", err)
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "requesttimetooskewed") || strings.Contains(msg, "request time and the current time is too large") {
-			err = cloud.ErrSystemTimeIncorrect
-			return
-		}
-
-		if strings.Contains(msg, "unavailable") {
-			err = cloud.ErrCloudServiceUnavailable
-			return
+		if ok, retErr := parseErr(err); ok {
+			return retErr
 		}
 
 		err = ErrLockCloudFailed
 	}
 	return
+}
+
+func parseErr(err error) (bool, error) {
+	if nil == err {
+		return true, nil
+	}
+
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "requesttimetooskewed") || strings.Contains(msg, "request time and the current time is too large") {
+		return true, cloud.ErrSystemTimeIncorrect
+	}
+
+	if strings.Contains(msg, "unavailable") {
+		return true, cloud.ErrCloudServiceUnavailable
+	}
+	return false, err
 }
