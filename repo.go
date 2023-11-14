@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -587,6 +588,29 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
 	//now := time.Now()
+
+	var dotSiYuans, tmp []*entity.File
+	for _, file := range files {
+		if strings.Contains(file.Path, ".siyuan") {
+			dotSiYuans = append(dotSiYuans, file)
+		} else {
+			tmp = append(tmp, file)
+		}
+	}
+	sort.Slice(dotSiYuans, func(i, j int) bool {
+		if strings.Contains(dotSiYuans[i].Path, "conf.json") {
+			return true
+		}
+		if strings.Contains(dotSiYuans[j].Path, "conf.json") {
+			return false
+		}
+		return dotSiYuans[i].Updated > dotSiYuans[j].Updated
+	})
+	sort.Slice(tmp, func(i, j int) bool {
+		return tmp[i].Updated > tmp[j].Updated
+	})
+	tmp = append(dotSiYuans, tmp...)
+	files = tmp
 
 	count, total := 0, len(files)
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
