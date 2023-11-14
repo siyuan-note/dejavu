@@ -501,6 +501,7 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		// Data synchronization accidentally deletes local files https://github.com/siyuan-note/siyuan/issues/9631
 		confirmed := false
 		for i := 0; i < 32; i++ {
+			time.Sleep(256 * time.Millisecond)
 			downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
 			if nil != downloadErr {
 				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed: %s", i, downloadErr)
