@@ -28,7 +28,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
-	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 )
 
@@ -167,10 +166,53 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 	}
 	for unreferencedID := range unreferencedIndexIDs {
 		indexPath := filepath.Join(store.Path, "indexes", unreferencedID)
-		if err = filelock.Remove(indexPath); nil != err {
+		if err = os.RemoveAll(indexPath); nil != err {
 			return
 		}
 	}
+
+	// 上面清理完索引了，最后再清理校验索引
+	// Clear check index when purging data repo https://github.com/siyuan-note/siyuan/issues/9665
+	checkIndexesDir := filepath.Join(store.Path, "check", "indexes")
+	if gulu.File.IsDir(checkIndexesDir) {
+		entries, err = os.ReadDir(checkIndexesDir)
+		if nil != err {
+			return
+		}
+
+		for _, entry := range entries {
+			id := entry.Name()
+			if 40 != len(id) {
+				continue
+			}
+
+			data, readErr := os.ReadFile(filepath.Join(checkIndexesDir, id))
+			if nil != readErr {
+				logging.LogErrorf("read check index [%s] failed: %s", id, readErr)
+				continue
+			}
+
+			if data, readErr = store.compressDecoder.DecodeAll(data, nil); nil != readErr {
+				logging.LogErrorf("decode check index [%s] failed: %s", id, readErr)
+				continue
+			}
+
+			checkIndex := &entity.CheckIndex{}
+			if readErr = gulu.JSON.UnmarshalJSON(data, checkIndex); nil != readErr {
+				logging.LogErrorf("unmarshal check index [%s] failed: %s", id, readErr)
+				continue
+			}
+
+			if _, err = os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(err) {
+				if removeErr := os.RemoveAll(filepath.Join(store.Path, "check", "indexes", checkIndex.ID)); nil != removeErr {
+					logging.LogErrorf("remove check index [%s] failed: %s", checkIndex.ID, removeErr)
+				}
+			}
+		}
+	}
+
+	fileCache.Clear()
+	indexCache.Clear()
 	return
 }
 
@@ -195,7 +237,7 @@ func (store *Store) readRefs() (ret map[string]bool, err error) {
 			return nil
 		}
 
-		data, err := filelock.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if nil != err {
 			return err
 		}
@@ -252,7 +294,7 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 
 	_, file := store.IndexAbsPath(id)
 	var data []byte
-	data, err = filelock.ReadFile(file)
+	data, err = os.ReadFile(file)
 	if nil != err {
 		return
 	}
@@ -366,7 +408,7 @@ func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 
 func (store *Store) Remove(id string) (err error) {
 	_, file := store.AbsPath(id)
-	err = filelock.Remove(file)
+	err = os.RemoveAll(file)
 	return
 }
 

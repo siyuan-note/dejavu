@@ -37,7 +37,7 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 		return
 	}
 
-	data, err := filelock.ReadFile(latest)
+	data, err := os.ReadFile(latest)
 	if nil != err {
 		return
 	}
