@@ -310,9 +310,31 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 			// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
 			for _, chunk := range file.Chunks {
-				if _, statErr := repo.store.Stat(chunk); nil != statErr {
-					logging.LogErrorf("stat file [%s, %s, %s, %d] chunk [%s] failed: %s",
+				info, statErr := repo.store.Stat(chunk)
+				if nil == statErr {
+					continue
+				}
+
+				if nil != info {
+					logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s, perm=%04o] failed: %s",
+						file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, info.Mode().Perm(), statErr)
+				} else {
+					logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s] failed: %s",
 						file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, statErr)
+				}
+
+				if errors.Is(statErr, os.ErrPermission) {
+					// 如果是权限问题，则尝试修改权限，不认为是分块文件损坏
+					// Improve checking local data chunk integrity before data sync https://github.com/siyuan-note/siyuan/issues/9688
+					if chmodErr := os.Chmod(chunk, 0644); nil != chmodErr {
+						logging.LogWarnf("chmod file [%s] failed: %s", chunk, chmodErr)
+					} else {
+						logging.LogInfof("chmod file [%s] to [0644]", chunk)
+					}
+					continue
+				}
+
+				if errors.Is(statErr, os.ErrNotExist) {
 					workerErrLock.Lock()
 					workerErrs = append(workerErrs, ErrNotFoundObject)
 					workerErrLock.Unlock()
