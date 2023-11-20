@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.47.10
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.17.3
 	github.com/panjf2000/ants/v2 v2.8.2
 	github.com/qiniu/go-sdk/v7 v7.18.2
 	github.com/restic/chunker v0.4.0
@@ -15,7 +15,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20230804030110-cf250f838c80
 	github.com/siyuan-note/filelock v0.0.0-20231107122348-6ed75b0b525a
-	github.com/siyuan-note/httpclient v0.0.0-20231114005512-c39c76a8c333
+	github.com/siyuan-note/httpclient v0.0.0-20231120083123-750db4d28b38
 	github.com/siyuan-note/logging v0.0.0-20231030034701-8265764f00ff
 	github.com/studio-b12/gowebdav v0.9.0
 )
@@ -32,7 +32,7 @@ require (
 	github.com/google/pprof v0.0.0-20231101202521-4ca4178f5c7a // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/imroc/req/v3 v3.42.1 // indirect
+	github.com/imroc/req/v3 v3.42.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.13.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
