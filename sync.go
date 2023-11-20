@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/dustin/go-humanize"
 	"github.com/panjf2000/ants/v2"
 	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/siyuan-note/dejavu/cloud"
@@ -1088,7 +1089,7 @@ func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, index.ID)
 	length, err := repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
 	uploadBytes += length
-	logging.LogInfof("uploaded index [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("uploaded index [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.Bytes(uint64(index.Size)), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1296,7 +1297,7 @@ func (repo *Repo) UpdateLatestSync(index *entity.Index) (err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("updated latest sync [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("updated latest sync [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.Bytes(uint64(index.Size)), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1368,7 +1369,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 		logging.LogWarnf("get latest sync index failed: %s", err)
 		return
 	}
-	logging.LogInfof("got latest sync [device=%s/%s, id=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("got latest sync [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, len(ret.Files), humanize.Bytes(uint64(ret.Size)), time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -1480,7 +1481,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	}
 	downloadBytes += int64(len(data))
 
-	logging.LogInfof("got cloud latest [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("got cloud latest [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.Bytes(uint64(index.Size)), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 

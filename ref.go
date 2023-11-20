@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/dustin/go-humanize"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
@@ -46,7 +47,7 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("got local latest [device=%s/%s, id=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("got local latest [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, len(ret.Files), humanize.Bytes(uint64(ret.Size)), time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
@@ -60,7 +61,7 @@ func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("updated local latest to [device=%s/%s, id=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+	logging.LogInfof("updated local latest to [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.Bytes(uint64(index.Size)), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 	return
 }
 
