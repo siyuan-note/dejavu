@@ -258,6 +258,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		return nil
 	})
 	if nil != err {
+		logging.LogErrorf("walk data failed: %s", err)
 		return
 	}
 
@@ -265,6 +266,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	init := false
 	if nil != err {
 		if ErrNotFoundIndex != err {
+			logging.LogErrorf("get latest index failed: %s", err)
 			return
 		}
 
@@ -356,6 +358,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 		if 0 < len(workerErrs) {
 			err = workerErrs[0]
+			logging.LogErrorf("get latest files failed: %s", err)
 			return
 		}
 	}
@@ -417,6 +420,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 	if 0 < len(workerErrs) {
 		err = workerErrs[0]
+		logging.LogErrorf("put file chunks failed: %s", err)
 		return
 	}
 
@@ -428,10 +432,15 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 
 	err = repo.store.PutIndex(ret)
 	if nil != err {
+		logging.LogErrorf("put index failed: %s", err)
 		return
 	}
 
 	err = repo.UpdateLatest(ret)
+	if nil != err {
+		logging.LogErrorf("update latest failed: %s", err)
+		return
+	}
 	return
 }
 

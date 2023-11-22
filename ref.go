@@ -40,11 +40,13 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 
 	data, err := os.ReadFile(latest)
 	if nil != err {
+		logging.LogErrorf("read latest index [%s] failed: %s", latest, err)
 		return
 	}
 	hash := string(data)
 	ret, err = repo.store.GetIndex(hash)
 	if nil != err {
+		logging.LogErrorf("get latest index [%s] failed: %s", hash, err)
 		return
 	}
 	logging.LogInfof("got local latest [device=%s/%s, id=%s, files=%d, size=%s, created=%s]", ret.SystemID, ret.SystemOS, ret.ID, len(ret.Files), humanize.Bytes(uint64(ret.Size)), time.UnixMilli(ret.Created).Format("2006-01-02 15:04:05"))
