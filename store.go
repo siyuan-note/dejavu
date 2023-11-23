@@ -65,6 +65,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 
 	entries, err := os.ReadDir(objectsDir)
 	if nil != err {
+		logging.LogErrorf("read objects dir [%s] failed: %s", objectsDir, err)
 		return
 	}
 
@@ -79,6 +80,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		objs, readErr := os.ReadDir(dir)
 		if nil != readErr {
 			err = readErr
+			logging.LogErrorf("read objects dir [%s] failed: %s", dir, err)
 			return
 		}
 
@@ -93,6 +95,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 	if gulu.File.IsDir(indexesDir) {
 		entries, err = os.ReadDir(indexesDir)
 		if nil != err {
+			logging.LogErrorf("read indexes dir [%s] failed: %s", indexesDir, err)
 			return
 		}
 
@@ -108,6 +111,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 
 	refIndexIDs, err := store.readRefs()
 	if nil != err {
+		logging.LogErrorf("read refs failed: %s", err)
 		return
 	}
 
@@ -123,6 +127,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		index, getErr := store.GetIndex(refID)
 		if nil != getErr {
 			err = getErr
+			logging.LogErrorf("get index [%s] failed: %s", refID, err)
 			return
 		}
 
@@ -131,6 +136,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 			file, getFileErr := store.GetFile(fileID)
 			if nil != getFileErr {
 				err = getFileErr
+				logging.LogErrorf("get file [%s] failed: %s", fileID, err)
 				return
 			}
 
@@ -154,6 +160,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		stat, statErr := store.Stat(unreferencedID)
 		if nil != statErr {
 			err = statErr
+			logging.LogErrorf("stat [%s] failed: %s", unreferencedID, err)
 			return
 		}
 
@@ -161,12 +168,14 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		ret.Objects++
 
 		if err = store.Remove(unreferencedID); nil != err {
+			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedID, err)
 			return
 		}
 	}
 	for unreferencedID := range unreferencedIndexIDs {
 		indexPath := filepath.Join(store.Path, "indexes", unreferencedID)
 		if err = os.RemoveAll(indexPath); nil != err {
+			logging.LogErrorf("remove unreferenced index [%s] failed: %s", unreferencedID, err)
 			return
 		}
 	}
@@ -177,6 +186,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 	if gulu.File.IsDir(checkIndexesDir) {
 		entries, err = os.ReadDir(checkIndexesDir)
 		if nil != err {
+			logging.LogErrorf("read check indexes dir [%s] failed: %s", checkIndexesDir, err)
 			return
 		}
 
