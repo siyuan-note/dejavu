@@ -23,8 +23,8 @@ import (
 	"github.com/siyuan-note/logging"
 )
 
-// DiffUpsertRemove 比较 left 多于/变动 right 的文件以及 left 少于 right 的文件。
-func (repo *Repo) DiffUpsertRemove(left, right []*entity.File, preventOldUpsertsLeftOverwriteRight, log bool) (upserts, removes []*entity.File) {
+// diffUpsertRemove 比较 left 多于/变动 right 的文件以及 left 少于 right 的文件。
+func (repo *Repo) diffUpsertRemove(left, right []*entity.File, preventOldUpsertsLeftOverwriteRight, log bool) (upserts, removes []*entity.File) {
 	l := map[string]*entity.File{}
 	r := map[string]*entity.File{}
 	for _, f := range left {
@@ -96,6 +96,11 @@ func (repo *Repo) DiffIndex(leftIndexID, rightIndexID string) (ret *LeftRightDif
 		return
 	}
 
+	ret, err = repo.diffIndex(leftIndex, rightIndex)
+	return
+}
+
+func (repo *Repo) diffIndex(leftIndex, rightIndex *entity.Index) (ret *LeftRightDiff, err error) {
 	leftFiles, err := repo.getFiles(leftIndex.Files)
 	if nil != err {
 		return

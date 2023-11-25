@@ -222,12 +222,12 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	localUpserts, localRemoves := repo.DiffUpsertRemove(latestFiles, latestSyncFiles, false, false)
+	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
-		cloudUpserts, cloudRemoves = repo.DiffUpsertRemove(cloudLatestFiles, latestFiles, true, true)
+		cloudUpserts, cloudRemoves = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, true, true)
 	}
 
 	// 增加一些诊断日志 https://ld246.com/article/1698370932077
@@ -386,11 +386,27 @@ func (repo *Repo) sync0(context map[string]interface{},
 		// 创建 merge 快照
 		logging.LogInfof("creating merge index [%s]", latest.ID)
 		mergeStart := time.Now()
-		latest, err = repo.index("[Sync] Cloud sync merge", context)
-		if nil != err {
-			logging.LogErrorf("merge index failed: %s", err)
+		mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", context)
+		if nil != mergeIndexErr {
+			logging.LogErrorf("merge index failed: %s", mergeIndexErr)
+			err = mergeIndexErr
 			return
 		}
+
+		diff, mergeIndexErr := repo.diffIndex(mergedLatest, latest)
+		if nil != mergeIndexErr {
+			logging.LogErrorf("diff index failed: %s", mergeIndexErr)
+			err = mergeIndexErr
+			return
+		}
+		for _, add := range diff.AddsLeft {
+			logging.LogInfof("merge index add [%s, %s, %s]", add.ID, add.Path, time.UnixMilli(add.Updated).Format("2006-01-02 15:04:05"))
+		}
+		for _, update := range diff.UpdatesLeft {
+			logging.LogInfof("merge index update [%s, %s, %s]", update.ID, update.Path, time.UnixMilli(update.Updated).Format("2006-01-02 15:04:05"))
+		}
+
+		latest = mergedLatest
 		mergeElapsed := time.Since(mergeStart)
 		mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
 		latest.Memo = mergeMemo
