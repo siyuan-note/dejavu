@@ -270,24 +270,36 @@ func (repo *Repo) sync0(context map[string]interface{},
 			cloudUpsertIgnore = cloudUpsert
 		}
 
-		if repo.existDataFile(localUpserts, cloudUpsert) {
+		if localUpsert := repo.getFile(localUpserts, cloudUpsert); nil != localUpsert {
 			// 无论是否发生实际下载文件，都需要生成本地历史，以确保任何情况下都能够通过数据历史恢复文件
 			tmpMergeConflicts = append(tmpMergeConflicts, cloudUpsert)
 
 			if gulu.Str.Contains(cloudUpsert.ID, fetchedFileIDs) {
 				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
 				// 冲突列表在外部单独处理生成副本
-				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
+				if localUpsert.Updated > cloudUpsert.Updated {
+					mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
+				} else {
+					// 如果云端文件更新时间大于本地修改过的文件时间，则以云端为准覆盖本地
+					// Improve data sync conflicts merging https://github.com/siyuan-note/siyuan/issues/9741
+					mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
+					logging.LogInfof("sync merge conflict upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+				}
+			} else {
+				// 未发生实际下载文件的情况下，云端有更新的 upsert 则直接以云端为准合并到本地
+				mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
+				logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 			}
 			continue
 		}
 
-		if !repo.existDataFile(localRemoves, cloudUpsert) {
+		if nil == repo.getFile(localRemoves, cloudUpsert) {
 			if strings.HasSuffix(cloudUpsert.Path, ".tmp") {
 				// 数据仓库不迁出 `.tmp` 临时文件 https://github.com/siyuan-note/siyuan/issues/7087
 				logging.LogWarnf("ignored tmp file [%s]", cloudUpsert.Path)
 				continue
 			}
+
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
 			logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
@@ -295,7 +307,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 
 	// 计算能够无冲突合并的 remove，冲突的文件以本地 upsert 为准
 	for _, cloudRemove := range cloudRemoves {
-		if !repo.existDataFile(localUpserts, cloudRemove) {
+		if nil == repo.getFile(localUpserts, cloudRemove) {
 			mergeResult.Removes = append(mergeResult.Removes, cloudRemove)
 		}
 	}
@@ -835,13 +847,13 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 	return
 }
 
-func (repo *Repo) existDataFile(files []*entity.File, file *entity.File) bool {
+func (repo *Repo) getFile(files []*entity.File, file *entity.File) *entity.File {
 	for _, f := range files {
 		if f.ID == file.ID || f.Path == file.Path {
-			return true
+			return f
 		}
 	}
-	return false
+	return nil
 }
 
 func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (data []byte, uploadBytes int64, err error) {

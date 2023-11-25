@@ -132,7 +132,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 计算冲突的 upsert
 	// 冲突的文件以云端 upsert 和 remove 为准
 	for _, localUpsert := range localUpserts {
-		if repo.existDataFile(mergeResult.Upserts, localUpsert) || repo.existDataFile(mergeResult.Removes, localUpsert) {
+		if nil != repo.getFile(mergeResult.Upserts, localUpsert) || nil != repo.getFile(mergeResult.Removes, localUpsert) {
 			mergeResult.Conflicts = append(mergeResult.Conflicts, localUpsert)
 		}
 	}
