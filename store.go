@@ -58,8 +58,11 @@ func NewStore(path string, aesKey []byte) (ret *Store, err error) {
 }
 
 func (store *Store) Purge() (ret *PurgeStat, err error) {
+	logging.LogInfof("purging data repo [%s]", store.Path)
+
 	objectsDir := filepath.Join(store.Path, "objects")
 	if !gulu.File.IsDir(objectsDir) {
+		logging.LogWarnf("objects dir [%s] is not a dir", objectsDir)
 		return
 	}
 
@@ -187,35 +190,34 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		entries, err = os.ReadDir(checkIndexesDir)
 		if nil != err {
 			logging.LogErrorf("read check indexes dir [%s] failed: %s", checkIndexesDir, err)
-			return
-		}
+		} else {
+			for _, entry := range entries {
+				id := entry.Name()
+				if 40 != len(id) {
+					continue
+				}
 
-		for _, entry := range entries {
-			id := entry.Name()
-			if 40 != len(id) {
-				continue
-			}
+				data, readErr := os.ReadFile(filepath.Join(checkIndexesDir, id))
+				if nil != readErr {
+					logging.LogErrorf("read check index [%s] failed: %s", id, readErr)
+					continue
+				}
 
-			data, readErr := os.ReadFile(filepath.Join(checkIndexesDir, id))
-			if nil != readErr {
-				logging.LogErrorf("read check index [%s] failed: %s", id, readErr)
-				continue
-			}
+				if data, readErr = store.compressDecoder.DecodeAll(data, nil); nil != readErr {
+					logging.LogErrorf("decode check index [%s] failed: %s", id, readErr)
+					continue
+				}
 
-			if data, readErr = store.compressDecoder.DecodeAll(data, nil); nil != readErr {
-				logging.LogErrorf("decode check index [%s] failed: %s", id, readErr)
-				continue
-			}
+				checkIndex := &entity.CheckIndex{}
+				if readErr = gulu.JSON.UnmarshalJSON(data, checkIndex); nil != readErr {
+					logging.LogErrorf("unmarshal check index [%s] failed: %s", id, readErr)
+					continue
+				}
 
-			checkIndex := &entity.CheckIndex{}
-			if readErr = gulu.JSON.UnmarshalJSON(data, checkIndex); nil != readErr {
-				logging.LogErrorf("unmarshal check index [%s] failed: %s", id, readErr)
-				continue
-			}
-
-			if _, err = os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(err) {
-				if removeErr := os.RemoveAll(filepath.Join(store.Path, "check", "indexes", checkIndex.ID)); nil != removeErr {
-					logging.LogErrorf("remove check index [%s] failed: %s", checkIndex.ID, removeErr)
+				if _, err = os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(err) {
+					if removeErr := os.RemoveAll(filepath.Join(store.Path, "check", "indexes", checkIndex.ID)); nil != removeErr {
+						logging.LogErrorf("remove check index [%s] failed: %s", checkIndex.ID, removeErr)
+					}
 				}
 			}
 		}
@@ -223,6 +225,8 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 
 	fileCache.Clear()
 	indexCache.Clear()
+
+	logging.LogInfof("purged data repo [%s], [%d] indexes, [%d] objects, [%d] bytes", store.Path, ret.Indexes, ret.Objects, ret.Size)
 	return
 }
 
