@@ -96,6 +96,27 @@ type PurgeStat struct {
 	Size    int64
 }
 
+func (repo *Repo) CountIndexes() (ret int, err error) {
+	dir := filepath.Join(repo.Path, "indexes")
+	files, err := os.ReadDir(dir)
+	if nil != err {
+		logging.LogErrorf("read dir [%s] failed: %s", dir, err)
+		return
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		id := file.Name()
+		if 40 == len(id) {
+			ret++
+		}
+	}
+	return
+}
+
 // Reset 重置仓库，清空所有数据。
 func (repo *Repo) Reset() (err error) {
 	lock.Lock()
