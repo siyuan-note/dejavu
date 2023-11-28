@@ -214,7 +214,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 					continue
 				}
 
-				if _, err = os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(err) {
+				if _, statErr := os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(statErr) {
 					if removeErr := os.RemoveAll(filepath.Join(store.Path, "check", "indexes", checkIndex.ID)); nil != removeErr {
 						logging.LogErrorf("remove check index [%s] failed: %s", checkIndex.ID, removeErr)
 					}
