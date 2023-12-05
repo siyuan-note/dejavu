@@ -551,10 +551,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		return
 	}
 
-	filelock.RWLock.Lock()
-	defer filelock.RWLock.Unlock()
-
-	reader, err := os.OpenFile(absPath, os.O_RDONLY, 0644)
+	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
 	if nil != err {
 		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
 		return
@@ -570,7 +567,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		if nil != chnkErr {
 			err = chnkErr
 			logging.LogErrorf("chunk file [%s] failed: %s", absPath, chnkErr)
-			if closeErr := reader.Close(); nil != closeErr {
+			if closeErr := filelock.CloseFile(reader); nil != closeErr {
 				logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 			}
 			return
@@ -581,14 +578,14 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		chunk := &entity.Chunk{ID: chunkHash, Data: chnk.Data}
 		if err = repo.store.PutChunk(chunk); nil != err {
 			logging.LogErrorf("put chunk [%s] failed: %s", chunkHash, err)
-			if closeErr := reader.Close(); nil != closeErr {
+			if closeErr := filelock.CloseFile(reader); nil != closeErr {
 				logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 			}
 			return
 		}
 	}
 
-	if err = reader.Close(); nil != err {
+	if err = filelock.CloseFile(reader); nil != err {
 		logging.LogErrorf("close file [%s] failed: %s", absPath, err)
 		return
 	}
@@ -728,8 +725,8 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 		return
 	}
 
-	filelock.RWLock.Lock()
-	defer filelock.RWLock.Unlock()
+	filelock.Lock(absPath)
+	defer filelock.Unlock(absPath)
 
 	for i := 0; i < 3; i++ {
 		err = os.Rename(f.Name(), absPath) // Windows 上重命名是非原子的

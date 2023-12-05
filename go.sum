@@ -1,5 +1,5 @@
-github.com/88250/gulu v1.2.3-0.20230501031728-4d62370997cd h1:PgbmnoTqfVbYyhUljovnAz6l/oWPlbM1d5yrkVDHO1w=
-github.com/88250/gulu v1.2.3-0.20230501031728-4d62370997cd/go.mod h1:pTWnjt+6qUqNnP9xltswsJxgCBVu3C7eW09u48LWX0k=
+github.com/88250/gulu v1.2.3-0.20231205093500-bcc43ee27cba h1:ypA1nYRPXm+oac3GnAziPOhMx49nTLtrajePha1CU0g=
+github.com/88250/gulu v1.2.3-0.20231205093500-bcc43ee27cba/go.mod h1:pTWnjt+6qUqNnP9xltswsJxgCBVu3C7eW09u48LWX0k=
 github.com/andybalholm/brotli v1.0.6 h1:Yf9fFpf49Zrxb9NlQaluyE92/+X7UVHlhMNJN2sxfOI=
 github.com/andybalholm/brotli v1.0.6/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef h1:2JGTg6JapxP9/R33ZaagQtAM4EkkSYnIAlOG5EI8gkM=
@@ -96,8 +96,8 @@ github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75 h1:Bi7/7f29
 github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75/go.mod h1:H8fyqqAbp9XreANjeSbc72zEdFfKTXYN34tc1TjZwtw=
 github.com/siyuan-note/eventbus v0.0.0-20230804030110-cf250f838c80 h1:XghjHKJd+SiL0DkGYFVC+UGUDFtnR4v9gkAbPeh9Eq8=
 github.com/siyuan-note/eventbus v0.0.0-20230804030110-cf250f838c80/go.mod h1:Sqo4FYX5lAXu7gWkbEdJF0e6P57tNNVV4WDKYDctokI=
-github.com/siyuan-note/filelock v0.0.0-20231107122348-6ed75b0b525a h1:fNWhSpB+e0zOc76isiXAhjiQRaHocitRhWthCaCYTJA=
-github.com/siyuan-note/filelock v0.0.0-20231107122348-6ed75b0b525a/go.mod h1:HjtfP1NLDw53BRSeAPJgZDIGqyxi4bANYn1IhgDCQUY=
+github.com/siyuan-note/filelock v0.0.0-20231205094230-68ac1f62dabf h1:Uv0ySSkICiS+6zZTKtD2keNT4TSQTgkWyaAbYlRr5+k=
+github.com/siyuan-note/filelock v0.0.0-20231205094230-68ac1f62dabf/go.mod h1:4teUA+79ESPDbagztng2dJfyv66pGrri5ldGJQG/saI=
 github.com/siyuan-note/httpclient v0.0.0-20231120083123-750db4d28b38 h1:deUrbUOwmsNYRT0x12GHaJ8exxmDMwXFL/1J4dVnLMM=
 github.com/siyuan-note/httpclient v0.0.0-20231120083123-750db4d28b38/go.mod h1:QOTSBBSeKU90Kb4aeDVcQ0G+2zJcNuhkwAlsJ2cnmkQ=
 github.com/siyuan-note/logging v0.0.0-20231030034701-8265764f00ff h1:5GcxrTOJTsusXOLhg4GuHWbEa4M5gu+CNfL0giwNjDM=

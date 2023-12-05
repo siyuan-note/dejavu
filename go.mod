@@ -3,7 +3,7 @@ module github.com/siyuan-note/dejavu
 go 1.18
 
 require (
-	github.com/88250/gulu v1.2.3-0.20230501031728-4d62370997cd
+	github.com/88250/gulu v1.2.3-0.20231205093500-bcc43ee27cba
 	github.com/aws/aws-sdk-go v1.48.6
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
@@ -14,7 +14,7 @@ require (
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20220713091850-5ecd92177b75
 	github.com/siyuan-note/eventbus v0.0.0-20230804030110-cf250f838c80
-	github.com/siyuan-note/filelock v0.0.0-20231107122348-6ed75b0b525a
+	github.com/siyuan-note/filelock v0.0.0-20231205094230-68ac1f62dabf
 	github.com/siyuan-note/httpclient v0.0.0-20231120083123-750db4d28b38
 	github.com/siyuan-note/logging v0.0.0-20231030034701-8265764f00ff
 	github.com/studio-b12/gowebdav v0.9.0
@@ -50,3 +50,5 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.16.0 // indirect
 )
+
+//replace github.com/siyuan-note/filelock => D:\88250\filelock
