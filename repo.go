@@ -404,12 +404,11 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 	}
 
-	count := 0
 	total := len(upserts)
 	workerErrs = nil
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
-	for _, file := range upserts {
-		err = repo.putFileChunks(file, context, count, total)
+	for i, file := range upserts {
+		err = repo.putFileChunks(file, context, i+1, total)
 		if nil != err {
 			workerErrs = append(workerErrs, err)
 			break
