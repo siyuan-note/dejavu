@@ -492,6 +492,7 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 
 	// 以下步骤是更新云端相关索引数据
 
+	trafficStatLock := sync.Mutex{}
 	var errs []error
 	errLock := sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
@@ -508,9 +509,12 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			errLock.Unlock()
 			return
 		}
+
+		trafficStatLock.Lock()
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += length
 		trafficStat.APIPut++
+		trafficStatLock.Unlock()
 	}()
 
 	// 更新云端 latest
@@ -561,9 +565,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			return
 		}
 
+		trafficStatLock.Lock()
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += length
 		trafficStat.APIPut++
+		trafficStatLock.Unlock()
 	}()
 
 	// 更新云端索引列表
@@ -579,12 +585,15 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			errLock.Unlock()
 			return
 		}
+
+		trafficStatLock.Lock()
 		trafficStat.DownloadFileCount++
 		trafficStat.DownloadBytes += downloadBytes
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += uploadBytes
 		trafficStat.APIGet++
 		trafficStat.APIPut++
+		trafficStatLock.Unlock()
 	}()
 
 	// 上传校验索引
