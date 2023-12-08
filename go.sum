@@ -1,5 +1,5 @@
-github.com/88250/gulu v1.2.3-0.20231205093500-bcc43ee27cba h1:ypA1nYRPXm+oac3GnAziPOhMx49nTLtrajePha1CU0g=
-github.com/88250/gulu v1.2.3-0.20231205093500-bcc43ee27cba/go.mod h1:pTWnjt+6qUqNnP9xltswsJxgCBVu3C7eW09u48LWX0k=
+github.com/88250/gulu v1.2.3-0.20231208041529-dafc64f2bd1d h1:5v2fUykQ2LHVLjYH6hitmpGQ4q9NIFTzdncnI7TNkaY=
+github.com/88250/gulu v1.2.3-0.20231208041529-dafc64f2bd1d/go.mod h1:pTWnjt+6qUqNnP9xltswsJxgCBVu3C7eW09u48LWX0k=
 github.com/andybalholm/brotli v1.0.6 h1:Yf9fFpf49Zrxb9NlQaluyE92/+X7UVHlhMNJN2sxfOI=
 github.com/andybalholm/brotli v1.0.6/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef h1:2JGTg6JapxP9/R33ZaagQtAM4EkkSYnIAlOG5EI8gkM=
