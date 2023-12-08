@@ -404,43 +404,23 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 	}
 
-	count := atomic.Int32{}
+	count := 0
 	total := len(upserts)
 	workerErrs = nil
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
-	waitGroup := &sync.WaitGroup{}
-	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
-		defer waitGroup.Done()
-
-		count.Add(1)
-		file := arg.(*entity.File)
-		err = repo.putFileChunks(file, context, int(count.Load()), total)
+	for _, file := range upserts {
+		err = repo.putFileChunks(file, context, count, total)
 		if nil != err {
-			workerErrLock.Lock()
 			workerErrs = append(workerErrs, err)
-			workerErrLock.Unlock()
-			return
+			break
 		}
 
 		if 1 > len(file.Chunks) {
-			workerErrLock.Lock()
 			err = fmt.Errorf("file [%s, %s, %s, %d] has no chunks", file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size)
 			workerErrs = append(workerErrs, err)
-			workerErrLock.Unlock()
-			return
-		}
-	})
-
-	for _, file := range upserts {
-		waitGroup.Add(1)
-		err = p.Invoke(file)
-		if nil != err {
-			logging.LogErrorf("invoke failed: %s", err)
-			return
+			break
 		}
 	}
-	waitGroup.Wait()
-	p.Release()
 
 	if 0 < len(workerErrs) {
 		err = workerErrs[0]
