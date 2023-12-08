@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/88250/gulu"
@@ -307,15 +308,16 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	workerErrLock := sync.Mutex{}
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
-		count, total := 0, len(files)
+		count := atomic.Int32{}
+		total := len(files)
 		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
 		lock := &sync.Mutex{}
 		waitGroup := &sync.WaitGroup{}
 		p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
 			defer waitGroup.Done()
 
-			count++
-			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, count, total)
+			count.Add(1)
+			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, int(count.Load()), total)
 
 			fileID := arg.(string)
 			file, getErr := repo.store.GetFile(fileID)
@@ -402,16 +404,17 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 		}
 	}
 
-	count, total := 0, len(upserts)
+	count := atomic.Int32{}
+	total := len(upserts)
 	workerErrs = nil
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
 	waitGroup := &sync.WaitGroup{}
 	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
 		defer waitGroup.Done()
 
-		count++
+		count.Add(1)
 		file := arg.(*entity.File)
-		err = repo.putFileChunks(file, context, count, total)
+		err = repo.putFileChunks(file, context, int(count.Load()), total)
 		if nil != err {
 			workerErrLock.Lock()
 			workerErrs = append(workerErrs, err)
@@ -661,15 +664,16 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	tmp = append(dotSiYuans, tmp...)
 	files = tmp
 
-	count, total := 0, len(files)
+	count := atomic.Int32{}
+	total := len(files)
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
 	waitGroup := &sync.WaitGroup{}
 	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
 		defer waitGroup.Done()
 
 		file := arg.(*entity.File)
-		count++
-		err = repo.checkoutFile(file, repo.DataPath, count, total, context)
+		count.Add(1)
+		err = repo.checkoutFile(file, repo.DataPath, int(count.Load()), total, context)
 		if nil != err {
 			return
 		}

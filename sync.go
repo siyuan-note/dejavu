@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/88250/gulu"
@@ -728,7 +729,9 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 	if poolSize > len(chunkIDs) {
 		poolSize = len(chunkIDs)
 	}
-	count, total := 0, len(chunkIDs)
+	count := atomic.Int32{}
+	dBytes := atomic.Int64{}
+	total := len(chunkIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != downloadErr {
@@ -736,8 +739,8 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 		}
 
 		chunkID := arg.(string)
-		count++
-		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, count, total, context)
+		count.Add(1)
+		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, int(count.Load()), total, context)
 		if nil != dccErr {
 			downloadErr = dccErr
 			return
@@ -746,7 +749,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 			downloadErr = pcErr
 			return
 		}
-		downloadBytes += length
+		dBytes.Add(length)
 	})
 	if nil != err {
 		return
@@ -766,6 +769,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 	}
 	waitGroup.Wait()
 	p.Release()
+	downloadBytes = dBytes.Load()
 	if nil != downloadErr {
 		err = downloadErr
 		return
@@ -785,7 +789,9 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	if poolSize > len(fileIDs) {
 		poolSize = len(fileIDs)
 	}
-	count, total := 0, len(fileIDs)
+	count := atomic.Int32{}
+	dBytes := atomic.Int64{}
+	total := len(fileIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != downloadErr {
@@ -793,8 +799,8 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		}
 
 		fileID := arg.(string)
-		count++
-		length, file, dcfErr := repo.downloadCloudFile(fileID, count, total, context)
+		count.Add(1)
+		length, file, dcfErr := repo.downloadCloudFile(fileID, int(count.Load()), total, context)
 		if nil != dcfErr {
 			downloadErr = dcfErr
 			return
@@ -803,7 +809,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 			downloadErr = pfErr
 			return
 		}
-		downloadBytes += length
+		dBytes.Add(length)
 
 		lock.Lock()
 		ret = append(ret, file)
@@ -827,6 +833,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	}
 	waitGroup.Wait()
 	p.Release()
+	downloadBytes = dBytes.Load()
 	if nil != downloadErr {
 		err = downloadErr
 		return
@@ -937,7 +944,8 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	if poolSize > len(missingObjects) {
 		poolSize = len(missingObjects)
 	}
-	count, total := 0, len(missingObjects)
+	count := atomic.Int32{}
+	total := len(missingObjects)
 	var fixed []string
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
@@ -947,8 +955,8 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 
 		objectPath := arg.(string)
 		filePath := "objects/" + objectPath
-		count++
-		eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, count, total)
+		count.Add(1)
+		eventbus.Publish(eventbus.EvtCloudBeforeFixObjects, context, int(count.Load()), total)
 		_, uoErr := repo.cloud.UploadObject(filePath, false)
 		if nil != uoErr {
 			uploadErr = uoErr
@@ -1132,7 +1140,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
 	}
-	count, total, uploadedCount := 0, len(upsertFiles), 0
+	count, uploadedCount := atomic.Int32{}, atomic.Int32{}
+	total := len(upsertFiles)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -1141,8 +1150,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
-		count++
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, count, total)
+		count.Add(1)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, int(count.Load()), total)
 		length, uoErr := repo.cloud.UploadObject(filePath, false)
 		if nil != uoErr {
 			uploadErr = uoErr
@@ -1150,8 +1159,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 			return
 		}
 		uploadBytes += length
-		uploadedCount++
-		logging.LogInfof("uploaded file [%s, %d/%d]", filePath, uploadedCount, total)
+		uploadedCount.Add(1)
+		logging.LogInfof("uploaded file [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
 	})
 	if nil != err {
 		return
@@ -1185,7 +1194,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
 	}
-	count, total, uploadedCount := 0, len(upsertChunkIDs), 0
+	count, uploadedCount := atomic.Int32{}, atomic.Int32{}
+	total := len(upsertChunkIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -1194,8 +1204,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
-		count++
-		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, count, total)
+		count.Add(1)
+		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, int(count.Load()), total)
 		length, uoErr := repo.cloud.UploadObject(filePath, false)
 		if nil != uoErr {
 			uploadErr = uoErr
@@ -1203,8 +1213,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 			return
 		}
 		uploadBytes += length
-		uploadedCount++
-		logging.LogInfof("uploaded chunk [%s, %d/%d]", filePath, uploadedCount, total)
+		uploadedCount.Add(1)
+		logging.LogInfof("uploaded chunk [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
 	})
 	if nil != err {
 		return
