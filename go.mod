@@ -3,8 +3,8 @@ module github.com/siyuan-note/dejavu
 go 1.18
 
 require (
-	github.com/88250/gulu v1.2.3-0.20231208041529-dafc64f2bd1d
-	github.com/aws/aws-sdk-go v1.48.15
+	github.com/88250/gulu v1.2.3-0.20231209020950-b7b6994e395c
+	github.com/aws/aws-sdk-go v1.48.16
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/klauspost/compress v1.17.4
