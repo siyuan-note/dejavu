@@ -1015,6 +1015,10 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		checkReport.MissingObjects = append(checkReport.MissingObjects, missingObject)
 	}
 
+	if 0 < len(checkReport.MissingObjects) {
+		eventbus.Publish(eventbus.EvtCloudCorrupted)
+	}
+
 	data, err = gulu.JSON.MarshalJSON(checkReport)
 	if nil != err {
 		logging.LogErrorf("marshal check report failed: %s", err)
