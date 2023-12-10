@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/88250/gulu"
@@ -40,7 +41,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	defer repo.unlockCloud(context)
 
 	mergeResult = &MergeResult{Time: time.Now()}
-	trafficStat = &TrafficStat{}
+	trafficStat = &TrafficStat{m: &sync.Mutex{}}
 
 	// 获取本地最新索引
 	latest, err := repo.Latest()
@@ -235,7 +236,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 	defer repo.unlockCloud(context)
 
-	trafficStat = &TrafficStat{}
+	trafficStat = &TrafficStat{m: &sync.Mutex{}}
 
 	latest, err := repo.Latest()
 	if nil != err {

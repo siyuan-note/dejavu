@@ -77,6 +77,8 @@ type TrafficStat struct {
 	DownloadTrafficStat
 	UploadTrafficStat
 	APITrafficStat
+
+	m *sync.Mutex
 }
 
 func (repo *Repo) GetSyncCloudFiles(context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
@@ -114,7 +116,7 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 
 func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	mergeResult = &MergeResult{Time: time.Now()}
-	trafficStat = &TrafficStat{}
+	trafficStat = &TrafficStat{m: &sync.Mutex{}}
 
 	// 获取本地最新索引
 	latest, err := repo.Latest()
@@ -492,7 +494,6 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 
 	// 以下步骤是更新云端相关索引数据
 
-	trafficStatLock := sync.Mutex{}
 	var errs []error
 	errLock := sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
@@ -510,11 +511,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			return
 		}
 
-		trafficStatLock.Lock()
+		trafficStat.m.Lock()
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += length
 		trafficStat.APIPut++
-		trafficStatLock.Unlock()
+		trafficStat.m.Unlock()
 	}()
 
 	// 更新云端 latest
@@ -565,11 +566,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			return
 		}
 
-		trafficStatLock.Lock()
+		trafficStat.m.Lock()
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += length
 		trafficStat.APIPut++
-		trafficStatLock.Unlock()
+		trafficStat.m.Unlock()
 	}()
 
 	// 更新云端索引列表
@@ -586,14 +587,14 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			return
 		}
 
-		trafficStatLock.Lock()
+		trafficStat.m.Lock()
 		trafficStat.DownloadFileCount++
 		trafficStat.DownloadBytes += downloadBytes
 		trafficStat.UploadFileCount++
 		trafficStat.UploadBytes += uploadBytes
 		trafficStat.APIGet++
 		trafficStat.APIPut++
-		trafficStatLock.Unlock()
+		trafficStat.m.Unlock()
 	}()
 
 	// 上传校验索引
@@ -685,10 +686,12 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 			return
 		}
 	}
-	trafficStat := &TrafficStat{}
+	trafficStat := &TrafficStat{m: &sync.Mutex{}}
+	trafficStat.m.Lock()
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += length
 	trafficStat.APIGet++
+	trafficStat.m.Unlock()
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
@@ -910,8 +913,11 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		logging.LogErrorf("download check report failed: %s", err)
 		return
 	}
+	trafficStat.m.Lock()
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += int64(len(data))
+	trafficStat.APIGet++
+	trafficStat.m.Unlock()
 
 	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
 	if nil != err {
@@ -930,8 +936,11 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	}
 
 	var missingObjects []string
+	stillMissingObjects := map[string]bool{}
 	for _, missingObject := range checkReport.MissingObjects {
 		logging.LogInfof("cloud missing object [%s]", missingObject)
+		stillMissingObjects[missingObject] = true
+
 		absFilePath := filepath.Join(repo.Path, "objects", missingObject)
 		info, statErr := os.Stat(absFilePath)
 		if nil != statErr {
@@ -941,8 +950,10 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 		}
 
 		length := info.Size()
+		trafficStat.m.Lock()
 		trafficStat.UploadBytes += length
 		trafficStat.UploadFileCount++
+		trafficStat.m.Unlock()
 		missingObjects = append(missingObjects, missingObject)
 	}
 	missingObjects = gulu.Str.RemoveDuplicatedElem(missingObjects)
@@ -955,7 +966,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	}
 	count := atomic.Int32{}
 	total := len(missingObjects)
-	var fixed []string
+	lock := sync.Mutex{}
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		if nil != uploadErr {
@@ -974,7 +985,9 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 			return
 		}
 
-		fixed = append(fixed, objectPath)
+		lock.Lock()
+		delete(stillMissingObjects, objectPath)
+		lock.Unlock()
 		logging.LogInfof("uploaded cloud missing object [%s]", filePath)
 	})
 	if nil != err {
@@ -1002,16 +1015,8 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	}
 
 	checkReport.FixCount++
-	missings := map[string]bool{}
-	for _, missingObject := range missingObjects {
-		missings[missingObject] = true
-	}
-
-	for _, objectPath := range fixed {
-		delete(missings, objectPath)
-	}
 	checkReport.MissingObjects = nil
-	for missingObject := range missings {
+	for missingObject := range stillMissingObjects {
 		checkReport.MissingObjects = append(checkReport.MissingObjects, missingObject)
 	}
 
