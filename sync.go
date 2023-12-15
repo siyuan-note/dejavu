@@ -463,11 +463,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	})
 
 	// 移除空目录
-	err = gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
-	if nil != err {
-		logging.LogErrorf("remove empty dirs failed: %s", err)
-		return
-	}
+	gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
 	return
 }
 

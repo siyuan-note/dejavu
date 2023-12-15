@@ -217,11 +217,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	})
 
 	// 移除空目录
-	err = gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
-	if nil != err {
-		logging.LogErrorf("remove empty dirs failed: %s", err)
-		return
-	}
+	gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
 	return
 }
 
