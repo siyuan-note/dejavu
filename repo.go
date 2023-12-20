@@ -530,7 +530,12 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		return
 	}
 
-	if chunker.MinSize > info.Size() {
+	size := info.Size()
+	updated := info.ModTime().Unix()
+	// Improve data snapshot and sync robustness https://github.com/siyuan-note/siyuan/issues/9941
+	fileChangedErr := fmt.Errorf("file changed [%s]", absPath)
+
+	if chunker.MinSize > size {
 		var data []byte
 		data, err = filelock.ReadFile(absPath)
 		if nil != err {
@@ -543,6 +548,21 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		chunk := &entity.Chunk{ID: chunkHash, Data: data}
 		if err = repo.store.PutChunk(chunk); nil != err {
 			logging.LogErrorf("put chunk [%s] failed: %s", chunkHash, err)
+			return
+		}
+
+		newInfo, statErr := os.Stat(absPath)
+		if nil != statErr {
+			logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
+			err = statErr
+			return
+		}
+
+		newSize := newInfo.Size()
+		newUpdated := newInfo.ModTime().Unix()
+		if size != newSize || updated != newUpdated {
+			logging.LogErrorf("file [%s] changed, size [%d -> %d], updated [%d -> %d]", absPath, size, newSize, updated, newUpdated)
+			err = fileChangedErr
 			return
 		}
 
@@ -590,6 +610,21 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 
 	if err = filelock.CloseFile(reader); nil != err {
 		logging.LogErrorf("close file [%s] failed: %s", absPath, err)
+		return
+	}
+
+	newInfo, statErr := os.Stat(absPath)
+	if nil != statErr {
+		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
+		err = statErr
+		return
+	}
+
+	newSize := newInfo.Size()
+	newUpdated := newInfo.ModTime().Unix()
+	if size != newSize || updated != newUpdated {
+		logging.LogErrorf("file [%s] changed, size [%d -> %d], updated [%d -> %d]", absPath, size, newSize, updated, newUpdated)
+		err = fileChangedErr
 		return
 	}
 
