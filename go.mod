@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20231209020950-b7b6994e395c
-	github.com/aws/aws-sdk-go v1.49.5
+	github.com/aws/aws-sdk-go v1.49.6
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/klauspost/compress v1.17.4
@@ -41,7 +41,7 @@ require (
 	github.com/refraction-networking/utls v1.6.0 // indirect
 	go.uber.org/mock v0.3.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611 // indirect
+	golang.org/x/exp v0.0.0-20231219180239-dc181d75b848 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect
