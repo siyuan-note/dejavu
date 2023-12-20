@@ -524,18 +524,10 @@ func (repo *Repo) relPath(absPath string) string {
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	absPath := repo.absPath(file.Path)
 
-	info, err := os.Stat(absPath)
-	if nil != err {
-		logging.LogErrorf("stat file [%s] failed: %s", absPath, err)
-		return
-	}
-
-	size := info.Size()
-	updated := info.ModTime().Unix()
 	// Improve data snapshot and sync robustness https://github.com/siyuan-note/siyuan/issues/9941
 	fileChangedErr := fmt.Errorf("file changed [%s]", absPath)
 
-	if chunker.MinSize > size {
+	if chunker.MinSize > file.Size {
 		var data []byte
 		data, err = filelock.ReadFile(absPath)
 		if nil != err {
@@ -559,9 +551,9 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		}
 
 		newSize := newInfo.Size()
-		newUpdated := newInfo.ModTime().Unix()
-		if size != newSize || updated != newUpdated {
-			logging.LogErrorf("file [%s] changed, size [%d -> %d], updated [%d -> %d]", absPath, size, newSize, updated, newUpdated)
+		newUpdated := newInfo.ModTime().UnixMilli()
+		if file.Size != newSize || file.Updated != newUpdated {
+			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
 			err = fileChangedErr
 			return
 		}
@@ -621,9 +613,9 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	}
 
 	newSize := newInfo.Size()
-	newUpdated := newInfo.ModTime().Unix()
-	if size != newSize || updated != newUpdated {
-		logging.LogErrorf("file [%s] changed, size [%d -> %d], updated [%d -> %d]", absPath, size, newSize, updated, newUpdated)
+	newUpdated := newInfo.ModTime().UnixMilli()
+	if file.Size != newSize || file.Updated != newUpdated {
+		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
 		err = fileChangedErr
 		return
 	}
