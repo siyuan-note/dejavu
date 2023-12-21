@@ -441,7 +441,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 
 	// 更新云端索引信息
-	err = repo.updateCloudIndexes(latest, trafficStat, context)
+	err = repo.updateCloudIndexes(latest, cloudLatest, trafficStat, context)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return
@@ -467,7 +467,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	return
 }
 
-func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
 	// 生成校验索引
 	files, getErr := repo.getFiles(latest.Files)
 	if nil != getErr {
@@ -519,6 +519,24 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	go func() {
 		defer waitGroup.Done()
 
+		// 再下载一次云端 latest，然后和同步开始时下载的 latest 对比，如果不一致说明云端已经有更新的 latest，此时放弃本次同步，避免造成错误覆盖
+		// Improve data sync to prevent an old snapshot to overwrite the new one https://github.com/siyuan-note/siyuan/issues/9949
+		length, cloudLatest2, latestErr := repo.downloadCloudLatest(context)
+		if nil == latestErr {
+			if cloudLatest.ID != cloudLatest2.ID {
+				errLock.Lock()
+				errs = append(errs, cloud.ErrCloudIndexChanged)
+				errLock.Unlock()
+				logging.LogWarnf("cloud latest changed [old=%s, new=%s]", cloudLatest.ID, cloudLatest2.ID)
+				return
+			}
+		}
+		trafficStat.m.Lock()
+		trafficStat.DownloadFileCount++
+		trafficStat.DownloadBytes += length
+		trafficStat.APIGet++
+		trafficStat.m.Unlock()
+
 		latestData, length, uploadErr := repo.updateCloudRef("refs/latest", context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
@@ -527,6 +545,11 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			errLock.Unlock()
 			return
 		}
+		trafficStat.m.Lock()
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += length
+		trafficStat.APIPut++
+		trafficStat.m.Unlock()
 
 		// 确认上传 refs/latest 成功，因为路径不变，存储可能会有缓存，导致后续下载 refs/latest 时返回的是旧数据
 		// Data synchronization accidentally deletes local files https://github.com/siyuan-note/siyuan/issues/9631
@@ -561,12 +584,6 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 			errLock.Unlock()
 			return
 		}
-
-		trafficStat.m.Lock()
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += length
-		trafficStat.APIPut++
-		trafficStat.m.Unlock()
 	}()
 
 	// 更新云端索引列表

@@ -308,7 +308,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	trafficStat.APIPut += trafficStat.UploadChunkCount
 
 	// 更新云端索引信息
-	err = repo.updateCloudIndexes(latest, trafficStat, context)
+	err = repo.updateCloudIndexes(latest, cloudLatest, trafficStat, context)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return
