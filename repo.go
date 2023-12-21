@@ -87,7 +87,10 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName, de
 	return
 }
 
-var ErrRepoFatalErr = errors.New("repo fatal error")
+var (
+	ErrRepoFatal  = errors.New("repo fatal error")
+	ErrEmptyIndex = errors.New("empty index")
+)
 
 var lock = sync.Mutex{} // 仓库锁，Checkout、Index 和 Sync 等不能同时执行
 
@@ -281,6 +284,13 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	})
 	if nil != err {
 		logging.LogErrorf("walk data failed: %s", err)
+		return
+	}
+
+	if 1 > len(files) {
+		// 如果没有文件，则不创建快照 Abandon snapshot if file does not exist when creating snapshot https://github.com/siyuan-note/siyuan/issues/9948
+		err = ErrEmptyIndex
+		logging.LogErrorf("empty index [%s]", repo.DataPath)
 		return
 	}
 

@@ -120,7 +120,7 @@ func (repo *Repo) UploadTagIndex(tag, id string, context map[string]interface{})
 
 		// 索引时正常，但是上传时可能因为外部变更导致对象（文件或者分块）不存在，此时需要告知用户数据仓库已经损坏，需要重置数据仓库
 		logging.LogErrorf("upload tag index failed: %s", err)
-		err = ErrRepoFatalErr
+		err = ErrRepoFatal
 	}
 	return
 }

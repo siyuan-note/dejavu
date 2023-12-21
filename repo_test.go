@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,6 +44,32 @@ var (
 	deviceName, _ = os.Hostname()
 	deviceOS      = runtime.GOOS
 )
+
+func TestIndexEmpty(t *testing.T) {
+	clearTestdata(t)
+	subscribeEvents(t)
+
+	aesKey, err := encryption.KDF(testRepoPassword, testRepoPasswordSalt)
+	if nil != err {
+		return
+	}
+
+	testEmptyDataPath := "testdata/empty-data"
+	if err = os.MkdirAll(testEmptyDataPath, 0755); nil != err {
+		t.Fatalf("mkdir failed: %s", err)
+		return
+	}
+	repo, err := NewRepo(testEmptyDataPath, testRepoPath, testHistoryPath, testTempPath, deviceID, deviceName, deviceOS, aesKey, ignoreLines(), nil)
+	if nil != err {
+		t.Fatalf("new repo failed: %s", err)
+		return
+	}
+	_, err = repo.Index("Index 1", map[string]interface{}{})
+	if !errors.Is(err, ErrEmptyIndex) {
+		t.Fatalf("should be empty index")
+		return
+	}
+}
 
 func TestPurge(t *testing.T) {
 	clearTestdata(t)

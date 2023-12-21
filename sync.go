@@ -109,7 +109,7 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 
 		// 索引时正常，但是上传时可能因为外部变更导致对象（文件或者分块）不存在，此时需要告知用户数据仓库已经损坏，需要重置数据仓库
 		logging.LogErrorf("sync failed: %s", err)
-		err = ErrRepoFatalErr
+		err = ErrRepoFatal
 	}
 	return
 }
