@@ -519,21 +519,21 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 	go func() {
 		defer waitGroup.Done()
 
-		// 再下载一次云端 latest，然后和同步开始时下载的 latest 对比，如果不一致说明云端已经有更新的 latest，此时放弃本次同步，避免造成错误覆盖
+		// 再下载一次云端 latest ref，然后和同步开始时下载的 latest ID 对比，如果不一致说明云端已经有更新的 latest，此时放弃本次同步，避免造成错误覆盖
 		// Improve data sync to prevent an old snapshot to overwrite the new one https://github.com/siyuan-note/siyuan/issues/9949
-		length, cloudLatest2, latestErr := repo.downloadCloudLatest(context)
-		if nil == latestErr {
-			if cloudLatest.ID != cloudLatest2.ID {
+		latestRef, downloadErr := repo.downloadCloudObject("refs/latest")
+		if nil == downloadErr {
+			if cloudLatest.ID != string(latestRef) {
 				errLock.Lock()
 				errs = append(errs, cloud.ErrCloudIndexChanged)
 				errLock.Unlock()
-				logging.LogWarnf("cloud latest changed [old=%s, new=%s]", cloudLatest.ID, cloudLatest2.ID)
+				logging.LogWarnf("cloud latest changed [old=%s, new=%s]", cloudLatest.ID, latestRef)
 				return
 			}
 		}
 		trafficStat.m.Lock()
 		trafficStat.DownloadFileCount++
-		trafficStat.DownloadBytes += length
+		trafficStat.DownloadBytes += int64(len(latestRef))
 		trafficStat.APIGet++
 		trafficStat.m.Unlock()
 
