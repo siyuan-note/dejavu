@@ -90,6 +90,9 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName, de
 var (
 	ErrRepoFatal  = errors.New("repo fatal error")
 	ErrEmptyIndex = errors.New("empty index")
+	// ErrIndexFileChanged indicates that the file has changed during the index process.
+	// Improve data snapshot and sync robustness https://github.com/siyuan-note/siyuan/issues/9941
+	ErrIndexFileChanged = errors.New("file changed")
 )
 
 var lock = sync.Mutex{} // 仓库锁，Checkout、Index 和 Sync 等不能同时执行
@@ -256,6 +259,24 @@ func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 }
 
 func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
+	for i := 0; i < 7; i++ {
+		ret, err = repo.index0(memo, context)
+		if nil == err {
+			return
+		}
+
+		if !errors.Is(err, ErrIndexFileChanged) {
+			return
+		}
+
+		logging.LogWarnf("index failed, caused by: %s, retrying [%d]", err, i)
+	}
+
+	logging.LogWarnf("index failed after 7 retries, caused by: %s", err)
+	return
+}
+
+func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
@@ -453,6 +474,13 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	p.Release()
 
 	if 0 < len(workerErrs) {
+		for _, e := range workerErrs {
+			if errors.Is(e, ErrIndexFileChanged) {
+				err = e
+				return
+			}
+		}
+
 		err = workerErrs[0]
 		logging.LogErrorf("put file chunks failed: %s", err)
 		return
@@ -534,9 +562,6 @@ func (repo *Repo) relPath(absPath string) string {
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	absPath := repo.absPath(file.Path)
 
-	// Improve data snapshot and sync robustness https://github.com/siyuan-note/siyuan/issues/9941
-	fileChangedErr := fmt.Errorf("file changed [%s]", absPath)
-
 	if chunker.MinSize > file.Size {
 		var data []byte
 		data, err = filelock.ReadFile(absPath)
@@ -564,7 +589,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		newUpdated := newInfo.ModTime().UnixMilli()
 		if file.Size != newSize || file.Updated != newUpdated {
 			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
-			err = fileChangedErr
+			err = ErrIndexFileChanged
 			return
 		}
 
@@ -626,7 +651,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	newUpdated := newInfo.ModTime().UnixMilli()
 	if file.Size != newSize || file.Updated != newUpdated {
 		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
-		err = fileChangedErr
+		err = ErrIndexFileChanged
 		return
 	}
 
