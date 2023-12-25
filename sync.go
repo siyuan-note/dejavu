@@ -1031,10 +1031,14 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	checkReport.MissingObjects = nil
 	for missingObject := range stillMissingObjects {
 		checkReport.MissingObjects = append(checkReport.MissingObjects, missingObject)
+		logging.LogWarnf("cloud still missing object [%s]", missingObject)
 	}
 
 	if 0 < len(checkReport.MissingObjects) {
 		eventbus.Publish(eventbus.EvtCloudCorrupted)
+		logging.LogWarnf("cloud still missing objects [%d]", len(checkReport.MissingObjects))
+	} else {
+		logging.LogInfof("cloud missing objects fixed")
 	}
 
 	data, err = gulu.JSON.MarshalJSON(checkReport)
