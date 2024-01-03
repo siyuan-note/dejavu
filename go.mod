@@ -15,7 +15,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20231210025112-82fdedd8e374
 	github.com/siyuan-note/filelock v0.0.0-20231211015131-3b3dfabdce9c
-	github.com/siyuan-note/httpclient v0.0.0-20231219001541-d75e4dce39fa
+	github.com/siyuan-note/httpclient v0.0.0-20240103002950-9edb2e05f821
 	github.com/siyuan-note/logging v0.0.0-20231208035918-61f884c854f0
 	github.com/studio-b12/gowebdav v0.9.0
 )
@@ -24,11 +24,11 @@ require (
 	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/cloudflare/circl v1.3.6 // indirect
+	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/getsentry/sentry-go v0.25.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/glog v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20231212022811-ec68065c825e // indirect
+	github.com/google/pprof v0.0.0-20231229205709-960ae82b1e42 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.42.2 // indirect
@@ -41,7 +41,7 @@ require (
 	github.com/refraction-networking/utls v1.6.0 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/exp v0.0.0-20231219180239-dc181d75b848 // indirect
+	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect
