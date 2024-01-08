@@ -493,26 +493,6 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 	var errs []error
 	errLock := sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
-	// 上传索引
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-
-		length, uploadErr := repo.uploadIndex(latest, context)
-		if nil != uploadErr {
-			logging.LogErrorf("upload latest index failed: %s", uploadErr)
-			errLock.Lock()
-			errs = append(errs, uploadErr)
-			errLock.Unlock()
-			return
-		}
-
-		trafficStat.m.Lock()
-		trafficStat.UploadFileCount++
-		trafficStat.UploadBytes += length
-		trafficStat.APIPut++
-		trafficStat.m.Unlock()
-	}()
 
 	// 更新云端 latest
 	waitGroup.Add(1)
@@ -537,6 +517,24 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 		trafficStat.APIGet++
 		trafficStat.m.Unlock()
 
+		// 上传索引和更新 refs/latest 两个操作需要保证顺序，否则可能会导致云端索引 和 refs/latest 不一致 https://github.com/siyuan-note/siyuan/issues/10111
+
+		// 上传索引
+		length, uploadErr := repo.uploadIndex(latest, context)
+		if nil != uploadErr {
+			logging.LogErrorf("upload latest index failed: %s", uploadErr)
+			errLock.Lock()
+			errs = append(errs, uploadErr)
+			errLock.Unlock()
+			return
+		}
+		trafficStat.m.Lock()
+		trafficStat.UploadFileCount++
+		trafficStat.UploadBytes += length
+		trafficStat.APIPut++
+		trafficStat.m.Unlock()
+
+		// 更新 refs/latest
 		latestData, length, uploadErr := repo.updateCloudRef("refs/latest", context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
@@ -1532,13 +1530,19 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			logging.LogWarnf("not found cloud latest")
 			err = nil
 			return
 		}
+
+		logging.LogErrorf("download cloud latest failed: %s", err)
 		return
 	}
-	latestID := string(data)
-	if "" == latestID {
+
+	latestID := strings.TrimSpace(string(data))
+	if 40 != len(latestID) {
+		err = cloud.ErrCloudObjectNotFound
+		logging.LogWarnf("got empty cloud latest")
 		return
 	}
 
@@ -1546,10 +1550,19 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, latestID)
 	data, err = repo.downloadCloudObject(key)
 	if nil != err {
+		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			logging.LogWarnf("not found cloud latest index [%s]", latestID)
+			err = nil
+			return
+		}
+
+		logging.LogErrorf("download cloud latest index [%s] failed: %s", latestID, err)
 		return
 	}
+
 	err = gulu.JSON.UnmarshalJSON(data, index)
 	if nil != err {
+		logging.LogErrorf("unmarshal cloud latest index [%s] failed: %s", latestID, err)
 		return
 	}
 	downloadBytes += int64(len(data))
