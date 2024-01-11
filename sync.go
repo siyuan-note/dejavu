@@ -219,12 +219,14 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get latest files failed: %s", err)
 		return
 	}
+	logging.LogInfof("got local latest [%s] files [%d]", latest.ID, len(latestFiles))
 	latestSync := repo.latestSync()
 	latestSyncFiles, err := repo.getFiles(latestSync.Files)
 	if nil != err {
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
+	logging.LogInfof("got latest sync [%s] files [%d]", latestSync.ID, len(latestSyncFiles))
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异

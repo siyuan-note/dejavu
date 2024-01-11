@@ -308,6 +308,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 		return
 	}
 
+	logging.LogInfof("walked data [files=%d]", len(files))
 	if 1 > len(files) {
 		// 如果没有文件，则不创建快照 Abandon snapshot if file does not exist when creating snapshot https://github.com/siyuan-note/siyuan/issues/9948
 		err = ErrEmptyIndex
