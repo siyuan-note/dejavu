@@ -274,7 +274,27 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	}
 	unreferencedPaths = gulu.Str.RemoveDuplicatedElem(unreferencedPaths)
 
-	// 先删除索引
+	// 删除所有遗留的校验索引
+	// S3/WebDAV 不上传校验索引 S3/WebDAV data sync no longer uploads check index https://github.com/siyuan-note/siyuan/issues/10180
+	checkIndexIDs, listErr := repo.cloud.ListObjects("check/indexes/")
+	if nil != listErr {
+		logging.LogErrorf("list indexes failed: %s", listErr)
+		err = listErr
+		return
+	}
+
+	var unreferencedCheckIndexPaths []string
+	for checkIndexID := range checkIndexIDs {
+		checkIndexPath := path.Join("check", "indexes", checkIndexID)
+		unreferencedCheckIndexPaths = append(unreferencedCheckIndexPaths, checkIndexPath)
+	}
+	err = repo.removeCloudObjects(unreferencedCheckIndexPaths)
+	if nil != err {
+		logging.LogErrorf("remove unreferenced check indexes failed: %s", err)
+		return
+	}
+
+	// 删除索引
 	var unreferencedIndexPaths []string
 	for unreferencedID := range unreferencedIndexIDs {
 		indexPath := path.Join("indexes", unreferencedID)
@@ -287,13 +307,14 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		return
 	}
 
+	// 清理索引列表
 	err = repo.purgeIndexesV2(refIndexIDs)
 	if nil != err {
 		logging.LogErrorf("purge indexes-v2.json failed: %s", err)
 		return
 	}
 
-	// 再删除对象
+	// 删除对象
 	var unreferencedObjPaths []string
 	for _, unreferencedPath := range unreferencedPaths {
 		objPath := path.Join("objects", unreferencedPath)
