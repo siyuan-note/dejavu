@@ -57,7 +57,7 @@ func NewStore(path string, aesKey []byte) (ret *Store, err error) {
 	return
 }
 
-func (store *Store) Purge() (ret *PurgeStat, err error) {
+func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 	logging.LogInfof("purging data repo [%s]", store.Path)
 
 	objectsDir := filepath.Join(store.Path, "objects")
@@ -156,7 +156,7 @@ func (store *Store) Purge() (ret *PurgeStat, err error) {
 		}
 	}
 
-	ret = &PurgeStat{}
+	ret = &entity.PurgeStat{}
 	ret.Indexes = len(unreferencedIndexIDs)
 
 	for unreferencedID := range unreferencedIDs {

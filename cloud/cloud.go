@@ -110,6 +110,12 @@ type Cloud interface {
 
 	// AddTraffic 用于统计流量。
 	AddTraffic(traffic *Traffic)
+
+	// ListObjects 用于列出指定前缀的对象。
+	ListObjects(pathPrefix string) (objInfos map[string]*entity.ObjectInfo, err error)
+
+	// GetIndex 用于获取索引。
+	GetIndex(id string) (index *entity.Index, err error)
 }
 
 // Traffic 描述了流量信息。
@@ -231,6 +237,16 @@ func (baseCloud *BaseCloud) GetStat() (stat *Stat, err error) {
 		Sync:   &StatSync{},
 		Backup: &StatBackup{},
 	}
+	return
+}
+
+func (baseCloud *BaseCloud) ListObjects(pathPrefix string) (objInfos map[string]*entity.ObjectInfo, err error) {
+	err = ErrUnsupported
+	return
+}
+
+func (baseCloud *BaseCloud) GetIndex(id string) (index *entity.Index, err error) {
+	err = ErrUnsupported
 	return
 }
 

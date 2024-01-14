@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -97,12 +98,6 @@ var (
 
 var lock = sync.Mutex{} // 仓库锁，Checkout、Index 和 Sync 等不能同时执行
 
-type PurgeStat struct {
-	Objects int
-	Indexes int
-	Size    int64
-}
-
 func (repo *Repo) CountIndexes() (ret int, err error) {
 	dir := filepath.Join(repo.Path, "indexes")
 	files, err := os.ReadDir(dir)
@@ -139,10 +134,173 @@ func (repo *Repo) Reset() (err error) {
 }
 
 // Purge 清理所有未引用数据。
-func (repo *Repo) Purge() (ret *PurgeStat, err error) {
+func (repo *Repo) Purge() (ret *entity.PurgeStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 	return repo.store.Purge()
+}
+
+// PurgeCloud 清理云端所有未引用数据。
+// Support manual purge of unreferenced data snapshots in the S3/WebDAV cloud storage https://github.com/siyuan-note/siyuan/issues/10081
+func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToStatusBar}
+	err = repo.tryLockCloud("purge", context)
+	if nil != err {
+		return
+	}
+	defer repo.unlockCloud(context)
+
+	logging.LogInfof("purging cloud...")
+	objInfos, listErr := repo.cloud.ListObjects("objects/")
+	if nil != listErr {
+		logging.LogErrorf("list objects failed: %s", listErr)
+		err = listErr
+		return
+	}
+
+	objIDs := map[string]bool{}
+	for objPath, _ := range objInfos {
+		objID := strings.ReplaceAll(objPath, "/", "")
+		objIDs[objID] = true
+	}
+
+	indexIDs, listErr := repo.cloud.ListObjects("indexes/")
+	if nil != listErr {
+		logging.LogErrorf("list indexes failed: %s", listErr)
+		err = listErr
+		return
+	}
+
+	if 1 > len(indexIDs) || 1 > len(objIDs) {
+		logging.LogInfof("skip purge cloud")
+		return
+	}
+
+	refs, listErr := repo.cloud.ListObjects("refs/")
+	if nil != listErr {
+		logging.LogErrorf("list refs failed: %s", listErr)
+		err = listErr
+		return
+	}
+
+	refIndexIDs := map[string]bool{}
+	for r := range refs {
+		ref, getErr := repo.cloud.DownloadObject(path.Join("refs", r))
+		if nil != getErr {
+			err = getErr
+			logging.LogErrorf("get ref [%s] failed: %s", r, err)
+			return
+		}
+
+		refID := strings.TrimSpace(string(ref))
+		refIndexIDs[refID] = true
+	}
+
+	unreferencedIndexIDs := map[string]bool{}
+	for indexID := range indexIDs {
+		if !refIndexIDs[indexID] {
+			unreferencedIndexIDs[indexID] = true
+		}
+	}
+
+	referencedFileIDs := map[string]bool{}
+	referencedObjIDs := map[string]bool{}
+	for refID := range refIndexIDs {
+		index, getErr := repo.cloud.GetIndex(refID)
+		if nil != getErr {
+			err = getErr
+			logging.LogErrorf("get index [%s] failed: %s", refID, err)
+			return
+		}
+
+		for _, fileID := range index.Files {
+			referencedObjIDs[fileID] = true
+			referencedFileIDs[fileID] = true
+		}
+	}
+
+	var files []*entity.File
+	var filesIDs []string
+	for fileID := range referencedFileIDs {
+		f, _ := repo.GetFile(fileID)
+		if nil != f {
+			files = append(files, f)
+			continue
+		}
+
+		filesIDs = append(filesIDs, fileID)
+	}
+
+	_, dFiles, downloadErr := repo.downloadCloudFilesPut(filesIDs, context)
+	if nil != downloadErr {
+		err = downloadErr
+		logging.LogErrorf("download cloud files failed: %s", err)
+		return
+	}
+	files = append(files, dFiles...)
+
+	for _, f := range files {
+		for _, chunkID := range f.Chunks {
+			referencedObjIDs[chunkID] = true
+		}
+	}
+
+	unreferencedIDs := map[string]bool{}
+	for objID := range objIDs {
+		if !referencedObjIDs[objID] {
+			unreferencedIDs[objID] = true
+		}
+	}
+
+	ret = &entity.PurgeStat{}
+	ret.Indexes = len(unreferencedIndexIDs)
+
+	unreferencedPaths := []string{}
+	for unreferencedID := range unreferencedIDs {
+		unreferencedPath := path.Join(unreferencedID[:2], unreferencedID[2:])
+		objInfo := objInfos[unreferencedPath]
+		if nil == objInfo {
+			logging.LogWarnf("unreferenced object [%s] not found", unreferencedPath)
+			continue
+		}
+
+		ret.Size += objInfo.Size
+		ret.Objects++
+
+		unreferencedPaths = append(unreferencedPaths, unreferencedPath)
+	}
+	unreferencedPaths = gulu.Str.RemoveDuplicatedElem(unreferencedPaths)
+
+	// 先删除索引
+	var unreferencedIndexPaths []string
+	for unreferencedID := range unreferencedIndexIDs {
+		indexPath := path.Join("indexes", unreferencedID)
+		unreferencedIndexPaths = append(unreferencedIndexPaths, indexPath)
+	}
+
+	err = repo.removeCloudObjects(unreferencedIndexPaths)
+	if nil != err {
+		logging.LogErrorf("remove unreferenced indexes failed: %s", err)
+		return
+	}
+
+	// 再删除对象
+	var unreferencedObjPaths []string
+	for _, unreferencedPath := range unreferencedPaths {
+		objPath := path.Join("objects", unreferencedPath)
+		unreferencedObjPaths = append(unreferencedObjPaths, objPath)
+	}
+	err = repo.removeCloudObjects(unreferencedObjPaths)
+	if nil != err {
+		logging.LogErrorf("remove unreferenced objects failed: %s", err)
+		return
+	}
+
+	logging.LogInfof("purged cloud, [%d] indexes, [%d] objects, [%d] bytes", ret.Indexes, ret.Objects, ret.Size)
+	return
 }
 
 // GetIndex 从仓库根据 id 获取索引。
@@ -255,6 +413,51 @@ func (repo *Repo) GetFile(fileID string) (ret *entity.File, err error) {
 
 func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 	ret, err = repo.openFile(file)
+	return
+}
+
+func (repo *Repo) removeCloudObjects(objects []string) (err error) {
+	waitGroup := &sync.WaitGroup{}
+	var removeErr error
+	poolSize := 8
+	if poolSize > len(objects) {
+		poolSize = len(objects)
+	}
+
+	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+		if nil != removeErr {
+			return // 快速失败
+		}
+
+		fileID := arg.(string)
+		rmErr := repo.cloud.RemoveObject(fileID)
+		if nil != rmErr {
+			removeErr = rmErr
+			return
+		}
+	})
+	if nil != err {
+		return
+	}
+
+	for _, obj := range objects {
+		waitGroup.Add(1)
+		if err = p.Invoke(obj); nil != err {
+			logging.LogErrorf("invoke failed: %s", err)
+			return
+		}
+		if nil != removeErr {
+			err = removeErr
+			return
+		}
+	}
+	waitGroup.Wait()
+	p.Release()
+	if nil != removeErr {
+		err = removeErr
+		return
+	}
 	return
 }
 

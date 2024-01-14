@@ -215,6 +215,50 @@ func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err 
 	return
 }
 
+func (webdav *WebDAV) GetIndex(id string) (index *entity.Index, err error) {
+	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
+	index, err = webdav.repoIndex(repoKey, id)
+	if nil != err {
+		logging.LogErrorf("get index [%s] failed: %s", id, err)
+		return
+	}
+	if nil == index {
+		err = ErrCloudObjectNotFound
+		return
+	}
+	return
+}
+
+func (webdav *WebDAV) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo, err error) {
+	ret = map[string]*entity.ObjectInfo{}
+
+	endWithSlash := strings.HasSuffix(pathPrefix, "/")
+	pathPrefix = path.Join(webdav.Dir, "siyuan", "repo", pathPrefix)
+	if endWithSlash {
+		pathPrefix += "/"
+	}
+
+	infos, err := webdav.Client.ReadDir(pathPrefix)
+	if nil != err {
+		logging.LogErrorf("list objects failed: %s", err)
+		return
+	}
+
+	for _, entry := range infos {
+		filePath := entry.Name()
+		ret[filePath] = &entity.ObjectInfo{
+			Path: filePath,
+			Size: entry.Size(),
+		}
+	}
+
+	if nil != err {
+		logging.LogErrorf("list objects failed: %s", err)
+		return
+	}
+	return
+}
+
 func (webdav *WebDAV) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	keyPath := path.Join(webdav.Dir, "siyuan", "repo", "refs", refPrefix)
 	infos, err := webdav.Client.ReadDir(keyPath)

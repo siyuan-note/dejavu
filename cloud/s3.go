@@ -240,6 +240,54 @@ func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 	return
 }
 
+func (s3 *S3) GetIndex(id string) (index *entity.Index, err error) {
+	index, err = s3.repoIndex(id)
+	if nil != err {
+		logging.LogErrorf("get index [%s] failed: %s", id, err)
+		return
+	}
+	if nil == index {
+		err = ErrCloudObjectNotFound
+		return
+	}
+	return
+}
+
+func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo, err error) {
+	ret = map[string]*entity.ObjectInfo{}
+	svc := s3.getService()
+
+	endWithSlash := strings.HasSuffix(pathPrefix, "/")
+	pathPrefix = path.Join("repo", pathPrefix)
+	if endWithSlash {
+		pathPrefix += "/"
+	}
+	limit := int64(1000)
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	defer cancelFn()
+
+	err = svc.ListObjectsPagesWithContext(ctx, &as3.ListObjectsInput{
+		Bucket:  &s3.Conf.S3.Bucket,
+		Prefix:  &pathPrefix,
+		MaxKeys: &limit,
+	}, func(output *as3.ListObjectsOutput, last bool) bool {
+		for _, entry := range output.Contents {
+			filePath := strings.TrimPrefix(*entry.Key, pathPrefix)
+			ret[filePath] = &entity.ObjectInfo{
+				Path: filePath,
+				Size: *entry.Size,
+			}
+		}
+		return true
+	})
+
+	if nil != err {
+		logging.LogErrorf("list objects failed: %s", err)
+		return
+	}
+	return
+}
+
 func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 	indexPath := path.Join("repo", "indexes", id)
 	info, err := s3.statFile(indexPath)
@@ -268,7 +316,6 @@ func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 
 func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	svc := s3.getService()
-
 	prefix := path.Join("repo", "refs", refPrefix)
 	limit := int64(32)
 	marker := ""
