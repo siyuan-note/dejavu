@@ -146,7 +146,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToStatusBar}
+	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToNone}
 	err = repo.tryLockCloud("purge", context)
 	if nil != err {
 		return
@@ -287,6 +287,12 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		return
 	}
 
+	err = repo.purgeIndexesV2(unreferencedIndexIDs)
+	if nil != err {
+		logging.LogErrorf("purge indexes-v2.json failed: %s", err)
+		return
+	}
+
 	// 再删除对象
 	var unreferencedObjPaths []string
 	for _, unreferencedPath := range unreferencedPaths {
@@ -300,6 +306,50 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	}
 
 	logging.LogInfof("purged cloud, [%d] indexes, [%d] objects, [%d] bytes", ret.Indexes, ret.Objects, ret.Size)
+	return
+}
+
+func (repo *Repo) purgeIndexesV2(unreferencedIndexIDs map[string]bool) (err error) {
+	data, err := repo.cloud.DownloadObject("indexes-v2.json")
+	if nil != err {
+		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			return
+		}
+		err = nil
+		return
+	}
+
+	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
+	if nil != err {
+		return
+	}
+
+	indexes := &cloud.Indexes{}
+	if 0 < len(data) {
+		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
+			logging.LogWarnf("unmarshal cloud indexes-v2.json failed: %s", err)
+		}
+	}
+
+	var tmp []*cloud.Index
+	for _, index := range indexes.Indexes {
+		if !unreferencedIndexIDs[index.ID] {
+			tmp = append(tmp, index)
+		}
+	}
+	indexes.Indexes = tmp
+
+	if data, err = gulu.JSON.MarshalIndentJSON(indexes, "", "\t"); nil != err {
+		return
+	}
+
+	data = repo.store.compressEncoder.EncodeAll(data, nil)
+
+	if err = gulu.File.WriteFileSafer(filepath.Join(repo.Path, "indexes-v2.json"), data, 0644); nil != err {
+		return
+	}
+
+	_, err = repo.cloud.UploadObject("indexes-v2.json", true)
 	return
 }
 
