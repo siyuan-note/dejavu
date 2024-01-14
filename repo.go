@@ -287,7 +287,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		return
 	}
 
-	err = repo.purgeIndexesV2(unreferencedIndexIDs)
+	err = repo.purgeIndexesV2(refIndexIDs)
 	if nil != err {
 		logging.LogErrorf("purge indexes-v2.json failed: %s", err)
 		return
@@ -309,7 +309,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	return
 }
 
-func (repo *Repo) purgeIndexesV2(unreferencedIndexIDs map[string]bool) (err error) {
+func (repo *Repo) purgeIndexesV2(refIndexIDs map[string]bool) (err error) {
 	data, err := repo.cloud.DownloadObject("indexes-v2.json")
 	if nil != err {
 		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
@@ -333,7 +333,7 @@ func (repo *Repo) purgeIndexesV2(unreferencedIndexIDs map[string]bool) (err erro
 
 	var tmp []*cloud.Index
 	for _, index := range indexes.Indexes {
-		if !unreferencedIndexIDs[index.ID] {
+		if refIndexIDs[index.ID] {
 			tmp = append(tmp, index)
 		}
 	}
