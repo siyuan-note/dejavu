@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/88250/gulu v1.2.3-0.20231209020950-b7b6994e395c
-	github.com/aws/aws-sdk-go v1.49.18
+	github.com/aws/aws-sdk-go v1.49.20
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/klauspost/compress v1.17.4
@@ -21,7 +21,7 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
@@ -33,7 +33,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.42.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/onsi/ginkgo/v2 v2.13.2 // indirect
+	github.com/onsi/ginkgo/v2 v2.14.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/qtls-go1-20 v0.4.1 // indirect
@@ -41,13 +41,13 @@ require (
 	github.com/refraction-networking/utls v1.6.1 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
-	golang.org/x/exp v0.0.0-20240110193028-0dcbfd608b1e // indirect
+	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.20.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.16.1 // indirect
+	golang.org/x/tools v0.17.0 // indirect
 )
 
 //replace github.com/siyuan-note/filelock => D:\88250\filelock
