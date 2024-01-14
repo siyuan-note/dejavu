@@ -578,7 +578,7 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 			break
 		}
 		if !confirmed {
-			logging.LogErrorf("final confirm uploaded cloud [refs/latest] failed: data not equal [local=%s, downloaded=%s]", latestData, latestData)
+			logging.LogErrorf("final confirm uploaded cloud [refs/latest] failed")
 			errLock.Lock()
 			errs = append(errs, errors.New("confirm uploaded cloud [refs/latest] failed"))
 			errLock.Unlock()
