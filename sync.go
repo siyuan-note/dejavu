@@ -1062,6 +1062,11 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 }
 
 func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context map[string]interface{}) (err error) {
+	if _, ok := repo.cloud.(*cloud.SiYuan); !ok {
+		// S3/WebDAV 不上传校验索引 S3/WebDAV data sync no longer uploads check index https://github.com/siyuan-note/siyuan/issues/10180
+		return
+	}
+
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadCheckIndex, context)
 
 	data, marshalErr := gulu.JSON.MarshalIndentJSON(checkIndex, "", "\t")
