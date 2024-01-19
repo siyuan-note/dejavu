@@ -564,8 +564,8 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 			logging.LogErrorf("walk data failed: %s", err)
 			return err
 		}
-		if ignored, ignoreResult := repo.builtInIgnore(info, path); ignored || nil != ignoreResult {
-			return ignoreResult
+		if ignored, ignoreErr := repo.builtInIgnore(info, path); ignored || nil != ignoreErr {
+			return ignoreErr
 		}
 
 		p := repo.relPath(path)
@@ -589,16 +589,6 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 		logging.LogErrorf("empty index [%s]", repo.DataPath)
 		return
 	}
-
-	//// TODO Add some temp logs to help debug https://github.com/siyuan-note/siyuan/issues/10205
-	//fileLogs := bytes.Buffer{}
-	//fileLogs.WriteString("\n")
-	//for _, f := range files {
-	//	fileLogs.WriteString("\t")
-	//	fileLogs.WriteString(f.Path + ", " + time.UnixMilli(f.Updated).Format("2006-01-02 15:04:05"))
-	//	fileLogs.WriteString("\n")
-	//}
-	//logging.LogInfof("%s", fileLogs.String())
 
 	latest, err := repo.Latest()
 	init := false
