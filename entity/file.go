@@ -44,3 +44,7 @@ func NewFile(path string, size int64, updated int64) (ret *File) {
 	ret.ID = util.Hash(buf.Bytes())
 	return
 }
+
+func (f *File) SecUpdated() int64 {
+	return f.Updated / 1000
+}

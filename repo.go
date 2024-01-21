@@ -407,7 +407,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtCheckoutBeforeWalkData, context, repo.DataPath)
-	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
+	err = filelock.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			logging.LogErrorf("walk data failed: %s", err)
 			return err
@@ -554,7 +554,8 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
-	err = filepath.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
+	//start := time.Now()
+	err = filelock.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			if isNoSuchFileOrDirErr(err) {
 				// An error `Failed to create data snapshot` is occasionally reported during automatic data sync https://github.com/siyuan-note/siyuan/issues/8998
@@ -581,8 +582,11 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 		logging.LogErrorf("walk data failed: %s", err)
 		return
 	}
-
-	logging.LogInfof("walked data [files=%d]", len(files))
+	//logging.LogInfof("walk data [files=%d] cost [%s]", len(files), time.Since(start))
+	//sort.Slice(files, func(i, j int) bool { return files[i].Updated > files[j].Updated })
+	//for _, f := range files {
+	//	logging.LogInfof("walked data [file=%s]", f.Path)
+	//}
 	if 1 > len(files) {
 		// 如果没有文件，则不创建快照 Abandon snapshot if file does not exist when creating snapshot https://github.com/siyuan-note/siyuan/issues/9948
 		err = ErrEmptyIndex
@@ -861,9 +865,9 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		}
 
 		newSize := newInfo.Size()
-		newUpdated := newInfo.ModTime().UnixMilli()
-		if file.Size != newSize || file.Updated != newUpdated {
-			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
+		newUpdated := newInfo.ModTime().Unix()
+		if file.Size != newSize || file.SecUpdated() != newUpdated {
+			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
 			err = ErrIndexFileChanged
 			return
 		}
