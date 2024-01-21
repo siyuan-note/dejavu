@@ -16,7 +16,7 @@ require (
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240114153055-cf4c124ddf6d
-	github.com/siyuan-note/filelock v0.0.0-20240121131032-ac31019859ab
+	github.com/siyuan-note/filelock v0.0.0-20240121150730-38e4487651d1
 	github.com/siyuan-note/httpclient v0.0.0-20240105083729-70d0557bc690
 	github.com/siyuan-note/logging v0.0.0-20231208035918-61f884c854f0
 	github.com/studio-b12/gowebdav v0.9.0
