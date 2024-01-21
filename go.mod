@@ -6,7 +6,7 @@ toolchain go1.21.6
 
 require (
 	github.com/88250/gulu v1.2.3-0.20231209020950-b7b6994e395c
-	github.com/aws/aws-sdk-go v1.49.20
+	github.com/aws/aws-sdk-go v1.50.0
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/klauspost/compress v1.17.4
