@@ -554,7 +554,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
-	//start := time.Now()
+	start := time.Now()
 	err = filelock.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
 		if nil != err {
 			if isNoSuchFileOrDirErr(err) {
@@ -582,7 +582,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 		logging.LogErrorf("walk data failed: %s", err)
 		return
 	}
-	//logging.LogInfof("walk data [files=%d] cost [%s]", len(files), time.Since(start))
+	logging.LogInfof("walk data [files=%d] cost [%s]", len(files), time.Since(start))
 	//sort.Slice(files, func(i, j int) bool { return files[i].Updated > files[j].Updated })
 	//for _, f := range files {
 	//	logging.LogInfof("walked data [file=%s]", f.Path)
