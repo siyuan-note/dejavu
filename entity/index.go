@@ -16,6 +16,13 @@
 
 package entity
 
+import (
+	"fmt"
+	"time"
+
+	"github.com/dustin/go-humanize"
+)
+
 // Index 描述了快照索引。
 type Index struct {
 	ID           string   `json:"id"`           // Hash
@@ -28,6 +35,11 @@ type Index struct {
 	SystemName   string   `json:"systemName"`   // 系统名称
 	SystemOS     string   `json:"systemOS"`     // 系统操作系统
 	CheckIndexID string   `json:"checkIndexID"` // Check Index ID
+}
+
+func (index *Index) String() string {
+	return fmt.Sprintf("device=%s/%s, id=%s, files=%d, size=%s, created=%s",
+		index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.Bytes(uint64(index.Size)), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 }
 
 // CheckIndex 描述了一个 Index 对应的数据 ID，包括 File ID 和 Chunk ID。

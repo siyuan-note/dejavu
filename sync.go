@@ -506,10 +506,10 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 		latestRef, downloadErr := repo.downloadCloudObject("refs/latest")
 		if nil == downloadErr {
 			if cloudLatest.ID != string(latestRef) {
+				logging.LogWarnf("cloud latest changed [old=%s, new=%s]", cloudLatest.ID, latestRef)
 				errLock.Lock()
 				errs = append(errs, cloud.ErrCloudIndexChanged)
 				errLock.Unlock()
-				logging.LogWarnf("cloud latest changed [old=%s, new=%s]", cloudLatest.ID, latestRef)
 				return
 			}
 		}
@@ -563,6 +563,22 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 			}
 			if !bytes.Equal(latestData, downloadedData) {
 				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed [local=%s, downloaded=%s]", i, latestData, downloadedData)
+
+				// 如果是不同设备上传的，则判定为数据已经改变 https://github.com/siyuan-note/siyuan/issues/10229
+				_, latestCloudIndex, downloadIdxErr := repo.downloadCloudIndex(string(downloadedData), context)
+				if nil != downloadIdxErr {
+					logging.LogWarnf("download [refs/latest] failed: %s", downloadIdxErr)
+					continue
+				}
+
+				if nil != latestCloudIndex && latestCloudIndex.SystemID != latest.SystemID {
+					logging.LogWarnf("cloud latest changed, current [%s], cloud [%s]", latest.String(), latestCloudIndex.String())
+					errLock.Lock()
+					errs = append(errs, cloud.ErrCloudIndexChanged)
+					errLock.Unlock()
+					return
+				}
+
 				latestData, length, uploadErr = repo.updateCloudRef("refs/latest", context)
 				if nil != uploadErr {
 					logging.LogWarnf("fix [%d] uploaded cloud [refs/latest, %s] failed: %s", i, latestData, uploadErr)
