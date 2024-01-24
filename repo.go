@@ -294,7 +294,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		checkIndexPath := path.Join("check", "indexes", checkIndexID)
 		unreferencedCheckIndexPaths = append(unreferencedCheckIndexPaths, checkIndexPath)
 	}
-	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexes, context, unreferencedCheckIndexPaths)
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexes, context)
 	err = repo.removeCloudObjects(unreferencedCheckIndexPaths)
 	if nil != err {
 		logging.LogErrorf("remove unreferenced check indexes failed: %s", err)
@@ -308,7 +308,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		unreferencedIndexPaths = append(unreferencedIndexPaths, indexPath)
 	}
 
-	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexes, context, unreferencedIndexPaths)
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexes, context)
 	err = repo.removeCloudObjects(unreferencedIndexPaths)
 	if nil != err {
 		logging.LogErrorf("remove unreferenced indexes failed: %s", err)
@@ -316,7 +316,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	}
 
 	// 清理索引列表
-	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexesV2, context, refIndexIDs)
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexesV2, context)
 	err = repo.purgeIndexesV2(refIndexIDs)
 	if nil != err {
 		logging.LogErrorf("purge indexes-v2.json failed: %s", err)
@@ -329,7 +329,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		objPath := path.Join("objects", unreferencedPath)
 		unreferencedObjPaths = append(unreferencedObjPaths, objPath)
 	}
-	eventbus.Publish(eventbus.EvtCloudPurgeRemoveObjects, context, unreferencedObjPaths)
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveObjects, context)
 	err = repo.removeCloudObjects(unreferencedObjPaths)
 	if nil != err {
 		logging.LogErrorf("remove unreferenced objects failed: %s", err)
