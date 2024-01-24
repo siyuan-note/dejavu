@@ -210,10 +210,10 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		}
 	}
 
+	eventbus.Publish(eventbus.EvtCloudPurgeDownloadIndexes, context)
 	referencedFileIDs := map[string]bool{}
 	referencedObjIDs := map[string]bool{}
 	for refID := range refIndexIDs {
-		eventbus.Publish(eventbus.EvtCloudPurgeDownloadIndex, context, refID)
 		index, getErr := repo.cloud.GetIndex(refID)
 		if nil != getErr {
 			err = getErr
