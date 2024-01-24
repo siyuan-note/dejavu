@@ -146,14 +146,16 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToNone}
-	err = repo.tryLockCloud("purge", context)
+	lockCtx := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToNone}
+	err = repo.tryLockCloud("purge", lockCtx)
 	if nil != err {
 		return
 	}
-	defer repo.unlockCloud(context)
+	defer repo.unlockCloud(lockCtx)
 
 	logging.LogInfof("purging cloud...")
+	context := map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToStatusBarAndProgress}
+	eventbus.Publish(eventbus.EvtCloudPurgeListObjects, context)
 	objInfos, listErr := repo.cloud.ListObjects("objects/")
 	if nil != listErr {
 		logging.LogErrorf("list objects failed: %s", listErr)
@@ -167,6 +169,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		objIDs[objID] = true
 	}
 
+	eventbus.Publish(eventbus.EvtCloudPurgeListIndexes, context)
 	indexIDs, listErr := repo.cloud.ListObjects("indexes/")
 	if nil != listErr {
 		logging.LogErrorf("list indexes failed: %s", listErr)
@@ -179,6 +182,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		return
 	}
 
+	eventbus.Publish(eventbus.EvtCloudPurgeListRefs, context)
 	refs, listErr := repo.cloud.ListObjects("refs/")
 	if nil != listErr {
 		logging.LogErrorf("list refs failed: %s", listErr)
@@ -209,6 +213,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	referencedFileIDs := map[string]bool{}
 	referencedObjIDs := map[string]bool{}
 	for refID := range refIndexIDs {
+		eventbus.Publish(eventbus.EvtCloudPurgeDownloadIndex, context, refID)
 		index, getErr := repo.cloud.GetIndex(refID)
 		if nil != getErr {
 			err = getErr
@@ -234,7 +239,8 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		filesIDs = append(filesIDs, fileID)
 	}
 
-	_, dFiles, downloadErr := repo.downloadCloudFilesPut(filesIDs, context)
+	eventbus.Publish(eventbus.EvtCloudPurgeDownloadFiles, context)
+	_, dFiles, downloadErr := repo.downloadCloudFilesPut(filesIDs, map[string]interface{}{eventbus.CtxPushMsg: eventbus.CtxPushMsgToNone})
 	if nil != downloadErr {
 		err = downloadErr
 		logging.LogErrorf("download cloud files failed: %s", err)
@@ -288,6 +294,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		checkIndexPath := path.Join("check", "indexes", checkIndexID)
 		unreferencedCheckIndexPaths = append(unreferencedCheckIndexPaths, checkIndexPath)
 	}
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexes, context, unreferencedCheckIndexPaths)
 	err = repo.removeCloudObjects(unreferencedCheckIndexPaths)
 	if nil != err {
 		logging.LogErrorf("remove unreferenced check indexes failed: %s", err)
@@ -301,6 +308,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		unreferencedIndexPaths = append(unreferencedIndexPaths, indexPath)
 	}
 
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexes, context, unreferencedIndexPaths)
 	err = repo.removeCloudObjects(unreferencedIndexPaths)
 	if nil != err {
 		logging.LogErrorf("remove unreferenced indexes failed: %s", err)
@@ -308,6 +316,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	}
 
 	// 清理索引列表
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveIndexesV2, context, refIndexIDs)
 	err = repo.purgeIndexesV2(refIndexIDs)
 	if nil != err {
 		logging.LogErrorf("purge indexes-v2.json failed: %s", err)
@@ -320,6 +329,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		objPath := path.Join("objects", unreferencedPath)
 		unreferencedObjPaths = append(unreferencedObjPaths, objPath)
 	}
+	eventbus.Publish(eventbus.EvtCloudPurgeRemoveObjects, context, unreferencedObjPaths)
 	err = repo.removeCloudObjects(unreferencedObjPaths)
 	if nil != err {
 		logging.LogErrorf("remove unreferenced objects failed: %s", err)
