@@ -6,17 +6,17 @@ toolchain go1.21.6
 
 require (
 	github.com/88250/gulu v1.2.3-0.20231209020950-b7b6994e395c
-	github.com/aws/aws-sdk-go v1.50.0
+	github.com/aws/aws-sdk-go v1.50.5
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dustin/go-humanize v1.0.1
-	github.com/klauspost/compress v1.17.4
+	github.com/klauspost/compress v1.17.5
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/qiniu/go-sdk/v7 v7.19.0
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240124091459-8e1b37a55255
-	github.com/siyuan-note/filelock v0.0.0-20240121150730-38e4487651d1
+	github.com/siyuan-note/filelock v0.0.0-20240128063420-b0b18a304e36
 	github.com/siyuan-note/httpclient v0.0.0-20240105083729-70d0557bc690
 	github.com/siyuan-note/logging v0.0.0-20231208035918-61f884c854f0
 	github.com/studio-b12/gowebdav v0.9.0
@@ -30,7 +30,7 @@ require (
 	github.com/getsentry/sentry-go v0.26.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/glog v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20240117000934-35fc243c5815 // indirect
+	github.com/google/pprof v0.0.0-20240125082051-42cd04596328 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.42.3 // indirect
