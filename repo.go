@@ -644,7 +644,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 			if nil != getErr {
 				logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
 				workerErrLock.Lock()
-				workerErrs = append(workerErrs, ErrNotFoundObject)
+				workerErrs = append(workerErrs, ErrRepoFatal)
 				workerErrLock.Unlock()
 				return
 			}
@@ -681,7 +681,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 
 				if errors.Is(statErr, os.ErrNotExist) {
 					workerErrLock.Lock()
-					workerErrs = append(workerErrs, ErrNotFoundObject)
+					workerErrs = append(workerErrs, ErrRepoFatal)
 					workerErrLock.Unlock()
 					return
 				}
