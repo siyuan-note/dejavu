@@ -226,12 +226,12 @@ func (repo *Repo) sync0(context map[string]interface{},
 		return
 	}
 	logging.LogInfof("got latest sync [%s] files [%d]", latestSync.ID, len(latestSyncFiles))
-	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false, false)
+	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
-		cloudUpserts, cloudRemoves = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, true, true)
+		cloudUpserts, cloudRemoves = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, true)
 	}
 
 	// 增加一些诊断日志 https://ld246.com/article/1698370932077
@@ -281,18 +281,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			if gulu.Str.Contains(cloudUpsert.ID, fetchedFileIDs) {
 				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
 				// 冲突列表在外部单独处理生成副本
-				if localUpsert.Updated > cloudUpsert.Updated {
-					mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
-				} else {
-					// 如果云端文件更新时间大于本地修改过的文件时间，则以云端为准覆盖本地
-					// Improve data sync conflicts merging https://github.com/siyuan-note/siyuan/issues/9741
-					mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-					logging.LogInfof("sync merge conflict upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
-				}
-			} else {
-				// 未发生实际下载文件的情况下，云端有更新的 upsert 则直接以云端为准合并到本地
-				mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-				logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
 			}
 			continue
 		}

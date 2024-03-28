@@ -446,7 +446,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	upserts, removes = repo.diffUpsertRemove(latestFiles, files, false, false)
+	upserts, removes = repo.diffUpsertRemove(latestFiles, files, false)
 	if 1 > len(upserts) && 1 > len(removes) {
 		return
 	}
@@ -705,7 +705,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 			return
 		}
 	}
-	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false, false)
+	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false)
 	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
 		return
