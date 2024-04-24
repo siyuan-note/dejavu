@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
-	"github.com/dustin/go-humanize"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
 )

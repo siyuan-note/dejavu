@@ -19,8 +19,6 @@ package entity
 import (
 	"fmt"
 	"time"
-
-	"github.com/dustin/go-humanize"
 )
 
 // Index 描述了快照索引。
