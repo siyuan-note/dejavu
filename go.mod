@@ -5,6 +5,7 @@ go 1.22
 toolchain go1.22.2
 
 require (
+	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
 	github.com/88250/gulu v1.2.3-0.20231209020950-b7b6994e395c
 	github.com/aws/aws-sdk-go v1.51.24
 	github.com/dgraph-io/ristretto v0.1.1

@@ -23,6 +23,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/88250/go-humanize"
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
@@ -216,7 +217,7 @@ func (repo *Repo) getLog(index *entity.Index, fetchFiles bool) (ret *Log, err er
 		Files:      files,
 		Count:      index.Count,
 		Size:       index.Size,
-		HSize:      humanize.Bytes(uint64(index.Size)),
+		HSize:      humanize.BytesCustomCeil(uint64(index.Size), 2),
 		SystemID:   index.SystemID,
 		SystemName: index.SystemName,
 		SystemOS:   index.SystemOS,

@@ -19,6 +19,8 @@ package entity
 import (
 	"fmt"
 	"time"
+
+	"github.com/88250/go-humanize"
 )
 
 // Index 描述了快照索引。
@@ -37,7 +39,7 @@ type Index struct {
 
 func (index *Index) String() string {
 	return fmt.Sprintf("device=%s/%s, id=%s, files=%d, size=%s, created=%s",
-		index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.Bytes(uint64(index.Size)), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+		index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.BytesCustomCeil(uint64(index.Size), 2), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
 }
 
 // CheckIndex 描述了一个 Index 对应的数据 ID，包括 File ID 和 Chunk ID。
