@@ -196,10 +196,10 @@ func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) 
 }
 
 func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
-	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
+	repoObjects := path.Join(webdav.Dir, "siyuan", "repo", "objects")
 	var keys []string
 	for _, chunk := range checkChunkIDs {
-		key := path.Join(repoKey, "objects", chunk[:2], chunk[2:])
+		key := path.Join(repoObjects, chunk[:2], chunk[2:])
 		keys = append(keys, key)
 	}
 
@@ -207,7 +207,15 @@ func (webdav *WebDAV) GetChunks(checkChunkIDs []string) (chunkIDs []string, err 
 	if nil != err {
 		return
 	}
-	chunkIDs = append(chunkIDs, notFound...)
+
+	var notFoundChunkIDs []string
+	for _, key := range notFound {
+		chunkID := strings.TrimPrefix(key, repoObjects)
+		chunkID = strings.ReplaceAll(chunkID, "/", "")
+		notFoundChunkIDs = append(notFoundChunkIDs, chunkID)
+	}
+
+	chunkIDs = append(chunkIDs, notFoundChunkIDs...)
 	chunkIDs = gulu.Str.RemoveDuplicatedElem(chunkIDs)
 	if 1 > len(chunkIDs) {
 		chunkIDs = []string{}

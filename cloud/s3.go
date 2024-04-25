@@ -223,8 +223,9 @@ func (s3 *S3) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
 
 func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 	var keys []string
+	repoObjects := path.Join("repo", "objects")
 	for _, chunk := range checkChunkIDs {
-		key := path.Join("repo", "objects", chunk[:2], chunk[2:])
+		key := path.Join(repoObjects, chunk[:2], chunk[2:])
 		keys = append(keys, key)
 	}
 
@@ -232,7 +233,15 @@ func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 	if nil != err {
 		return
 	}
-	chunkIDs = append(chunkIDs, notFound...)
+
+	var notFoundChunkIDs []string
+	for _, key := range notFound {
+		chunkID := strings.TrimPrefix(key, repoObjects)
+		chunkID = strings.ReplaceAll(chunkID, "/", "")
+		notFoundChunkIDs = append(notFoundChunkIDs, chunkID)
+	}
+
+	chunkIDs = append(chunkIDs, notFoundChunkIDs...)
 	chunkIDs = gulu.Str.RemoveDuplicatedElem(chunkIDs)
 	if 1 > len(chunkIDs) {
 		chunkIDs = []string{}
