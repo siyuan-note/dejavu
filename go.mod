@@ -6,7 +6,7 @@ toolchain go1.22.2
 
 require (
 	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
-	github.com/88250/gulu v1.2.3-0.20240505085123-dca01813eb6a
+	github.com/88250/gulu v1.2.3-0.20240505144956-d772973c92dd
 	github.com/aws/aws-sdk-go v1.52.2
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/klauspost/compress v1.17.8
@@ -16,7 +16,7 @@ require (
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240318125243-801c98e8f025
-	github.com/siyuan-note/filelock v0.0.0-20240505090505-cfe824d7d4fb
+	github.com/siyuan-note/filelock v0.0.0-20240505145129-bc0d3c3a13f6
 	github.com/siyuan-note/httpclient v0.0.0-20240429013218-3caa1f89f9ed
 	github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2
 	github.com/studio-b12/gowebdav v0.9.0
