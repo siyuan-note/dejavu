@@ -162,6 +162,28 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 		}
 
 		err = ErrLockCloudFailed
+		return
+	}
+	data, err = repo.cloud.DownloadObject(lockSyncKey)
+	if err != nil {
+		// 二次确认时，如果锁文件已经被删除了，说明其他设备已经拿到锁后释放锁了，此时可以留待下一次尝试
+		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			return ErrCloudLocked
+		}
+		logging.LogErrorf("get lock sync failed: %s", err)
+		return err
+	}
+	content = make(map[string]any)
+	err = gulu.JSON.UnmarshalJSON(data, &content)
+	if err != nil {
+		// 解码失败可能是用户手动修改了该文件，需要删除后重新锁定
+		logging.LogErrorf("unmarshal lock sync failed: %s", err)
+		repo.cloud.RemoveObject(lockSyncKey)
+		return ErrCloudLocked
+	}
+	deviceID := content["deviceID"].(string)
+	if deviceID != currentDeviceID {
+		return ErrCloudLocked
 	}
 	return
 }
