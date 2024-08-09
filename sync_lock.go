@@ -72,11 +72,13 @@ func (repo *Repo) tryLockCloud(currentDeviceID string, context map[string]interf
 
 		// 锁定成功，定时刷新锁
 		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
 			for {
 				select {
 				case <-endRefreshLock:
 					return
-				case <-time.After(30 * time.Second):
+				case <-ticker.C:
 					if refershErr := repo.lockCloud0(currentDeviceID); nil != refershErr {
 						logging.LogErrorf("refresh cloud repo lock failed: %s", refershErr)
 					}
