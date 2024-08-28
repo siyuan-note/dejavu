@@ -184,7 +184,7 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 
 	for i := start; i < end; i++ {
 		index, getErr := s3.repoIndex(indexesJSON.Indexes[i].ID)
-		if nil != err {
+		if nil != getErr {
 			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
 			continue
 		}

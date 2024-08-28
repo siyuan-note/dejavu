@@ -162,7 +162,7 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
 	for i := start; i < end; i++ {
 		index, getErr := webdav.repoIndex(repoKey, indexesJSON.Indexes[i].ID)
-		if nil != err {
+		if nil != getErr {
 			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
 			continue
 		}
