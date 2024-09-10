@@ -55,8 +55,8 @@ github.com/hashicorp/errwrap v1.1.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brv
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
-github.com/imroc/req/v3 v3.44.0 h1:JBrxoN5DykYvkeEZx3dski8/A+WVz9HD147cwEeyFlM=
-github.com/imroc/req/v3 v3.44.0/go.mod h1:6cQ91w7qPn+bYjcWnA1S/LmTh6z3cz8Oa9qdwm7gS8w=
+github.com/imroc/req/v3 v3.45.0 h1:cEpleKeyXXECAYuD33ZFdU1ghjqlfhtmQHwO8+Nk96Q=
+github.com/imroc/req/v3 v3.45.0/go.mod h1:bhMZLgMY+g46mKmNUKFfAIY1JICvqj3kpQpSDDp45Zg=
 github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9YPoQUg=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGwWFoC7ycTf1rcQZHOlsJ6N8=
@@ -87,10 +87,10 @@ github.com/qiniu/dyn v1.3.0/go.mod h1:E8oERcm8TtwJiZvkQPbcAh0RL8jO1G0VXJMW3FAWdk
 github.com/qiniu/go-sdk/v7 v7.20.2 h1:Jd+ZJs79APo0dnRlv3aA/uEP7b44flP+p32Lek/WxlY=
 github.com/qiniu/go-sdk/v7 v7.20.2/go.mod h1:ZnEP1rOOi7weF+yzM2qZMHI0z1ht+KjVuNAuKTQW3aM=
 github.com/qiniu/x v1.10.5/go.mod h1:03Ni9tj+N2h2aKnAz+6N0Xfl8FwMEDRC2PAlxekASDs=
-github.com/quic-go/qpack v0.4.0 h1:Cr9BXA1sQS2SmDUWjSofMPNKmvF6IiIfDRmgU0w1ZCo=
-github.com/quic-go/qpack v0.4.0/go.mod h1:UZVnYIfi5GRk+zI9UMaCPsmZ2xKJP7XBUvVyT1Knj9A=
-github.com/quic-go/quic-go v0.46.0 h1:uuwLClEEyk1DNvchH8uCByQVjo3yKL9opKulExNDs7Y=
-github.com/quic-go/quic-go v0.46.0/go.mod h1:1dLehS7TIR64+vxGR70GDcatWTOtMX2PUtnKsjbTurI=
+github.com/quic-go/qpack v0.5.1 h1:giqksBPnT/HDtZ6VhtFKgoLOWmlyo9Ei6u9PqzIMbhI=
+github.com/quic-go/qpack v0.5.1/go.mod h1:+PC4XFrEskIVkcLzpEkbLqq1uCoxPhQuvK5rH1ZgaEg=
+github.com/quic-go/quic-go v0.47.0 h1:yXs3v7r2bm1wmPTYNLKAAJTHMYkPEsfYJmTazXrCZ7Y=
+github.com/quic-go/quic-go v0.47.0/go.mod h1:3bCapYsJvXGZcipOHuu7plYtaV6tnF+z7wIFsU0WK9E=
 github.com/refraction-networking/utls v1.6.7 h1:zVJ7sP1dJx/WtVuITug3qYUq034cDq9B2MR1K67ULZM=
 github.com/refraction-networking/utls v1.6.7/go.mod h1:BC3O4vQzye5hqpmDTWUqi4P5DDhzJfkV1tdqtawQIH0=
 github.com/restic/chunker v0.4.0 h1:YUPYCUn70MYP7VO4yllypp2SjmsRhRJaad3xKu1QFRw=
@@ -105,8 +105,8 @@ github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtb
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97/go.mod h1:1/nGgthl89FPA7GzAcEWKl6zRRnfgyTjzLZj9bW7kuw=
 github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04 h1:aoXvEO6BMqm6L0EnTjRhB4ynQIyJvHpqz+Ue3g0D3a0=
 github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04/go.mod h1:iqFhf4EDKy4MjQgT6RQJ6Z6NSW662NS0PR40K1qdSpE=
-github.com/siyuan-note/httpclient v0.0.0-20240910020111-2b0eaf674f88 h1:jumwlZ3EaqpvQDoHXf7iV/lAbdz88beBE3r7yXGpY4w=
-github.com/siyuan-note/httpclient v0.0.0-20240910020111-2b0eaf674f88/go.mod h1:4jJF3tsLJAtXssJsGYPbzzwHXNHiJ2MemJox98mf9rc=
+github.com/siyuan-note/httpclient v0.0.0-20240910021232-ab6f84db3b8b h1:gl+FZ3mo6ybClz2ePCJ0yo58abr1ByUDCbffqrdDxFE=
+github.com/siyuan-note/httpclient v0.0.0-20240910021232-ab6f84db3b8b/go.mod h1:szsySkVwuZ1INYAbPE/afcmTjJW+IrDMBMK1tMw36oA=
 github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2 h1:/2+tlOThVB86RxSLeW0JFw2ISUrH2ZFRg15ULGAUGAE=
 github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2/go.mod h1:3Osd2/nwzXZFl6ZcDE4hA0HD83Wyv1fds47nVuapyOM=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
