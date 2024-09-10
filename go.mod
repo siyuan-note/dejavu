@@ -17,7 +17,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04
-	github.com/siyuan-note/httpclient v0.0.0-20240910013518-4af096b03826
+	github.com/siyuan-note/httpclient v0.0.0-20240910015132-c69bee6c9a28
 	github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2
 	github.com/studio-b12/gowebdav v0.9.0
 )
