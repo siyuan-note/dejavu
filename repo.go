@@ -742,6 +742,15 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 			return
 		}
 
+		putFileErr := repo.store.PutFile(file)
+
+		if nil != putFileErr {
+			workerErrLock.Lock()
+			workerErrs = append(workerErrs, putFileErr)
+			workerErrLock.Unlock()
+			return
+		}
+
 		if 1 > len(file.Chunks) {
 			workerErrLock.Lock()
 			putErr = fmt.Errorf("file [%s, %s, %s, %d] has no chunks", file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size)
@@ -883,7 +892,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		}
 
 		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
-		err = repo.store.PutFile(file)
+
 		if nil != err {
 			return
 		}
@@ -945,7 +954,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	}
 
 	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
-	err = repo.store.PutFile(file)
+
 	return
 }
 
