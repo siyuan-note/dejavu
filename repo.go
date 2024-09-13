@@ -862,6 +862,26 @@ func createChunk(data []byte) *entity.Chunk {
 	return &entity.Chunk{ID: chunkHash, Data: data}
 }
 
+func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) {
+
+	absPath := repo.absPath(file.Path)
+	newInfo, statErr := os.Stat(absPath)
+	if nil != statErr {
+		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
+		err = statErr
+		return
+	}
+	newSize := newInfo.Size()
+	newUpdated := newInfo.ModTime().Unix()
+
+	update = file.Size != newSize || file.SecUpdated() != newUpdated
+	if update {
+		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
+		err = ErrIndexFileChanged
+	}
+	return
+}
+
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	absPath := repo.absPath(file.Path)
 
@@ -880,19 +900,9 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
 			return
 		}
-
-		newInfo, statErr := os.Stat(absPath)
-		if nil != statErr {
-			logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
-			err = statErr
-			return
-		}
-
-		newSize := newInfo.Size()
-		newUpdated := newInfo.ModTime().Unix()
-		if file.Size != newSize || file.SecUpdated() != newUpdated {
-			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
-			err = ErrIndexFileChanged
+		_, checkErr := repo.checkFileIfUpdate(file)
+		if nil != checkErr {
+			err = checkErr
 			return
 		}
 
@@ -943,18 +953,9 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		return
 	}
 
-	newInfo, statErr := os.Stat(absPath)
-	if nil != statErr {
-		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
-		err = statErr
-		return
-	}
-
-	newSize := newInfo.Size()
-	newUpdated := newInfo.ModTime().Unix()
-	if file.Size != newSize || file.SecUpdated() != newUpdated {
-		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
-		err = ErrIndexFileChanged
+	_, checkErr := repo.checkFileIfUpdate(file)
+	if nil != checkErr {
+		err = checkErr
 		return
 	}
 
