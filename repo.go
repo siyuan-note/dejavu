@@ -57,6 +57,18 @@ type Repo struct {
 	cloud    cloud.Cloud // 云端存储服务
 }
 
+type ChunkSize struct {
+	MinSize uint
+	MaxSize uint
+}
+
+var (
+	RepoChunkSize = &ChunkSize{
+		MinSize: chunker.MinSize,
+		MaxSize: chunker.MaxSize,
+	}
+)
+
 // NewRepo 创建一个新的仓库。
 func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName, deviceOS string, aesKey []byte, ignoreLines []string, cloud cloud.Cloud) (ret *Repo, err error) {
 	if nil != cloud {
@@ -862,6 +874,54 @@ func createChunk(data []byte) *entity.Chunk {
 	return &entity.Chunk{ID: chunkHash, Data: data}
 }
 
+func (repo *Repo) createChunks(file *entity.File, chunkSize *ChunkSize) (chunks []*entity.Chunk, err error) {
+	absPath := repo.absPath(file.Path)
+	chunks = make([]*entity.Chunk, 0)
+
+	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
+	if nil != err {
+		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
+		return
+	}
+	defer func() {
+		if closeErr := filelock.CloseFile(reader); nil != closeErr {
+			logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
+			return
+		}
+	}()
+
+	if chunker.MinSize > file.Size {
+		var data []byte
+		data, err = io.ReadAll(reader)
+		if nil != err {
+			logging.LogErrorf("read file [%s] failed: %s", absPath, err)
+			return
+		}
+
+		chunk := createChunk(data)
+		chunks = append(chunks, chunk)
+		return
+	}
+
+	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunkSize.MinSize, chunkSize.MaxSize)
+	for {
+		buf := make([]byte, chunker.MaxSize)
+		chnk, chnkErr := chnkr.Next(buf)
+		if io.EOF == chnkErr {
+			break
+		}
+		if nil != chnkErr {
+			err = chnkErr
+			logging.LogErrorf("chunk file [%s] failed: %s", absPath, chnkErr)
+			return
+		}
+		chunk := createChunk(chnk.Data)
+		chunks = append(chunks, chunk)
+	}
+	return
+
+}
+
 func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) {
 
 	absPath := repo.absPath(file.Path)
@@ -883,75 +943,15 @@ func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) 
 }
 
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
-	absPath := repo.absPath(file.Path)
+	chunks, err := repo.createChunks(file, RepoChunkSize)
 
-	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
-	if nil != err {
-		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
-		return
-	}
-	defer func() {
-		if err = filelock.CloseFile(reader); nil != err {
-			logging.LogErrorf("close file [%s] failed: %s", absPath, err)
-			return
-		}
-	}()
-
-	if chunker.MinSize > file.Size {
-		var data []byte
-		data, err = io.ReadAll(reader)
-		if nil != err {
-			logging.LogErrorf("read file [%s] failed: %s", absPath, err)
-			return
-		}
-
-		chunk := createChunk(data)
+	for _, chunk := range chunks {
 		file.Chunks = append(file.Chunks, chunk.ID)
-
 		if err = repo.store.PutChunk(chunk); nil != err {
 			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
 			return
 		}
-		_, checkErr := repo.checkFileIfUpdate(file)
-		if nil != checkErr {
-			err = checkErr
-			return
-		}
 
-		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
-
-		if nil != err {
-			return
-		}
-		return
-	}
-
-	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
-	for {
-		buf := make([]byte, chunker.MaxSize)
-		chnk, chnkErr := chnkr.Next(buf)
-		if io.EOF == chnkErr {
-			break
-		}
-		if nil != chnkErr {
-			err = chnkErr
-			logging.LogErrorf("chunk file [%s] failed: %s", absPath, chnkErr)
-			if closeErr := filelock.CloseFile(reader); nil != closeErr {
-				logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
-			}
-			return
-		}
-
-		chunk := createChunk(chnk.Data)
-		file.Chunks = append(file.Chunks, chunk.ID)
-
-		if err = repo.store.PutChunk(chunk); nil != err {
-			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
-			if closeErr := filelock.CloseFile(reader); nil != closeErr {
-				logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
-			}
-			return
-		}
 	}
 
 	_, checkErr := repo.checkFileIfUpdate(file)
