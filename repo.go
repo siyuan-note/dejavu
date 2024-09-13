@@ -857,6 +857,11 @@ func (repo *Repo) relPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
+func createChunk(data []byte) *entity.Chunk {
+	chunkHash := util.Hash(data)
+	return &entity.Chunk{ID: chunkHash, Data: data}
+}
+
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	absPath := repo.absPath(file.Path)
 
@@ -868,11 +873,11 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 			return
 		}
 
-		chunkHash := util.Hash(data)
-		file.Chunks = append(file.Chunks, chunkHash)
-		chunk := &entity.Chunk{ID: chunkHash, Data: data}
+		chunk := createChunk(data)
+		file.Chunks = append(file.Chunks, chunk.ID)
+
 		if err = repo.store.PutChunk(chunk); nil != err {
-			logging.LogErrorf("put chunk [%s] failed: %s", chunkHash, err)
+			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
 			return
 		}
 
@@ -921,11 +926,11 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 			return
 		}
 
-		chunkHash := util.Hash(chnk.Data)
-		file.Chunks = append(file.Chunks, chunkHash)
-		chunk := &entity.Chunk{ID: chunkHash, Data: chnk.Data}
+		chunk := createChunk(chnk.Data)
+		file.Chunks = append(file.Chunks, chunk.ID)
+
 		if err = repo.store.PutChunk(chunk); nil != err {
-			logging.LogErrorf("put chunk [%s] failed: %s", chunkHash, err)
+			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
 			if closeErr := filelock.CloseFile(reader); nil != closeErr {
 				logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
 			}
