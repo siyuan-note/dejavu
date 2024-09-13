@@ -885,9 +885,21 @@ func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) 
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	absPath := repo.absPath(file.Path)
 
+	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
+	if nil != err {
+		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
+		return
+	}
+	defer func() {
+		if err = filelock.CloseFile(reader); nil != err {
+			logging.LogErrorf("close file [%s] failed: %s", absPath, err)
+			return
+		}
+	}()
+
 	if chunker.MinSize > file.Size {
 		var data []byte
-		data, err = filelock.ReadFile(absPath)
+		data, err = io.ReadAll(reader)
 		if nil != err {
 			logging.LogErrorf("read file [%s] failed: %s", absPath, err)
 			return
@@ -911,12 +923,6 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		if nil != err {
 			return
 		}
-		return
-	}
-
-	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
-	if nil != err {
-		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
 		return
 	}
 
@@ -946,11 +952,6 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 			}
 			return
 		}
-	}
-
-	if err = filelock.CloseFile(reader); nil != err {
-		logging.LogErrorf("close file [%s] failed: %s", absPath, err)
-		return
 	}
 
 	_, checkErr := repo.checkFileIfUpdate(file)
