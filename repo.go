@@ -869,9 +869,27 @@ func (repo *Repo) relPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
-func createChunk(data []byte) *entity.Chunk {
-	chunkHash := util.Hash(data)
-	return &entity.Chunk{ID: chunkHash, Data: data}
+func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
+	chunks, err := repo.createChunks(file, RepoChunkSize)
+
+	for _, chunk := range chunks {
+		file.Chunks = append(file.Chunks, chunk.ID)
+		if err = repo.store.PutChunk(chunk); nil != err {
+			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
+			return
+		}
+
+	}
+
+	_, checkErr := repo.checkFileIfUpdate(file)
+	if nil != checkErr {
+		err = checkErr
+		return
+	}
+
+	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
+
+	return
 }
 
 func (repo *Repo) createChunks(file *entity.File, chunkSize *ChunkSize) (chunks []*entity.Chunk, err error) {
@@ -922,6 +940,11 @@ func (repo *Repo) createChunks(file *entity.File, chunkSize *ChunkSize) (chunks 
 
 }
 
+func createChunk(data []byte) *entity.Chunk {
+	chunkHash := util.Hash(data)
+	return &entity.Chunk{ID: chunkHash, Data: data}
+}
+
 func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) {
 
 	absPath := repo.absPath(file.Path)
@@ -939,29 +962,6 @@ func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) 
 		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
 		err = ErrIndexFileChanged
 	}
-	return
-}
-
-func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
-	chunks, err := repo.createChunks(file, RepoChunkSize)
-
-	for _, chunk := range chunks {
-		file.Chunks = append(file.Chunks, chunk.ID)
-		if err = repo.store.PutChunk(chunk); nil != err {
-			logging.LogErrorf("put chunk [%s] failed: %s", chunk.ID, err)
-			return
-		}
-
-	}
-
-	_, checkErr := repo.checkFileIfUpdate(file)
-	if nil != checkErr {
-		err = checkErr
-		return
-	}
-
-	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
-
 	return
 }
 
