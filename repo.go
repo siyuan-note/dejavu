@@ -57,18 +57,6 @@ type Repo struct {
 	cloud    cloud.Cloud // 云端存储服务
 }
 
-type ChunkSize struct {
-	MinSize uint
-	MaxSize uint
-}
-
-var (
-	RepoChunkSize = &ChunkSize{
-		MinSize: chunker.MinSize,
-		MaxSize: chunker.MaxSize,
-	}
-)
-
 // NewRepo 创建一个新的仓库。
 func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName, deviceOS string, aesKey []byte, ignoreLines []string, cloud cloud.Cloud) (ret *Repo, err error) {
 	if nil != cloud {
@@ -870,7 +858,7 @@ func (repo *Repo) relPath(absPath string) string {
 }
 
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
-	chunks, err := repo.createChunks(file, RepoChunkSize)
+	chunks, err := repo.createChunks(file, chunker.MinSize, chunker.MaxSize)
 
 	for _, chunk := range chunks {
 		file.Chunks = append(file.Chunks, chunk.ID)
@@ -888,6 +876,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		return
 	}
 
+	// 判断文件是否在 put chunk 期间更新
 	if file.Size != newSize || file.SecUpdated() != newUpdated {
 		err = ErrIndexFileChanged
 		return
@@ -898,7 +887,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	return
 }
 
-func (repo *Repo) createChunks(file *entity.File, chunkSize *ChunkSize) (chunks []*entity.Chunk, err error) {
+func (repo *Repo) createChunks(file *entity.File, minSize, maxSize uint) (chunks []*entity.Chunk, err error) {
 	absPath := repo.absPath(file.Path)
 	chunks = make([]*entity.Chunk, 0)
 
@@ -914,7 +903,8 @@ func (repo *Repo) createChunks(file *entity.File, chunkSize *ChunkSize) (chunks 
 		}
 	}()
 
-	if chunker.MinSize > file.Size {
+	// minSize 需要小于 1<<63 - 1 ，防止溢出错误
+	if int64(minSize) > file.Size {
 		var data []byte
 		data, err = io.ReadAll(reader)
 		if nil != err {
@@ -927,7 +917,7 @@ func (repo *Repo) createChunks(file *entity.File, chunkSize *ChunkSize) (chunks 
 		return
 	}
 
-	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunkSize.MinSize, chunkSize.MaxSize)
+	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, minSize, maxSize)
 	for {
 		buf := make([]byte, chunker.MaxSize)
 		chnk, chnkErr := chnkr.Next(buf)
