@@ -881,9 +881,15 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 
 	}
 
-	_, checkErr := repo.checkFileIfUpdate(file)
-	if nil != checkErr {
-		err = checkErr
+	newSize, newUpdated, infoErr := repo.getFileNewInfo(file)
+
+	if nil != infoErr {
+		err = infoErr
+		return
+	}
+
+	if file.Size != newSize || file.SecUpdated() != newUpdated {
+		err = ErrIndexFileChanged
 		return
 	}
 
@@ -945,8 +951,7 @@ func createChunk(data []byte) *entity.Chunk {
 	return &entity.Chunk{ID: chunkHash, Data: data}
 }
 
-func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) {
-
+func (repo *Repo) getFileNewInfo(file *entity.File) (newSize, newUpdated int64, err error) {
 	absPath := repo.absPath(file.Path)
 	newInfo, statErr := os.Stat(absPath)
 	if nil != statErr {
@@ -954,14 +959,8 @@ func (repo *Repo) checkFileIfUpdate(file *entity.File) (update bool, err error) 
 		err = statErr
 		return
 	}
-	newSize := newInfo.Size()
-	newUpdated := newInfo.ModTime().Unix()
-
-	update = file.Size != newSize || file.SecUpdated() != newUpdated
-	if update {
-		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
-		err = ErrIndexFileChanged
-	}
+	newSize = newInfo.Size()
+	newUpdated = newInfo.ModTime().Unix()
 	return
 }
 
