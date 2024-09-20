@@ -281,25 +281,12 @@ func (store *Store) PurgeV2() (ret *entity.PurgeStat, err error) {
 		return
 	}
 
-	refIndexIDs, err := store.readRefs()
-	if nil != err {
-		logging.LogErrorf("read refs failed: %s", err)
-		return
-	}
-
-	unreferencedIndexIDs := map[string]bool{}
-	for indexID := range indexIDs {
-		if !refIndexIDs[indexID] {
-			unreferencedIndexIDs[indexID] = true
-		}
-	}
-
 	referencedObjIDs := map[string]bool{}
-	for refID := range refIndexIDs {
-		index, getErr := store.GetIndex(refID)
+	for indexID := range indexIDs {
+		index, getErr := store.GetIndex(indexID)
 		if nil != getErr {
 			err = getErr
-			logging.LogErrorf("get index [%s] failed: %s", refID, err)
+			logging.LogErrorf("get index [%s] failed: %s", indexID, err)
 			return
 		}
 
@@ -326,7 +313,6 @@ func (store *Store) PurgeV2() (ret *entity.PurgeStat, err error) {
 	}
 
 	ret = &entity.PurgeStat{}
-	ret.Indexes = len(unreferencedIndexIDs)
 
 	for unreferencedID := range unreferencedIDs {
 		stat, statErr := store.Stat(unreferencedID)
@@ -341,13 +327,6 @@ func (store *Store) PurgeV2() (ret *entity.PurgeStat, err error) {
 
 		if err = store.Remove(unreferencedID); nil != err {
 			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedID, err)
-			return
-		}
-	}
-	for unreferencedID := range unreferencedIndexIDs {
-		indexPath := filepath.Join(store.Path, "indexes", unreferencedID)
-		if err = os.RemoveAll(indexPath); nil != err {
-			logging.LogErrorf("remove unreferenced index [%s] failed: %s", unreferencedID, err)
 			return
 		}
 	}
