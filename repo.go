@@ -874,7 +874,7 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 			return
 		}
 
-		chunk := createChunk(data)
+		chunk := entity.NewChunk(data)
 		chunks = append(chunks, chunk)
 	} else {
 		chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
@@ -889,7 +889,7 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 				logging.LogErrorf("chunk file [%s] failed: %s", absPath, chnkErr)
 				return
 			}
-			chunk := createChunk(chnk.Data)
+			chunk := entity.NewChunk(chnk.Data)
 			chunks = append(chunks, chunk)
 		}
 	}
@@ -930,11 +930,6 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
 
 	return
-}
-
-func createChunk(data []byte) *entity.Chunk {
-	chunkHash := util.Hash(data)
-	return &entity.Chunk{ID: chunkHash, Data: data}
 }
 
 func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {

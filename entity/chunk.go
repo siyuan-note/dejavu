@@ -16,8 +16,15 @@
 
 package entity
 
+import "github.com/siyuan-note/dejavu/util"
+
 // Chunk 描述了文件分块
 type Chunk struct {
 	ID   string `json:"id"`
 	Data []byte `json:"data"` // 实际的数据
+}
+
+func NewChunk(data []byte) *Chunk {
+	chunkHash := util.Hash(data)
+	return &Chunk{ID: chunkHash, Data: data}
 }
