@@ -232,7 +232,11 @@ func TestPurgeV2(t *testing.T) {
 
 func addFile(t *testing.T, path string) {
 	// 放入新文件
-	content := []byte(fmt.Sprintf("hello dejavu %d", rand.Int63()))
+	rawString := "hello dejavu "
+	for i := 0; i <= 20000; i++ {
+		rawString += fmt.Sprintf(" %d", rand.Int63())
+	}
+	content := []byte(rawString)
 	err := os.WriteFile(filepath.Join(testDataPath, path), content, 0644)
 	if err != nil {
 		t.Fatalf("put new file error")
