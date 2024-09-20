@@ -734,19 +734,10 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 
 		count.Add(1)
 		file := arg.(*entity.File)
-		putErr := repo.putFileChunks(file, context, int(count.Load()), total)
+		putErr := repo.putFileAndChunks(file, context, int(count.Load()), total)
 		if nil != putErr {
 			workerErrLock.Lock()
 			workerErrs = append(workerErrs, putErr)
-			workerErrLock.Unlock()
-			return
-		}
-
-		putFileErr := repo.store.PutFile(file)
-
-		if nil != putFileErr {
-			workerErrLock.Lock()
-			workerErrs = append(workerErrs, putFileErr)
 			workerErrLock.Unlock()
 			return
 		}
@@ -857,7 +848,8 @@ func (repo *Repo) relPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
-func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
+// 将 file 及其对应 chunks 放入 repo，先放入 chunks，成功后再放入 file
+func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
 	chunks, err := repo.createChunks(file, chunker.MinSize, chunker.MaxSize)
 
 	for _, chunk := range chunks {
@@ -879,6 +871,13 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	// 判断文件是否在 put chunk 期间更新
 	if file.Size != newSize || file.SecUpdated() != newUpdated {
 		err = ErrIndexFileChanged
+		return
+	}
+
+	putFileErr := repo.store.PutFile(file)
+
+	if nil != putFileErr {
+		err = putFileErr
 		return
 	}
 
