@@ -18,6 +18,8 @@ package dejavu
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -227,6 +229,186 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 	indexCache.Clear()
 
 	logging.LogInfof("purged data repo [%s], [%d] indexes, [%d] objects, [%d] bytes", store.Path, ret.Indexes, ret.Objects, ret.Size)
+	return
+}
+
+func (store *Store) DeleteIndex(id string) (err error) {
+	err = os.RemoveAll(filepath.Join(store.Path, "indexes", id))
+	return
+}
+
+func (store *Store) PurgeV2() (ret *entity.PurgeStat, err error) {
+	logging.LogInfof("purging data repo [%s]", store.Path)
+
+	objIDs := map[string]bool{}
+
+	collectObjErr := store.storeDirWalk("objects", func(_ int, entry fs.DirEntry, _ string) (cbErr error) {
+		if !entry.IsDir() {
+			return
+		}
+		dirName := entry.Name()
+		dir := filepath.Join("objects", dirName)
+		cbErr = store.storeDirWalk(dir, func(_ int, entry fs.DirEntry, _ string) (cbErr error) {
+			id := dirName + entry.Name()
+			objIDs[id] = true
+			return
+		})
+		return
+	})
+
+	if nil != collectObjErr {
+		err = fmt.Errorf("PurgeV2 failed: %v", collectObjErr)
+		return
+	}
+
+	indexIDs := map[string]bool{}
+
+	collectIndexErr := store.storeDirWalk("indexes", func(index int, entry fs.DirEntry, _ string) (cbErr error) {
+		id := entry.Name()
+		if 40 != len(id) {
+			return
+		}
+		indexIDs[id] = true
+		return
+	})
+
+	if nil != collectIndexErr {
+		err = fmt.Errorf("PurgeV2 failed: %v", collectIndexErr)
+		return
+	}
+
+	refIndexIDs, err := store.readRefs()
+	if nil != err {
+		logging.LogErrorf("read refs failed: %s", err)
+		return
+	}
+
+	unreferencedIndexIDs := map[string]bool{}
+	for indexID := range indexIDs {
+		if !refIndexIDs[indexID] {
+			unreferencedIndexIDs[indexID] = true
+		}
+	}
+
+	referencedObjIDs := map[string]bool{}
+	for refID := range refIndexIDs {
+		index, getErr := store.GetIndex(refID)
+		if nil != getErr {
+			err = getErr
+			logging.LogErrorf("get index [%s] failed: %s", refID, err)
+			return
+		}
+
+		for _, fileID := range index.Files {
+			referencedObjIDs[fileID] = true
+			file, getFileErr := store.GetFile(fileID)
+			if nil != getFileErr {
+				err = getFileErr
+				logging.LogErrorf("get file [%s] failed: %s", fileID, err)
+				return
+			}
+
+			for _, chunkID := range file.Chunks {
+				referencedObjIDs[chunkID] = true
+			}
+		}
+	}
+
+	unreferencedIDs := map[string]bool{}
+	for objID := range objIDs {
+		if !referencedObjIDs[objID] {
+			unreferencedIDs[objID] = true
+		}
+	}
+
+	ret = &entity.PurgeStat{}
+	ret.Indexes = len(unreferencedIndexIDs)
+
+	for unreferencedID := range unreferencedIDs {
+		stat, statErr := store.Stat(unreferencedID)
+		if nil != statErr {
+			err = statErr
+			logging.LogErrorf("stat [%s] failed: %s", unreferencedID, err)
+			return
+		}
+
+		ret.Size += stat.Size()
+		ret.Objects++
+
+		if err = store.Remove(unreferencedID); nil != err {
+			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedID, err)
+			return
+		}
+	}
+	for unreferencedID := range unreferencedIndexIDs {
+		indexPath := filepath.Join(store.Path, "indexes", unreferencedID)
+		if err = os.RemoveAll(indexPath); nil != err {
+			logging.LogErrorf("remove unreferenced index [%s] failed: %s", unreferencedID, err)
+			return
+		}
+	}
+
+	// 上面清理完索引了，最后再清理校验索引
+	// Clear check index when purging data repo https://github.com/siyuan-note/siyuan/issues/9665
+
+	checkIndexesDir := filepath.Join("check", "indexes")
+	_ = store.storeDirWalk(checkIndexesDir, func(index int, entry fs.DirEntry, rootDir string) (cbErr error) {
+		id := entry.Name()
+		if 40 != len(id) {
+			return
+		}
+		data, readErr := os.ReadFile(filepath.Join(rootDir, id))
+		if nil != readErr {
+			logging.LogErrorf("read check index [%s] failed: %s", id, readErr)
+			return
+		}
+
+		if data, readErr = store.compressDecoder.DecodeAll(data, nil); nil != readErr {
+			logging.LogErrorf("decode check index [%s] failed: %s", id, readErr)
+			return
+		}
+
+		checkIndex := &entity.CheckIndex{}
+		if readErr = gulu.JSON.UnmarshalJSON(data, checkIndex); nil != readErr {
+			logging.LogErrorf("unmarshal check index [%s] failed: %s", id, readErr)
+			return
+		}
+
+		if _, statErr := os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(statErr) {
+			if removeErr := os.RemoveAll(filepath.Join(store.Path, "check", "indexes", checkIndex.ID)); nil != removeErr {
+				logging.LogErrorf("remove check index [%s] failed: %s", checkIndex.ID, removeErr)
+			}
+		}
+		return
+	})
+
+	fileCache.Clear()
+	indexCache.Clear()
+
+	logging.LogInfof("purged data repo [%s], [%d] indexes, [%d] objects, [%d] bytes", store.Path, ret.Indexes, ret.Objects, ret.Size)
+	return
+}
+
+func (store *Store) storeDirWalk(path string, callback func(index int, entry fs.DirEntry, rootDir string) (cbErr error)) (err error) {
+	rootDir := filepath.Join(store.Path, path)
+	if !gulu.File.IsDir(rootDir) {
+		logging.LogWarnf("%s dir [%s] is not a dir", path, rootDir)
+		err = errors.New(rootDir + "  is not a dir")
+		return
+	}
+
+	entries, err := os.ReadDir(rootDir)
+	if nil != err {
+		logging.LogErrorf("read %s dir [%s] failed: %s", path, rootDir, err)
+		return
+	}
+	for index, entry := range entries {
+		cbErr := callback(index, entry, rootDir)
+		if nil != cbErr {
+			err = cbErr
+			return
+		}
+	}
 	return
 }
 
