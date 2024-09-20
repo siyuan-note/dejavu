@@ -915,6 +915,7 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 	newUpdated := newInfo.ModTime().Unix()
 
 	if file.Size != newSize || file.SecUpdated() != newUpdated {
+		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
 		err = ErrIndexFileChanged
 		return
 	}
