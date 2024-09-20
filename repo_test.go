@@ -18,6 +18,8 @@ package dejavu
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -27,6 +29,7 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
 	"github.com/siyuan-note/eventbus"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -114,6 +117,125 @@ func TestIndexCheckout(t *testing.T) {
 
 	if !gulu.File.IsExist(filepath.Join(testDataCheckoutPath, "foo")) {
 		t.Fatalf("checkout failed")
+		return
+	}
+}
+
+func TestPurgeV2(t *testing.T) {
+	clearTestdata(t)
+	firstFile := "abc"
+	secFile := "def"
+	//添加文件
+	addFile(t, firstFile)
+	repo, initIndex := initIndex(t)
+
+	_ = initIndex
+
+	//遍历 repo文件夹，并收集object
+	objIDs := map[string]bool{}
+
+	collectObjErr := repo.store.storeDirWalk("objects", func(_ int, entry fs.DirEntry, _ string) (cbErr error) {
+		if !entry.IsDir() {
+			return
+		}
+		dirName := entry.Name()
+		dir := filepath.Join("objects", dirName)
+		cbErr = repo.store.storeDirWalk(dir, func(_ int, entry fs.DirEntry, _ string) (cbErr error) {
+			id := dirName + entry.Name()
+			objIDs[id] = true
+			return
+		})
+		return
+	})
+	if nil != collectObjErr {
+		t.Fatalf("PurgeV2 collect object failed: %v", collectObjErr)
+		return
+	}
+
+	if len(objIDs) <= 1 {
+		t.Fatalf("put obj error")
+	}
+
+	// 放入新文件
+	addFile(t, secFile)
+
+	newIndex, err := repo.index("new obj", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("create new snapshot fail")
+		return
+	}
+
+	//测试是否会删除最新快照
+	err = repo.DeleteIndex(newIndex.ID)
+	if err == nil {
+		t.Fatalf("delete latest index")
+		return
+	}
+
+	//删除文件
+	err = os.RemoveAll(filepath.Join(testDataPath, secFile))
+	if err != nil {
+		t.Fatalf("delete new file failed")
+		return
+	}
+	err = os.RemoveAll(filepath.Join(testDataPath, firstFile))
+	if err != nil {
+		t.Fatalf("delete new file failed")
+		return
+	}
+
+	//创建新快照后删除之前的快照
+	testIndex, err := repo.index("an another snapshot", map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("create new snapshot fail %s", testIndex.ID)
+		return
+	}
+
+	//测试是否会删除最新快照
+	err = repo.DeleteIndex(newIndex.ID)
+	if err != nil {
+		t.Fatalf("delete index failed")
+		return
+	}
+
+	_, err = repo.PurgeV2()
+	if err != nil {
+		t.Fatalf("clean repo fail!")
+	}
+
+	// 检查对象是否清理干净
+	newObjIDs := map[string]bool{}
+	repo.store.storeDirWalk("objects", func(_ int, entry fs.DirEntry, _ string) (cbErr error) {
+		if !entry.IsDir() {
+			return
+		}
+		dirName := entry.Name()
+		dir := filepath.Join("objects", dirName)
+		cbErr = repo.store.storeDirWalk(dir, func(_ int, entry fs.DirEntry, _ string) (cbErr error) {
+			id := dirName + entry.Name()
+			newObjIDs[id] = true
+			return
+		})
+		return
+	})
+	for oldID := range objIDs {
+		if newObjIDs[oldID] != true {
+			t.Fatalf("[%s] should not have been deleted in purge", oldID)
+		}
+	}
+	for newID := range newObjIDs {
+		if objIDs[newID] != true {
+			t.Fatalf("[%s] should be delete in purge", newID)
+		}
+	}
+}
+
+func addFile(t *testing.T, path string) {
+	// 放入新文件
+	content := []byte(fmt.Sprintf("hello dejavu %d", rand.Int63()))
+	err := os.WriteFile(filepath.Join(testDataPath, path), content, 0644)
+	if err != nil {
+		t.Fatalf("put new file error")
 		return
 	}
 }
