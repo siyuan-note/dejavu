@@ -850,8 +850,51 @@ func (repo *Repo) relPath(absPath string) string {
 
 // 将 file 及其对应 chunks 放入 repo，先放入 chunks，成功后再放入 file
 func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
-	chunks, err := repo.createChunks(file, chunker.MinSize, chunker.MaxSize)
 
+	// 读取文件并创建chunks
+	absPath := repo.absPath(file.Path)
+	chunks := make([]*entity.Chunk, 0)
+	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
+	if nil != err {
+		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
+		return
+	}
+	defer func() {
+		if closeErr := filelock.CloseFile(reader); nil != closeErr {
+			logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
+			return
+		}
+	}()
+
+	if chunker.MinSize > file.Size {
+		var data []byte
+		data, err = io.ReadAll(reader)
+		if nil != err {
+			logging.LogErrorf("read file [%s] failed: %s", absPath, err)
+			return
+		}
+
+		chunk := createChunk(data)
+		chunks = append(chunks, chunk)
+	} else {
+		chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
+		for {
+			buf := make([]byte, chunker.MaxSize)
+			chnk, chnkErr := chnkr.Next(buf)
+			if io.EOF == chnkErr {
+				break
+			}
+			if nil != chnkErr {
+				err = chnkErr
+				logging.LogErrorf("chunk file [%s] failed: %s", absPath, chnkErr)
+				return
+			}
+			chunk := createChunk(chnk.Data)
+			chunks = append(chunks, chunk)
+		}
+	}
+
+	//将chunks全部放入store
 	for _, chunk := range chunks {
 		file.Chunks = append(file.Chunks, chunk.ID)
 		if err = repo.store.PutChunk(chunk); nil != err {
@@ -861,14 +904,16 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 
 	}
 
-	newSize, newUpdated, infoErr := repo.getFileNewInfo(file)
-
-	if nil != infoErr {
-		err = infoErr
+	// 判断文件是否在 put chunk 期间更新
+	newInfo, statErr := os.Stat(absPath)
+	if nil != statErr {
+		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
+		err = statErr
 		return
 	}
+	newSize := newInfo.Size()
+	newUpdated := newInfo.ModTime().Unix()
 
-	// 判断文件是否在 put chunk 期间更新
 	if file.Size != newSize || file.SecUpdated() != newUpdated {
 		err = ErrIndexFileChanged
 		return
@@ -886,71 +931,9 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 	return
 }
 
-func (repo *Repo) createChunks(file *entity.File, minSize, maxSize uint) (chunks []*entity.Chunk, err error) {
-	absPath := repo.absPath(file.Path)
-	chunks = make([]*entity.Chunk, 0)
-
-	reader, err := filelock.OpenFile(absPath, os.O_RDONLY, 0644)
-	if nil != err {
-		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
-		return
-	}
-	defer func() {
-		if closeErr := filelock.CloseFile(reader); nil != closeErr {
-			logging.LogErrorf("close file [%s] failed: %s", absPath, closeErr)
-			return
-		}
-	}()
-
-	// minSize 需要小于 1<<63 - 1 ，防止溢出错误
-	if int64(minSize) > file.Size {
-		var data []byte
-		data, err = io.ReadAll(reader)
-		if nil != err {
-			logging.LogErrorf("read file [%s] failed: %s", absPath, err)
-			return
-		}
-
-		chunk := createChunk(data)
-		chunks = append(chunks, chunk)
-		return
-	}
-
-	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, minSize, maxSize)
-	for {
-		buf := make([]byte, chunker.MaxSize)
-		chnk, chnkErr := chnkr.Next(buf)
-		if io.EOF == chnkErr {
-			break
-		}
-		if nil != chnkErr {
-			err = chnkErr
-			logging.LogErrorf("chunk file [%s] failed: %s", absPath, chnkErr)
-			return
-		}
-		chunk := createChunk(chnk.Data)
-		chunks = append(chunks, chunk)
-	}
-	return
-
-}
-
 func createChunk(data []byte) *entity.Chunk {
 	chunkHash := util.Hash(data)
 	return &entity.Chunk{ID: chunkHash, Data: data}
-}
-
-func (repo *Repo) getFileNewInfo(file *entity.File) (newSize, newUpdated int64, err error) {
-	absPath := repo.absPath(file.Path)
-	newInfo, statErr := os.Stat(absPath)
-	if nil != statErr {
-		logging.LogErrorf("stat file [%s] failed: %s", absPath, statErr)
-		err = statErr
-		return
-	}
-	newSize = newInfo.Size()
-	newUpdated = newInfo.ModTime().Unix()
-	return
 }
 
 func (repo *Repo) getFiles(fileIDs []string) (ret []*entity.File, err error) {
