@@ -233,7 +233,11 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 }
 
 func (store *Store) DeleteIndex(id string) (err error) {
-	err = os.RemoveAll(filepath.Join(store.Path, "indexes", id))
+	indexPath := filepath.Join(store.Path, "indexes", id)
+	if err = os.RemoveAll(indexPath); nil != err {
+		logging.LogErrorf("remove unreferenced index [%s] failed: %s", id, err)
+		return
+	}
 	return
 }
 
@@ -257,7 +261,7 @@ func (store *Store) PurgeV2() (ret *entity.PurgeStat, err error) {
 	})
 
 	if nil != collectObjErr {
-		err = fmt.Errorf("PurgeV2 failed: %v", collectObjErr)
+		err = fmt.Errorf("PurgeV2 collect object failed: %v", collectObjErr)
 		return
 	}
 
@@ -273,7 +277,7 @@ func (store *Store) PurgeV2() (ret *entity.PurgeStat, err error) {
 	})
 
 	if nil != collectIndexErr {
-		err = fmt.Errorf("PurgeV2 failed: %v", collectIndexErr)
+		err = fmt.Errorf("PurgeV2 collect Index failed: %v", collectIndexErr)
 		return
 	}
 

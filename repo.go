@@ -384,6 +384,30 @@ func (repo *Repo) purgeIndexesV2(refIndexIDs map[string]bool) (err error) {
 	return
 }
 
+func (repo *Repo) DeleteIndex(indexID string) (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	latest, err := repo.Latest()
+	if nil != err {
+		logging.LogErrorf("get latest index failed: %s", err)
+		return
+	}
+
+	if latest.ID == indexID {
+		logging.LogInfof("try to delete latest index")
+		err = errors.New("can not delete latest index")
+		return
+	}
+
+	return repo.store.DeleteIndex(indexID)
+}
+
+func (repo *Repo) PurgeV2() (ret *entity.PurgeStat, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	return repo.store.PurgeV2()
+}
+
 // GetIndex 从仓库根据 id 获取索引。
 func (repo *Repo) GetIndex(id string) (index *entity.Index, err error) {
 	lock.Lock()
