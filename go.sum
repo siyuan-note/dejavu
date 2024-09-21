@@ -55,8 +55,8 @@ github.com/hashicorp/errwrap v1.1.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brv
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
-github.com/imroc/req/v3 v3.46.0 h1:18WVbx5NdlQFpZKCZkYwO/AglIQKAx/UPC/w+rrPWv8=
-github.com/imroc/req/v3 v3.46.0/go.mod h1:weam9gmyb00QnOtu6HXSnk44dNFkIUQb5QdMx13FeUU=
+github.com/imroc/req/v3 v3.46.1 h1:oahr2hBTb3AaFI4P6jkN0Elj2ZVKJcdQ/IjWqeIKjvc=
+github.com/imroc/req/v3 v3.46.1/go.mod h1:weam9gmyb00QnOtu6HXSnk44dNFkIUQb5QdMx13FeUU=
 github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9YPoQUg=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGwWFoC7ycTf1rcQZHOlsJ6N8=
@@ -105,8 +105,8 @@ github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtb
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97/go.mod h1:1/nGgthl89FPA7GzAcEWKl6zRRnfgyTjzLZj9bW7kuw=
 github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04 h1:aoXvEO6BMqm6L0EnTjRhB4ynQIyJvHpqz+Ue3g0D3a0=
 github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04/go.mod h1:iqFhf4EDKy4MjQgT6RQJ6Z6NSW662NS0PR40K1qdSpE=
-github.com/siyuan-note/httpclient v0.0.0-20240911092543-5e2322472fde h1:TS8I7yDwJuEOXZcEdrup8LmMPukwSRLU8BV9WgZIEbs=
-github.com/siyuan-note/httpclient v0.0.0-20240911092543-5e2322472fde/go.mod h1:IzBFIxpGyTdUhgC28wF/1LbkqS6U/VsX33Fa4V0LNSA=
+github.com/siyuan-note/httpclient v0.0.0-20240921165925-d7d8fb56fa4e h1:kSZ0D/kBbN+XHGL/GJmpboqYxKFUq88b+AQvHxKD9tk=
+github.com/siyuan-note/httpclient v0.0.0-20240921165925-d7d8fb56fa4e/go.mod h1:HY31th4VRW7zCnircDjUP5hjdEb1E2rUJQhf6wtfVSk=
 github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2 h1:/2+tlOThVB86RxSLeW0JFw2ISUrH2ZFRg15ULGAUGAE=
 github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2/go.mod h1:3Osd2/nwzXZFl6ZcDE4hA0HD83Wyv1fds47nVuapyOM=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
