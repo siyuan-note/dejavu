@@ -451,16 +451,12 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	count, total := 0, len(upserts)
-	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
-	for _, file := range upserts {
-		count++
-		if err = repo.checkoutFile(file, repo.DataPath, count, total, context); nil != err {
-			return
-		}
+	err = repo.checkoutFiles(upserts, context)
+	if nil != err {
+		return
 	}
 
-	total = len(removes)
+	total := len(removes)
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, total)
 	for i, f := range removes {
 		absPath := repo.absPath(f.Path)
@@ -973,73 +969,77 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 	return
 }
 
-//func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
-//	now := time.Now()
-//
-//	total := len(files)
-//	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
-//	for i, file := range files {
-//		err = repo.checkoutFile(file, repo.DataPath, i+1, total, context)
-//		if nil != err {
-//			return
-//		}
-//	}
-//
-//	logging.LogInfof("checkout files done, total: %d, cost: %s", total, time.Since(now))
-//	return
-//}
-
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
 	//now := time.Now()
 
-	var dotSiYuans, tmp []*entity.File
+	var dotSiYuans, assets, emojis, storage, widgets, templates, public, others, all []*entity.File
 	for _, file := range files {
 		if strings.Contains(file.Path, ".siyuan") {
 			dotSiYuans = append(dotSiYuans, file)
+		} else if strings.HasPrefix(file.Path, "/assets/") {
+			assets = append(assets, file)
+		} else if strings.HasPrefix(file.Path, "/emojis/") {
+			emojis = append(emojis, file)
+		} else if strings.HasPrefix(file.Path, "/storage/") {
+			storage = append(storage, file)
+		} else if strings.HasPrefix(file.Path, "/widgets/") {
+			widgets = append(widgets, file)
+		} else if strings.HasPrefix(file.Path, "/templates/") {
+			templates = append(templates, file)
+		} else if strings.HasPrefix(file.Path, "/public/") {
+			public = append(public, file)
 		} else {
-			tmp = append(tmp, file)
+			others = append(others, file)
 		}
 	}
+	files = nil
+
 	sort.Slice(dotSiYuans, func(i, j int) bool {
-		if strings.Contains(dotSiYuans[i].Path, "conf.json") {
-			return true
-		}
-		if strings.Contains(dotSiYuans[j].Path, "conf.json") {
-			return false
-		}
-		return dotSiYuans[i].Updated > dotSiYuans[j].Updated
+		return strings.Count(dotSiYuans[i].Path, "/") < strings.Count(dotSiYuans[j].Path, "/")
 	})
-	sort.Slice(tmp, func(i, j int) bool {
-		return tmp[i].Updated > tmp[j].Updated
-	})
-	tmp = append(dotSiYuans, tmp...)
-	files = tmp
+	all = append(all, dotSiYuans...)
+	dotSiYuans = nil
 
-	count := atomic.Int32{}
-	total := len(files)
+	sort.Slice(assets, func(i, j int) bool { return strings.Count(assets[i].Path, "/") < strings.Count(assets[j].Path, "/") })
+	all = append(all, assets...)
+	assets = nil
+
+	sort.Slice(emojis, func(i, j int) bool { return strings.Count(emojis[i].Path, "/") < strings.Count(emojis[j].Path, "/") })
+	all = append(all, emojis...)
+	emojis = nil
+
+	sort.Slice(storage, func(i, j int) bool { return strings.Count(storage[i].Path, "/") < strings.Count(storage[j].Path, "/") })
+	all = append(all, storage...)
+	storage = nil
+
+	sort.Slice(widgets, func(i, j int) bool { return strings.Count(widgets[i].Path, "/") < strings.Count(widgets[j].Path, "/") })
+	all = append(all, widgets...)
+	widgets = nil
+
+	sort.Slice(templates, func(i, j int) bool {
+		return strings.Count(templates[i].Path, "/") < strings.Count(templates[j].Path, "/")
+	})
+	all = append(all, templates...)
+	templates = nil
+
+	sort.Slice(public, func(i, j int) bool { return strings.Count(public[i].Path, "/") < strings.Count(public[j].Path, "/") })
+	all = append(all, public...)
+	public = nil
+
+	sort.Slice(others, func(i, j int) bool { return strings.Count(others[i].Path, "/") < strings.Count(others[j].Path, "/") })
+	all = append(all, others...)
+	others = nil
+
+	files = all
+	count, total := 0, len(files)
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
-	waitGroup := &sync.WaitGroup{}
-	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
-		defer waitGroup.Done()
-
-		file := arg.(*entity.File)
-		count.Add(1)
-		err = repo.checkoutFile(file, repo.DataPath, int(count.Load()), total, context)
+	for _, file := range files {
+		count++
+		err = repo.checkoutFile(file, repo.DataPath, count, total, context)
 		if nil != err {
-			return
-		}
-	})
-
-	for _, f := range files {
-		waitGroup.Add(1)
-		err = p.Invoke(f)
-		if nil != err {
-			logging.LogErrorf("invoke failed: %s", err)
 			return
 		}
 	}
-	waitGroup.Wait()
-	p.Release()
 
 	//logging.LogInfof("checkout files done, total: %d, cost: %s", total, time.Since(now))
 	return
