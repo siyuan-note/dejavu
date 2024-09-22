@@ -459,13 +459,13 @@ func (store *Store) decodeData(data []byte) (ret []byte, err error) {
 	return
 }
 
-var fileCache, _ = ristretto.NewCache(&ristretto.Config{
+var fileCache, _ = ristretto.NewCache[string, any](&ristretto.Config[string, any]{
 	NumCounters: 200000,
 	MaxCost:     1000 * 1000 * 32, // 1 个文件按 300 字节计算，32MB 大概可以缓存 10W 个文件实例
 	BufferItems: 64,
 })
 
-var indexCache, _ = ristretto.NewCache(&ristretto.Config{
+var indexCache, _ = ristretto.NewCache[string, any](&ristretto.Config[string, any]{
 	NumCounters: 200000,
 	MaxCost:     1000 * 1000 * 128, // 1 个文件按 300K 字节（大约 1.5W 个文件）计算，128MB 大概可以缓存 400 个索引
 	BufferItems: 64,

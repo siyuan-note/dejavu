@@ -304,7 +304,7 @@ func stripCtlFromUTF8(str string) string {
 
 var (
 	compressDecoder *zstd.Decoder
-	cache           *ristretto.Cache
+	cache           *ristretto.Cache[string, any]
 )
 
 func init() {
@@ -314,7 +314,7 @@ func init() {
 		panic(err)
 	}
 
-	cache, err = ristretto.NewCache(&ristretto.Config{
+	cache, err = ristretto.NewCache[string, any](&ristretto.Config[string, any]{
 		NumCounters: 200000,
 		MaxCost:     1000 * 1000 * 32,
 		BufferItems: 64,
