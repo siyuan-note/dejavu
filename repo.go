@@ -398,7 +398,7 @@ func (repo *Repo) PutIndex(index *entity.Index) (err error) {
 	return repo.store.PutIndex(index)
 }
 
-var workspaceDataDirs = []string{"assets", "emojis", "snippets", "storage", "templates", "widgets"}
+var workspaceDataDirs = []string{"assets", "emojis", "snippets", "storage", "templates", "widgets", "plugins", "public", "snippets"}
 var removeEmptyDirExcludes = append(workspaceDataDirs, ".git")
 
 // Checkout 将仓库中的数据迁出到 repo 数据文件夹下。context 参数用于发布事件时传递调用上下文。
@@ -972,7 +972,7 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
 	//now := time.Now()
 
-	var dotSiYuans, assets, emojis, storage, widgets, templates, public, others, all []*entity.File
+	var dotSiYuans, assets, emojis, storage, plugins, widgets, templates, public, others, all []*entity.File
 	for _, file := range files {
 		if strings.Contains(file.Path, ".siyuan") {
 			dotSiYuans = append(dotSiYuans, file)
@@ -982,6 +982,8 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 			emojis = append(emojis, file)
 		} else if strings.HasPrefix(file.Path, "/storage/") {
 			storage = append(storage, file)
+		} else if strings.HasPrefix(file.Path, "/plugins/") {
+			plugins = append(plugins, file)
 		} else if strings.HasPrefix(file.Path, "/widgets/") {
 			widgets = append(widgets, file)
 		} else if strings.HasPrefix(file.Path, "/templates/") {
@@ -1011,6 +1013,10 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	sort.Slice(storage, func(i, j int) bool { return strings.Count(storage[i].Path, "/") < strings.Count(storage[j].Path, "/") })
 	all = append(all, storage...)
 	storage = nil
+
+	sort.Slice(plugins, func(i, j int) bool { return strings.Count(plugins[i].Path, "/") < strings.Count(plugins[j].Path, "/") })
+	all = append(all, plugins...)
+	plugins = nil
 
 	sort.Slice(widgets, func(i, j int) bool { return strings.Count(widgets[i].Path, "/") < strings.Count(widgets[j].Path, "/") })
 	all = append(all, widgets...)
