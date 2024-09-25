@@ -920,14 +920,9 @@ func (repo *Repo) putFileAndChunks(file *entity.File, context map[string]interfa
 		return
 	}
 
-	putFileErr := repo.store.PutFile(file)
-
-	if nil != putFileErr {
-		err = putFileErr
-		return
-	}
-
 	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
+
+	err = repo.store.PutFile(file)
 
 	return
 }
