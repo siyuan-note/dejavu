@@ -11,7 +11,7 @@ require (
 	github.com/dgraph-io/ristretto v1.0.0
 	github.com/klauspost/compress v1.17.10
 	github.com/panjf2000/ants/v2 v2.10.0
-	github.com/qiniu/go-sdk/v7 v7.23.0
+	github.com/qiniu/go-sdk/v7 v7.20.2
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
@@ -23,16 +23,11 @@ require (
 )
 
 require (
-	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/alex-ant/gomath v0.0.0-20160516115720-89013a210a82 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/elastic/go-sysinfo v1.14.2 // indirect
-	github.com/elastic/go-windows v1.0.2 // indirect
-	github.com/gammazero/toposort v0.1.1 // indirect
 	github.com/getsentry/sentry-go v0.29.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
@@ -43,7 +38,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.20.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.47.0 // indirect
 	github.com/refraction-networking/utls v1.6.7 // indirect
@@ -56,8 +50,6 @@ require (
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/tools v0.25.0 // indirect
-	howett.net/plist v1.0.1 // indirect
-	modernc.org/fileutil v1.3.0 // indirect
 )
 
 //replace github.com/siyuan-note/filelock => D:\88250\filelock
