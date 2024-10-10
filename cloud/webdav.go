@@ -307,6 +307,10 @@ func (webdav *WebDAV) listRepos() (ret []*Repo, err error) {
 	}
 
 	for _, repoInfo := range infos {
+		if !repoInfo.IsDir() {
+			continue
+		}
+
 		ret = append(ret, &Repo{
 			Name:    repoInfo.Name(),
 			Size:    0,
