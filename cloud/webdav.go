@@ -289,7 +289,7 @@ func (webdav *WebDAV) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 		ref := &Ref{
 			Name:    info.Name(),
 			ID:      id,
-			Updated: info.ModTime().Format("2006-01-02 15:04:05"),
+			Updated: info.ModTime().Local().Format("2006-01-02 15:04:05"),
 		}
 		ret = append(ret, ref)
 	}
@@ -314,7 +314,7 @@ func (webdav *WebDAV) listRepos() (ret []*Repo, err error) {
 		ret = append(ret, &Repo{
 			Name:    repoInfo.Name(),
 			Size:    0,
-			Updated: repoInfo.ModTime().Format("2006-01-02 15:04:05"),
+			Updated: repoInfo.ModTime().Local().Format("2006-01-02 15:04:05"),
 		})
 	}
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
