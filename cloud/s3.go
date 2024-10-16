@@ -262,6 +262,17 @@ func (s3 *S3) GetIndex(id string) (index *entity.Index, err error) {
 	return
 }
 
+func (s3 *S3) GetConcurrentReqs() (ret int) {
+	ret = s3.S3.ConcurrentReqs
+	if 1 > ret {
+		ret = 8
+	}
+	if 16 < ret {
+		ret = 16
+	}
+	return
+}
+
 func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo, err error) {
 	ret = map[string]*entity.ObjectInfo{}
 	svc := s3.getService()
@@ -417,8 +428,14 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 	if 1 > len(keys) {
 		return
 	}
+
+	poolSize := s3.GetConcurrentReqs()
+	if poolSize > len(keys) {
+		poolSize = len(keys)
+	}
+
 	waitGroup := &sync.WaitGroup{}
-	p, _ := ants.NewPoolWithFunc(8, func(arg interface{}) {
+	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		key := arg.(string)
 		info, statErr := s3.statFile(key)

@@ -754,7 +754,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
-	poolSize := 8
+	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(chunkIDs) {
 		poolSize = len(chunkIDs)
 	}
@@ -814,7 +814,7 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	lock := &sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
-	poolSize := 8
+	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(fileIDs) {
 		poolSize = len(fileIDs)
 	}
@@ -977,7 +977,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
-	poolSize := 8
+	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(missingObjects) {
 		poolSize = len(missingObjects)
 	}
@@ -1180,7 +1180,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
-	poolSize := 8
+	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
 	}
@@ -1234,7 +1234,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
-	poolSize := 8
+	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
 	}

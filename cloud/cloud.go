@@ -47,23 +47,25 @@ type Conf struct {
 
 // ConfS3 用于描述 S3 对象存储协议所需配置。
 type ConfS3 struct {
-	Endpoint      string // 服务端点
-	AccessKey     string // Access Key
-	SecretKey     string // Secret Key
-	Region        string // 存储区域
-	Bucket        string // 存储空间
-	PathStyle     bool   // 是否使用路径风格寻址
-	SkipTlsVerify bool   //  是否跳过 TLS 验证
-	Timeout       int    // 超时时间，单位：秒
+	Endpoint       string // 服务端点
+	AccessKey      string // Access Key
+	SecretKey      string // Secret Key
+	Region         string // 存储区域
+	Bucket         string // 存储空间
+	PathStyle      bool   // 是否使用路径风格寻址
+	SkipTlsVerify  bool   //  是否跳过 TLS 验证
+	Timeout        int    // 超时时间，单位：秒
+	ConcurrentReqs int    // 并发请求数
 }
 
 // ConfWebDAV 用于描述 WebDAV 协议所需配置。
 type ConfWebDAV struct {
-	Endpoint      string // 服务端点
-	Username      string // 用户名
-	Password      string // 密码
-	SkipTlsVerify bool   // 是否跳过 TLS 验证
-	Timeout       int    // 超时时间，单位：秒
+	Endpoint       string // 服务端点
+	Username       string // 用户名
+	Password       string // 密码
+	SkipTlsVerify  bool   // 是否跳过 TLS 验证
+	Timeout        int    // 超时时间，单位：秒
+	ConcurrentReqs int    // 并发请求数
 }
 
 // Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。
@@ -116,6 +118,9 @@ type Cloud interface {
 
 	// GetIndex 用于获取索引。
 	GetIndex(id string) (index *entity.Index, err error)
+
+	// GetConcurrentReqs 用于获取配置的并发请求数。
+	GetConcurrentReqs() int
 }
 
 // Traffic 描述了流量信息。
@@ -248,6 +253,10 @@ func (baseCloud *BaseCloud) ListObjects(pathPrefix string) (objInfos map[string]
 func (baseCloud *BaseCloud) GetIndex(id string) (index *entity.Index, err error) {
 	err = ErrUnsupported
 	return
+}
+
+func (baseCloud *BaseCloud) GetConcurrentReqs() int {
+	return 8
 }
 
 func (baseCloud *BaseCloud) GetConf() *Conf {

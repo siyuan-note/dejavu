@@ -237,6 +237,17 @@ func (webdav *WebDAV) GetIndex(id string) (index *entity.Index, err error) {
 	return
 }
 
+func (webdav *WebDAV) GetConcurrentReqs() (ret int) {
+	ret = webdav.Conf.WebDAV.ConcurrentReqs
+	if 1 > ret {
+		ret = 1
+	}
+	if 16 < ret {
+		ret = 16
+	}
+	return
+}
+
 func (webdav *WebDAV) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo, err error) {
 	ret = map[string]*entity.ObjectInfo{}
 

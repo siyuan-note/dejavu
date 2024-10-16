@@ -496,7 +496,7 @@ func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 func (repo *Repo) removeCloudObjects(objects []string) (err error) {
 	waitGroup := &sync.WaitGroup{}
 	var removeErr error
-	poolSize := 8
+	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(objects) {
 		poolSize = len(objects)
 	}
