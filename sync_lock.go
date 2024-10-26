@@ -177,7 +177,7 @@ func parseErr(err error) (bool, error) {
 	msg := strings.ToLower(err.Error())
 	if strings.Contains(msg, "requesttimetooskewed") || strings.Contains(msg, "request time and the current time is too large") {
 		return true, cloud.ErrSystemTimeIncorrect
-	} else if strings.Contains(msg, "unavailable") {
+	} else if strings.Contains(msg, "500") || strings.Contains(msg, "internal server error") || strings.Contains(msg, "503") || strings.Contains(msg, "unavailable") {
 		return true, cloud.ErrCloudServiceUnavailable
 	} else if strings.Contains(msg, "401") || strings.Contains(msg, "unauthorized") ||
 		strings.Contains(msg, "403") || strings.Contains(msg, "forbidden") {
