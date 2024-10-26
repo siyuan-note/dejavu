@@ -280,6 +280,8 @@ var (
 	ErrDeprecatedVersion       = errors.New("deprecated version")        // ErrDeprecatedVersion 描述了版本过低的错误
 	ErrCloudCheckFailed        = errors.New("cloud check failed")        // ErrCloudCheckFailed 描述了云端存储服务检查失败的错误
 	ErrCloudIndexChanged       = errors.New("cloud index changed")       // ErrCloudIndexChanged 描述了云端快照已变更的错误
+	ErrCloudForbidden          = errors.New("cloud forbidden")           // ErrCloudForbidden 描述了云端存储服务禁止访问的错误
+	ErrCloudTooManyRequests    = errors.New("cloud too many requests")   // ErrCloudTooManyRequests 描述了云端存储服务请求过多的错误
 )
 
 func IsValidCloudDirName(cloudDirName string) bool {
