@@ -1536,7 +1536,7 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
 	index = &entity.Index{}
 
-	key := path.Join("refs", "latest")
+	key := path.Join("refs", "latest?r="+gulu.Rand.String(7))
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {

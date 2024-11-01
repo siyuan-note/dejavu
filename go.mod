@@ -17,7 +17,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04
-	github.com/siyuan-note/httpclient v0.0.0-20241014033953-8a969cdbd61b
+	github.com/siyuan-note/httpclient v0.0.0-20241101092545-63ac2e89a49d
 	github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2
 	github.com/studio-b12/gowebdav v0.9.0
 )
@@ -31,17 +31,17 @@ require (
 	github.com/getsentry/sentry-go v0.29.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
-	github.com/google/pprof v0.0.0-20241009165004-a3522334989c // indirect
+	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.48.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/onsi/ginkgo/v2 v2.20.2 // indirect
+	github.com/onsi/ginkgo/v2 v2.21.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.47.0 // indirect
+	github.com/quic-go/quic-go v0.48.1 // indirect
 	github.com/refraction-networking/utls v1.6.7 // indirect
-	go.uber.org/mock v0.4.0 // indirect
+	go.uber.org/mock v0.5.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
 	golang.org/x/mod v0.21.0 // indirect
