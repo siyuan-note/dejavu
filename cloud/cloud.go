@@ -83,6 +83,9 @@ type Cloud interface {
 	// UploadObject 用于上传对象，overwrite 参数用于指示是否覆盖已有对象。
 	UploadObject(filePath string, overwrite bool) (length int64, err error)
 
+	// UploadBytes 用于上传对象数据 data，overwrite 参数用于指示是否覆盖已有对象。
+	UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error)
+
 	// DownloadObject 用于下载对象数据 data。
 	DownloadObject(filePath string) (data []byte, err error)
 
@@ -203,6 +206,11 @@ func (baseCloud *BaseCloud) GetRepos() (repos []*Repo, size int64, err error) {
 }
 
 func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (err error) {
+	err = ErrUnsupported
+	return
+}
+
+func (baseCloud *BaseCloud) UploadBytes(filePath string, data []byte, overwrite bool) (err error) {
 	err = ErrUnsupported
 	return
 }

@@ -17,6 +17,7 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"math"
@@ -86,6 +87,27 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 		Key:          aws.String(key),
 		CacheControl: aws.String("no-cache"),
 		Body:         file,
+	})
+	if nil != err {
+		return
+	}
+
+	logging.LogInfof("uploaded object [%s]", key)
+	return
+}
+
+func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
+	length = int64(len(data))
+	svc := s3.getService()
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	defer cancelFn()
+
+	key := path.Join("repo", filePath)
+	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
+		Bucket:       aws.String(s3.Conf.S3.Bucket),
+		Key:          aws.String(key),
+		CacheControl: aws.String("no-cache"),
+		Body:         bytes.NewReader(data),
 	})
 	if nil != err {
 		return

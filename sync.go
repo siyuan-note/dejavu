@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -542,8 +543,8 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 		// 确认上传 refs/latest 成功，因为路径不变，存储可能会有缓存，导致后续下载 refs/latest 时返回的是旧数据
 		// Data synchronization accidentally deletes local files https://github.com/siyuan-note/siyuan/issues/9631
 		confirmed := false
-		for i := 0; i < 32; i++ {
-			time.Sleep(256 * time.Millisecond)
+		for i := 0; i < 16; i++ {
+			time.Sleep(512 * time.Millisecond)
 			downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
 			if nil != downloadErr {
 				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed: %s", i, downloadErr)
@@ -567,7 +568,7 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 					return
 				}
 
-				latestData, length, uploadErr = repo.updateCloudRef("refs/latest", context)
+				latestData, _, uploadErr = repo.updateCloudRef("refs/latest", context)
 				if nil != uploadErr {
 					logging.LogWarnf("fix [%d] uploaded cloud [refs/latest, %s] failed: %s", i, latestData, uploadErr)
 				} else {
@@ -589,6 +590,48 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 			return
 		}
 	}()
+
+	isS3OrSiYuan := true
+	switch repo.cloud.(type) {
+	case *cloud.S3, *cloud.SiYuan:
+		isS3OrSiYuan = true
+	default:
+		isS3OrSiYuan = false
+	}
+
+	if isS3OrSiYuan {
+		// 上传最新索引列表 https://github.com/siyuan-note/siyuan/issues/12991
+		// 上传 refs/latest 后可能存在缓存导致后续下载 refs/latest 时返回的是旧数据（虽然上传 refs/latest 时已经通过下载确认是最新的，
+		// 但是还是可能会在后续几秒的同步时下载到旧的 latest），所以这里还需要再上传 refs/latest-seqNum，
+		// 后续下载 latest 时使用 list 接口返回前缀为 refs/latest- 的对象，然后取最新的一个和下载到的 latest 对比，
+		// 如果不一致则重现下载 refs/latest 进行确认，具体细节参考 downloadCloudLatest()
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+
+			_, maxSeqNum, seqNumLatests := repo.getSeqNumLatest()
+			seqNum := maxSeqNum + 1
+			_, uploadErr := repo.cloud.UploadBytes("refs/latest-"+strconv.Itoa(seqNum)+"-"+latest.ID, []byte(latest.ID), true)
+			if nil != uploadErr {
+				logging.LogErrorf("update cloud [refs/latest-%d] failed: %s", seqNum, uploadErr)
+				errLock.Lock()
+				errs = append(errs, uploadErr)
+				errLock.Unlock()
+				return
+			}
+
+			// 删除旧的 refs/latest-*
+			go func() {
+				for _, seqNumLatest := range seqNumLatests {
+					deleteErr := repo.cloud.RemoveObject(seqNumLatest)
+					if nil != deleteErr {
+						logging.LogWarnf("delete cloud [%s] failed: %s", seqNumLatest, deleteErr)
+						continue
+					}
+				}
+			}()
+		}()
+	}
 
 	// 更新云端索引列表
 	waitGroup.Add(1)
@@ -1536,7 +1579,7 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
 	index = &entity.Index{}
 
-	key := path.Join("refs", "latest?r="+gulu.Rand.String(7))
+	key := path.Join("refs", "latest")
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
@@ -1557,28 +1600,89 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		return
 	}
 
-	key = path.Join("indexes", latestID)
-	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, latestID)
-	data, err = repo.downloadCloudObject(key)
-	if nil != err {
-		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
-			logging.LogWarnf("not found cloud latest index [%s]", latestID)
-			err = nil
-			return
+	downloadBytes, index, err = repo.downloadCloudIndex(latestID, context)
+
+	isS3OrSiYuan := true
+	switch repo.cloud.(type) {
+	case *cloud.S3, *cloud.SiYuan:
+		isS3OrSiYuan = true
+	default:
+		isS3OrSiYuan = false
+	}
+
+	if isS3OrSiYuan {
+		// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
+		seqNumLatestID, _, _ := repo.getSeqNumLatest()
+		confirmed := false
+		if "" != seqNumLatestID && latestID != seqNumLatestID {
+			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
+			for i := 0; i < 16; i++ {
+				time.Sleep(512 * time.Millisecond)
+				downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
+				if nil != downloadErr {
+					logging.LogWarnf("confirm [%d] downloaded cloud [refs/latest] failed: %s", i, downloadErr)
+					continue
+				}
+				tmpLatestID := strings.TrimSpace(string(downloadedData))
+				seqNumLatestID, _, _ = repo.getSeqNumLatest()
+				if tmpLatestID != seqNumLatestID {
+					logging.LogWarnf("confirm [%d] downloaded cloud [refs/latest] failed [latest=%s, seqNumLatest=%s]", i, latestID, seqNumLatestID)
+					continue
+				}
+				confirmed = true
+				if 0 < i {
+					logging.LogInfof("confirmed [%d] downloaded cloud [refs/latest]", i)
+				}
+				break
+			}
+
+			if !confirmed {
+				// 无法确认时下载索引对象，以时间较新的为准
+				_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
+				if nil != downloadErr {
+					logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
+				} else {
+					if seqNumLatest.Created > index.Created {
+						index = seqNumLatest
+						logging.LogWarnf("use seq num latest [%s] instead of cloud latest [%s]", seqNumLatest, index)
+					} else {
+						logging.LogWarnf("still use cloud latest [%s] rather than seq num latest [%s]", index, seqNumLatest)
+					}
+				}
+			}
 		}
-
-		logging.LogErrorf("download cloud latest index [%s] failed: %s", latestID, err)
-		return
 	}
-
-	err = gulu.JSON.UnmarshalJSON(data, index)
-	if nil != err {
-		logging.LogErrorf("unmarshal cloud latest index [%s] failed: %s", latestID, err)
-		return
-	}
-	downloadBytes += int64(len(data))
 
 	logging.LogInfof("got cloud latest [%s]", index.String())
+	return
+}
+
+func (repo *Repo) getSeqNumLatest() (id string, maxSeqNum int, seqNumLatests []string) {
+	refs, listErr := repo.cloud.ListObjects("refs/")
+	if nil != listErr {
+		logging.LogErrorf("list refs failed: %s", listErr)
+		return
+	}
+	for _, ref := range refs {
+		if !strings.HasPrefix(ref.Path, "latest-") {
+			continue
+		}
+
+		p := strings.TrimPrefix(ref.Path, "latest-")
+		parts := strings.Split(p, "-")
+		if 2 > len(parts) {
+			repo.cloud.RemoveObject("refs/" + ref.Path)
+			continue
+		}
+
+		seqNum, _ := strconv.Atoi(parts[0])
+		if seqNum > maxSeqNum {
+			maxSeqNum = seqNum
+			id = parts[1]
+		}
+
+		seqNumLatests = append(seqNumLatests, "refs/"+ref.Path)
+	}
 	return
 }
 

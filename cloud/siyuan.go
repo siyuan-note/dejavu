@@ -17,6 +17,7 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -79,7 +80,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 			return
 		}
 
-		logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
 		if e, ok := err.(*client.ErrorInfo); ok {
 			if 614 == e.Code || strings.Contains(e.Err, "file exists") {
 				err = nil
@@ -96,7 +97,64 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 				return
 			}
 
-			logging.LogErrorf("upload object [%s] failed: %s", absFilePath, err)
+			logging.LogErrorf("upload object [%s] failed: %s", key, err)
+			if e, ok := err.(*client.ErrorInfo); ok {
+				if 614 == e.Code || strings.Contains(e.Err, "file exists") {
+					err = nil
+					return
+				}
+
+				logging.LogErrorf("error detail: %s", e.ErrorDetail())
+			}
+		}
+		return
+	}
+
+	logging.LogInfof("uploaded object [%s]", key)
+	return
+}
+
+func (siyuan *SiYuan) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
+	length = int64(len(data))
+
+	key := path.Join("siyuan", siyuan.Conf.UserID, "repo", siyuan.Conf.Dir, filePath)
+	keyUploadToken, scopeUploadToken, err := siyuan.requestScopeKeyUploadToken(key, overwrite)
+	if nil != err {
+		return
+	}
+
+	uploadToken := keyUploadToken
+	if !overwrite {
+		uploadToken = scopeUploadToken
+	}
+
+	formUploader := storage.NewFormUploader(&storage.Config{UseHTTPS: true})
+	ret := storage.PutRet{}
+	err = formUploader.Put(context.Background(), &ret, uploadToken, key, bytes.NewReader(data), length, &storage.PutExtra{})
+	if nil != err {
+		if msg := fmt.Sprintf("%s", err); strings.Contains(msg, "file exists") {
+			err = nil
+			return
+		}
+
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
+		if e, ok := err.(*client.ErrorInfo); ok {
+			if 614 == e.Code || strings.Contains(e.Err, "file exists") {
+				err = nil
+				return
+			}
+			logging.LogErrorf("error detail: %s", e.ErrorDetail())
+		}
+
+		time.Sleep(1 * time.Second)
+		err = formUploader.Put(context.Background(), &ret, uploadToken, key, bytes.NewReader(data), length, &storage.PutExtra{})
+		if nil != err {
+			if msg := fmt.Sprintf("%s", err); strings.Contains(msg, "file exists") {
+				err = nil
+				return
+			}
+
+			logging.LogErrorf("upload object [%s] failed: %s", key, err)
 			if e, ok := err.(*client.ErrorInfo); ok {
 				if 614 == e.Code || strings.Contains(e.Err, "file exists") {
 					err = nil
@@ -171,6 +229,57 @@ func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 	}
 
 	logging.LogInfof("removed object [%s]", key)
+	return
+}
+
+func (siyuan *SiYuan) ListObjects(pathPrefix string) (objInfos map[string]*entity.ObjectInfo, err error) {
+	objInfos = map[string]*entity.ObjectInfo{}
+
+	token := siyuan.Conf.Token
+	dir := siyuan.Conf.Dir
+	userId := siyuan.Conf.UserID
+	server := siyuan.Conf.Server
+
+	result := gulu.Ret.NewResult()
+	request := httpclient.NewCloudRequest30s()
+	resp, err := request.
+		SetSuccessResult(&result).
+		SetBody(map[string]string{"repo": dir, "token": token, "pathPrefix": pathPrefix}).
+		Post(server + "/apis/siyuan/dejavu/listRepoObjects?uid=" + userId)
+	if nil != err {
+		err = fmt.Errorf("list cloud repo objects failed: %s", err)
+		return
+	}
+
+	if 200 != resp.StatusCode {
+		if 401 == resp.StatusCode {
+			err = ErrCloudAuthFailed
+			return
+		}
+		err = fmt.Errorf("list cloud repo objects failed [%d]", resp.StatusCode)
+		return
+	}
+
+	if 0 != result.Code {
+		err = fmt.Errorf("list cloud repo objects failed: %s", result.Msg)
+		return
+	}
+
+	retData := result.Data.(map[string]interface{})
+	retObjects := retData["objects"].([]interface{})
+	for _, retObj := range retObjects {
+		data, marshalErr := gulu.JSON.MarshalJSON(retObj)
+		if nil != marshalErr {
+			logging.LogErrorf("marshal obj failed: %s", marshalErr)
+			continue
+		}
+		obj := &entity.ObjectInfo{}
+		if unmarshalErr := gulu.JSON.UnmarshalJSON(data, obj); nil != unmarshalErr {
+			logging.LogErrorf("unmarshal obj failed: %s", unmarshalErr)
+			continue
+		}
+		objInfos[obj.Path] = obj
+	}
 	return
 }
 
