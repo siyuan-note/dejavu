@@ -591,14 +591,7 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 		}
 	}()
 
-	isS3OrSiYuan := true
-	switch repo.cloud.(type) {
-	case *cloud.S3, *cloud.SiYuan:
-		isS3OrSiYuan = true
-	default:
-		isS3OrSiYuan = false
-	}
-
+	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
 	if isS3OrSiYuan {
 		// 上传最新索引列表 https://github.com/siyuan-note/siyuan/issues/12991
 		// 上传 refs/latest 后可能存在缓存导致后续下载 refs/latest 时返回的是旧数据（虽然上传 refs/latest 时已经通过下载确认是最新的，
@@ -1602,14 +1595,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 
 	downloadBytes, index, err = repo.downloadCloudIndex(latestID, context)
 
-	isS3OrSiYuan := true
-	switch repo.cloud.(type) {
-	case *cloud.S3, *cloud.SiYuan:
-		isS3OrSiYuan = true
-	default:
-		isS3OrSiYuan = false
-	}
-
+	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
 	if isS3OrSiYuan {
 		// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
 		seqNumLatestID, _, _ := repo.getSeqNumLatest()

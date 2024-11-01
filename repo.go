@@ -1119,6 +1119,44 @@ func isNoSuchFileOrDirErr(err error) bool {
 	if nil == err {
 		return false
 	}
-
 	return os.IsNotExist(err) || strings.Contains(err.Error(), "no such file or directory")
+}
+
+func (repo *Repo) isCloudS3() bool {
+	if nil == repo.cloud {
+		return false
+	}
+
+	switch repo.cloud.(type) {
+	case *cloud.S3:
+		return true
+	default:
+		return false
+	}
+}
+
+func (repo *Repo) isCloudWebDAV() bool {
+	if nil == repo.cloud {
+		return false
+	}
+
+	switch repo.cloud.(type) {
+	case *cloud.WebDAV:
+		return true
+	default:
+		return false
+	}
+}
+
+func (repo *Repo) isCloudSiYuan() bool {
+	if nil == repo.cloud {
+		return false
+	}
+
+	switch repo.cloud.(type) {
+	case *cloud.SiYuan:
+		return true
+	default:
+		return false
+	}
 }
