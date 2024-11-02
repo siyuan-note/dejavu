@@ -595,7 +595,7 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 	if isS3OrSiYuan {
 		// 上传最新索引列表 https://github.com/siyuan-note/siyuan/issues/12991
 		// 上传 refs/latest 后可能存在缓存导致后续下载 refs/latest 时返回的是旧数据（虽然上传 refs/latest 时已经通过下载确认是最新的，
-		// 但是还是可能会在后续几秒的同步时下载到旧的 latest），所以这里还需要再上传 refs/latest-seqNum，
+		// 但是还是可能会在后续几秒的同步时下载到旧的 latest），所以这里还需要再上传 refs/latest-seqNum-id，
 		// 后续下载 latest 时使用 list 接口返回前缀为 refs/latest- 的对象，然后取最新的一个和下载到的 latest 对比，
 		// 如果不一致则重现下载 refs/latest 进行确认，具体细节参考 downloadCloudLatest()
 		waitGroup.Add(1)
@@ -939,6 +939,7 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (da
 
 	length, err := repo.cloud.UploadObject(ref, true)
 	uploadBytes += length
+	logging.LogInfof("uploaded cloud ref [%s, id=%s]", ref, data)
 	return
 }
 
@@ -1594,15 +1595,15 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	}
 
 	downloadBytes, index, err = repo.downloadCloudIndex(latestID, context)
-
+	isSameDevice := index.SystemID == repo.DeviceID
 	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
-	if isS3OrSiYuan {
+	if !isSameDevice && isS3OrSiYuan {
 		// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
 		seqNumLatestID, _, _ := repo.getSeqNumLatest()
 		confirmed := false
 		if "" != seqNumLatestID && latestID != seqNumLatestID {
 			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
-			for i := 0; i < 16; i++ {
+			for i := 0; i < 7; i++ {
 				time.Sleep(512 * time.Millisecond)
 				downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
 				if nil != downloadErr {
@@ -1623,7 +1624,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 			}
 
 			if !confirmed {
-				// 无法确认时下载索引对象，以时间较新的为准
+				// 无法确认时以时间较新的为准
 				_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
 				if nil != downloadErr {
 					logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
