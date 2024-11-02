@@ -1600,41 +1600,18 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	if !isSameDevice && isS3OrSiYuan {
 		// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
 		seqNumLatestID, _, _ := repo.getSeqNumLatest()
-		confirmed := false
 		if "" != seqNumLatestID && latestID != seqNumLatestID {
 			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
-			for i := 0; i < 3; i++ {
-				time.Sleep(1 * time.Second)
-				downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
-				if nil != downloadErr {
-					logging.LogWarnf("confirm [%d] downloaded cloud [refs/latest] failed: %s", i, downloadErr)
-					continue
-				}
-				tmpLatestID := strings.TrimSpace(string(downloadedData))
-				seqNumLatestID, _, _ = repo.getSeqNumLatest()
-				if tmpLatestID != seqNumLatestID {
-					logging.LogWarnf("confirm [%d] downloaded cloud [refs/latest] failed [latest=%s, seqNumLatest=%s]", i, latestID, seqNumLatestID)
-					continue
-				}
-				confirmed = true
-				if 0 < i {
-					logging.LogInfof("confirmed [%d] downloaded cloud [refs/latest]", i)
-				}
-				break
-			}
-
-			if !confirmed {
-				// 无法确认时以时间较新的为准
-				_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
-				if nil != downloadErr {
-					logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
+			// 以时间较新的为准
+			_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
+			if nil != downloadErr {
+				logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
+			} else {
+				if seqNumLatest.Created > index.Created {
+					index = seqNumLatest
+					logging.LogWarnf("use seq num latest [%s] instead of cloud latest [%s]", seqNumLatest, index)
 				} else {
-					if seqNumLatest.Created > index.Created {
-						index = seqNumLatest
-						logging.LogWarnf("use seq num latest [%s] instead of cloud latest [%s]", seqNumLatest, index)
-					} else {
-						logging.LogWarnf("still use cloud latest [%s] rather than seq num latest [%s]", index, seqNumLatest)
-					}
+					logging.LogWarnf("still use cloud latest [%s] rather than seq num latest [%s]", index, seqNumLatest)
 				}
 			}
 		}
