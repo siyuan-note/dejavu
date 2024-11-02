@@ -1603,7 +1603,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		confirmed := false
 		if "" != seqNumLatestID && latestID != seqNumLatestID {
 			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
-			for i := 0; i < 7; i++ {
+			for i := 0; i < 3; i++ {
 				time.Sleep(512 * time.Millisecond)
 				downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
 				if nil != downloadErr {
