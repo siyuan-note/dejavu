@@ -1604,7 +1604,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		if "" != seqNumLatestID && latestID != seqNumLatestID {
 			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
 			for i := 0; i < 3; i++ {
-				time.Sleep(512 * time.Millisecond)
+				time.Sleep(1 * time.Second)
 				downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
 				if nil != downloadErr {
 					logging.LogWarnf("confirm [%d] downloaded cloud [refs/latest] failed: %s", i, downloadErr)
