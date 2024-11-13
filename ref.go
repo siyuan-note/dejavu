@@ -47,7 +47,7 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 		logging.LogErrorf("get latest index [%s] failed: %s", hash, err)
 		return
 	}
-	logging.LogInfof("got local latest [%s]", ret.String())
+	//logging.LogInfof("got local latest [%s]", ret.String())
 	return
 }
 

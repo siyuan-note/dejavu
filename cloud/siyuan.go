@@ -110,7 +110,7 @@ func (siyuan *SiYuan) UploadObject(filePath string, overwrite bool) (length int6
 		return
 	}
 
-	logging.LogInfof("uploaded object [%s]", key)
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -167,7 +167,7 @@ func (siyuan *SiYuan) UploadBytes(filePath string, data []byte, overwrite bool) 
 		return
 	}
 
-	logging.LogInfof("uploaded object [%s]", key)
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -193,7 +193,7 @@ func (siyuan *SiYuan) DownloadObject(filePath string) (ret []byte, err error) {
 		return
 	}
 
-	logging.LogInfof("downloaded object [%s]", key)
+	//logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -228,7 +228,7 @@ func (siyuan *SiYuan) RemoveObject(filePath string) (err error) {
 		return
 	}
 
-	logging.LogInfof("removed object [%s]", key)
+	//logging.LogInfof("removed object [%s]", key)
 	return
 }
 

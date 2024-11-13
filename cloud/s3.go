@@ -92,7 +92,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 		return
 	}
 
-	logging.LogInfof("uploaded object [%s]", key)
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -113,7 +113,7 @@ func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length 
 		return
 	}
 
-	logging.LogInfof("uploaded object [%s]", key)
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -140,7 +140,7 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 		return
 	}
 
-	logging.LogInfof("downloaded object [%s]", key)
+	//logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -157,7 +157,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 		return
 	}
 
-	logging.LogInfof("removed object [%s]", key)
+	//logging.LogInfof("removed object [%s]", key)
 	return
 }
 
@@ -272,7 +272,7 @@ func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 }
 
 func (s3 *S3) GetIndex(id string) (index *entity.Index, err error) {
-	index, err = s3.repoIndex(id)
+	//index, err = s3.repoIndex(id)
 	if nil != err {
 		logging.LogErrorf("get index [%s] failed: %s", id, err)
 		return

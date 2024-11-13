@@ -243,7 +243,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	logging.LogInfof("got latest sync [%s] files [%d]", latestSync.ID, len(latestSyncFiles))
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
@@ -1207,7 +1206,7 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		}
 		uploadBytes += length
 		uploadedCount.Add(1)
-		logging.LogInfof("uploaded file [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
+		//logging.LogInfof("uploaded file [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
 	})
 	if nil != err {
 		return
@@ -1261,7 +1260,7 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		}
 		uploadBytes += length
 		uploadedCount.Add(1)
-		logging.LogInfof("uploaded chunk [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
+		//logging.LogInfof("uploaded chunk [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
 	})
 	if nil != err {
 		return
@@ -1325,8 +1324,8 @@ func (repo *Repo) getChunks(files []*entity.File) (chunkIDs []string) {
 func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs []string) (ret []string, err error) {
 	chunks := map[string]bool{}
 	for _, file := range localFiles {
-		logging.LogInfof("upsert file [%s, %s, %s] chunk [%s]",
-			file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), strings.Join(file.Chunks, ","))
+		//logging.LogInfof("upsert file [%s, %s, %s] chunk [%s]",
+		//	file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), strings.Join(file.Chunks, ","))
 		for _, chunkID := range file.Chunks {
 			chunks[chunkID] = true
 		}
@@ -1340,9 +1339,9 @@ func (repo *Repo) localUpsertChunkIDs(localFiles []*entity.File, cloudChunkIDs [
 		ret = append(ret, chunkID)
 	}
 
-	for _, c := range ret {
-		logging.LogInfof("upsert chunk [%s]", c)
-	}
+	//for _, c := range ret {
+	//	logging.LogInfof("upsert chunk [%s]", c)
+	//}
 	return
 }
 

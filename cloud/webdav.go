@@ -82,7 +82,7 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 		logging.LogErrorf("upload object [%s] failed: %s", key, err)
 		return
 	}
-	logging.LogInfof("uploaded object [%s]", key)
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -101,7 +101,7 @@ func (webdav *WebDAV) UploadBytes(filePath string, data []byte, overwrite bool) 
 		logging.LogErrorf("upload object [%s] failed: %s", key, err)
 		return
 	}
-	logging.LogInfof("uploaded object [%s]", key)
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
@@ -113,7 +113,7 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 		return
 	}
 
-	logging.LogInfof("downloaded object [%s]", key)
+	//logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
@@ -125,7 +125,7 @@ func (webdav *WebDAV) RemoveObject(filePath string) (err error) {
 		return
 	}
 
-	logging.LogInfof("removed object [%s]", key)
+	//logging.LogInfof("removed object [%s]", key)
 	return
 }
 
