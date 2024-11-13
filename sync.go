@@ -189,29 +189,46 @@ func (repo *Repo) sync0(context map[string]interface{},
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
 
-	// 计算本地缺失的分块
-	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
-	if nil != err {
-		logging.LogErrorf("get local not found chunks failed: %s", err)
-		return
-	}
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+	var errs []error
+	go func() { // 从云端下载缺失分块并入库
+		defer waitGroup.Done()
 
-	// 上传数据
-	err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
-	if nil != err {
-		logging.LogErrorf("upload cloud failed: %s", err)
-		return
-	}
+		fetchChunkIDs, downloadErr := repo.localNotFoundChunks(cloudChunkIDs)
+		if nil != downloadErr {
+			logging.LogErrorf("get local not found chunks failed: %s", downloadErr)
+			errs = append(errs, downloadErr)
+			return
+		}
 
-	// 从云端下载缺失分块并入库
-	length, err := repo.downloadCloudChunksPut(fetchChunkIDs, context)
-	if nil != err {
-		logging.LogErrorf("download cloud chunks put failed: %s", err)
+		length, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
+		if nil != downloadErr {
+			logging.LogErrorf("download cloud chunks put failed: %s", downloadErr)
+			errs = append(errs, downloadErr)
+			return
+		}
+		trafficStat.DownloadBytes += length
+		trafficStat.DownloadChunkCount += len(fetchChunkIDs)
+		trafficStat.APIGet += trafficStat.DownloadChunkCount
+	}()
+
+	waitGroup.Add(1)
+	go func() { // 上传差异数据
+		defer waitGroup.Done()
+
+		uploadErr := repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
+		if nil != uploadErr {
+			logging.LogErrorf("upload cloud failed: %s", uploadErr)
+			errs = append(errs, uploadErr)
+			return
+		}
+	}()
+	waitGroup.Wait()
+	if 0 < len(errs) {
+		err = errs[0]
 		return
 	}
-	trafficStat.DownloadBytes += length
-	trafficStat.DownloadChunkCount += len(fetchChunkIDs)
-	trafficStat.APIGet += trafficStat.DownloadChunkCount
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -251,6 +268,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 
 	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
 	localUpserts = repo.filterLocalUpserts(localUpserts, cloudUpserts)
+	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
 
 	// 记录本地 syncignore 变更
 	var localUpsertIgnore *entity.File
@@ -369,79 +387,22 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 	}
 
-	// 数据变更后需要还原工作区并创建 merge 快照
-	if 0 < len(mergeResult.Upserts) || 0 < len(mergeResult.Removes) {
-		if 0 < len(mergeResult.Upserts) {
-			// 迁出到工作区
-			err = repo.checkoutFiles(mergeResult.Upserts, context)
-			if nil != err {
-				logging.LogErrorf("checkout files failed: %s", err)
-				return
-			}
-		}
-
-		if 0 < len(mergeResult.Removes) {
-			// 删除工作区文件
-			err = repo.removeFiles(mergeResult.Removes, context)
-			if nil != err {
-				logging.LogErrorf("remove files failed: %s", err)
-				return
-			}
-		}
-
-		// 创建 merge 快照
-		logging.LogInfof("creating merge index [%s]", latest.ID)
-		mergeStart := time.Now()
-		mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", context)
-		if nil != mergeIndexErr {
-			logging.LogErrorf("merge index failed: %s", mergeIndexErr)
-			err = mergeIndexErr
-			return
-		}
-
-		diff, mergeIndexErr := repo.diffIndex(mergedLatest, latest)
-		if nil != mergeIndexErr {
-			logging.LogErrorf("diff index failed: %s", mergeIndexErr)
-			err = mergeIndexErr
-			return
-		}
-		for _, add := range diff.AddsLeft {
-			logging.LogInfof("merge index add [%s, %s, %s]", add.ID, add.Path, time.UnixMilli(add.Updated).Format("2006-01-02 15:04:05"))
-		}
-		for _, update := range diff.UpdatesLeft {
-			logging.LogInfof("merge index update [%s, %s, %s]", update.ID, update.Path, time.UnixMilli(update.Updated).Format("2006-01-02 15:04:05"))
-		}
-
-		latest = mergedLatest
-		mergeElapsed := time.Since(mergeStart)
-		mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
-		latest.Memo = mergeMemo
-		err = repo.store.PutIndex(latest)
-		if nil != err {
-			logging.LogErrorf("put merge index failed: %s", err)
-			return
-		}
-		logging.LogInfof("created merge index [%s]", latest.ID)
-
-		// 索引后的 upserts 需要上传到云端
-		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
-		if nil != err {
-			logging.LogErrorf("upload cloud failed: %s", err)
-			return
-		}
-	}
-
-	// 更新云端索引信息
-	err = repo.updateCloudIndexes(latest, cloudLatest, trafficStat, context)
+	// 数据变更后还原工作区
+	err = repo.checkoutFiles(mergeResult.Upserts, context)
 	if nil != err {
-		logging.LogErrorf("update cloud indexes failed: %s", err)
+		logging.LogErrorf("checkout files failed: %s", err)
+		return
+	}
+	err = repo.removeFiles(mergeResult.Removes, context)
+	if nil != err {
+		logging.LogErrorf("remove files failed: %s", err)
 		return
 	}
 
-	// 更新本地同步点
-	err = repo.UpdateLatestSync(latest)
+	// 处理合并
+	err = repo.mergeSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context)
 	if nil != err {
-		logging.LogErrorf("update latest sync failed: %s", err)
+		logging.LogErrorf("merge sync failed: %s", err)
 		return
 	}
 
@@ -458,7 +419,94 @@ func (repo *Repo) sync0(context map[string]interface{},
 	return
 }
 
-func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+	// 数据变更后还原工作区
+	err = repo.checkoutFiles(mergeResult.Upserts, context)
+	if nil != err {
+		logging.LogErrorf("checkout files failed: %s", err)
+		return
+	}
+	err = repo.removeFiles(mergeResult.Removes, context)
+	if nil != err {
+		logging.LogErrorf("remove files failed: %s", err)
+		return
+	}
+
+	if mergeResult.DataChanged() {
+		if localChanged { // 如果云端和本地都改变了，则需要创建合并索引并再次同步
+			logging.LogInfof("creating merge index [%s]", latest.ID)
+			mergeStart := time.Now()
+			mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", context)
+			if nil != mergeIndexErr {
+				logging.LogErrorf("merge index failed: %s", mergeIndexErr)
+				err = mergeIndexErr
+				return
+			}
+
+			diff, mergeIndexErr := repo.diffIndex(mergedLatest, latest)
+			if nil != mergeIndexErr {
+				logging.LogErrorf("diff index failed: %s", mergeIndexErr)
+				err = mergeIndexErr
+				return
+			}
+			for _, add := range diff.AddsLeft {
+				logging.LogInfof("merge index add [%s, %s, %s]", add.ID, add.Path, time.UnixMilli(add.Updated).Format("2006-01-02 15:04:05"))
+			}
+			for _, update := range diff.UpdatesLeft {
+				logging.LogInfof("merge index update [%s, %s, %s]", update.ID, update.Path, time.UnixMilli(update.Updated).Format("2006-01-02 15:04:05"))
+			}
+
+			latest = mergedLatest
+			mergeElapsed := time.Since(mergeStart)
+			mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
+			latest.Memo = mergeMemo
+			err = repo.store.PutIndex(latest)
+			if nil != err {
+				logging.LogErrorf("put merge index failed: %s", err)
+				return
+			}
+			logging.LogInfof("created merge index [%s]", latest.ID)
+
+			if needSyncCloud {
+				err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
+				if nil != err {
+					logging.LogErrorf("upload cloud failed: %s", err)
+					return
+				}
+			}
+		} else { // 只有云端改变了，本地没有改变，则直接使用云端索引作为本地最新索引
+			latest = cloudLatest
+		}
+	}
+
+	if localChanged && needSyncCloud {
+		err = repo.updateCloudIndexes(latest, trafficStat, context)
+		if nil != err {
+			logging.LogErrorf("update cloud indexes failed: %s", err)
+			return
+		}
+	}
+
+	// 更新本地最新索引
+	if err = repo.UpdateLatest(latest); nil != err {
+		logging.LogErrorf("update latest failed: %s", err)
+		return
+	}
+	if err = repo.store.PutIndex(latest); nil != err {
+		logging.LogErrorf("put index failed: %s", err)
+		return
+	}
+
+	// 更新本地同步点
+	err = repo.UpdateLatestSync(latest)
+	if nil != err {
+		logging.LogErrorf("update latest sync failed: %s", err)
+		return
+	}
+	return
+}
+
+func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
 	// 生成校验索引
 	files, getErr := repo.getFiles(latest.Files)
 	if nil != getErr {
@@ -490,24 +538,6 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 	go func() {
 		defer waitGroup.Done()
 
-		// 再下载一次云端 latest ref，然后和同步开始时下载的 latest ID 对比，如果不一致说明云端已经有更新的 latest，此时放弃本次同步，避免造成错误覆盖
-		// Improve data sync to prevent an old snapshot to overwrite the new one https://github.com/siyuan-note/siyuan/issues/9949
-		latestRef, downloadErr := repo.downloadCloudObject("refs/latest")
-		if nil == downloadErr {
-			if cloudLatest.ID != string(latestRef) {
-				logging.LogWarnf("cloud latest changed [old=%s, new=%s]", cloudLatest.ID, latestRef)
-				errLock.Lock()
-				errs = append(errs, cloud.ErrCloudIndexChanged)
-				errLock.Unlock()
-				return
-			}
-		}
-		trafficStat.m.Lock()
-		trafficStat.DownloadFileCount++
-		trafficStat.DownloadBytes += int64(len(latestRef))
-		trafficStat.APIGet++
-		trafficStat.m.Unlock()
-
 		// 上传索引和更新 refs/latest 两个操作需要保证顺序，否则可能会导致云端索引 和 refs/latest 不一致 https://github.com/siyuan-note/siyuan/issues/10111
 
 		// 上传索引
@@ -526,7 +556,7 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 		trafficStat.m.Unlock()
 
 		// 更新 refs/latest
-		latestData, length, uploadErr := repo.updateCloudRef("refs/latest", context)
+		length, uploadErr = repo.updateCloudRef("refs/latest", context)
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
 			errLock.Lock()
@@ -539,63 +569,12 @@ func (repo *Repo) updateCloudIndexes(latest, cloudLatest *entity.Index, trafficS
 		trafficStat.UploadBytes += length
 		trafficStat.APIPut++
 		trafficStat.m.Unlock()
-
-		// 确认上传 refs/latest 成功，因为路径不变，存储可能会有缓存，导致后续下载 refs/latest 时返回的是旧数据
-		// Data synchronization accidentally deletes local files https://github.com/siyuan-note/siyuan/issues/9631
-		confirmed := false
-		for i := 0; i < 16; i++ {
-			time.Sleep(512 * time.Millisecond)
-			downloadedData, downloadErr := repo.downloadCloudObject("refs/latest")
-			if nil != downloadErr {
-				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed: %s", i, downloadErr)
-				continue
-			}
-			if !bytes.Equal(latestData, downloadedData) {
-				logging.LogWarnf("confirm [%d] uploaded cloud [refs/latest] failed [local=%s, downloaded=%s]", i, latestData, downloadedData)
-
-				// 如果是不同设备上传的，则判定为数据已经改变 https://github.com/siyuan-note/siyuan/issues/10229
-				_, latestCloudIndex, downloadIdxErr := repo.downloadCloudIndex(string(downloadedData), context)
-				if nil != downloadIdxErr {
-					logging.LogWarnf("download [refs/latest] failed: %s", downloadIdxErr)
-					continue
-				}
-
-				if nil != latestCloudIndex && latestCloudIndex.SystemID != latest.SystemID {
-					logging.LogWarnf("cloud latest changed, current [%s], cloud [%s]", latest.String(), latestCloudIndex.String())
-					errLock.Lock()
-					errs = append(errs, cloud.ErrCloudIndexChanged)
-					errLock.Unlock()
-					return
-				}
-
-				latestData, _, uploadErr = repo.updateCloudRef("refs/latest", context)
-				if nil != uploadErr {
-					logging.LogWarnf("fix [%d] uploaded cloud [refs/latest, %s] failed: %s", i, latestData, uploadErr)
-				} else {
-					logging.LogWarnf("fix [%d] uploaded cloud [refs/latest, %s]", i, latestData)
-				}
-				continue
-			}
-			confirmed = true
-			if 0 < i {
-				logging.LogInfof("confirmed [%d] uploaded cloud [refs/latest]", i)
-			}
-			break
-		}
-		if !confirmed {
-			logging.LogErrorf("final confirm uploaded cloud [refs/latest] failed")
-			errLock.Lock()
-			errs = append(errs, errors.New("confirm uploaded cloud [refs/latest] failed"))
-			errLock.Unlock()
-			return
-		}
 	}()
 
 	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
 	if isS3OrSiYuan {
 		// 上传最新索引列表 https://github.com/siyuan-note/siyuan/issues/12991
-		// 上传 refs/latest 后可能存在缓存导致后续下载 refs/latest 时返回的是旧数据（虽然上传 refs/latest 时已经通过下载确认是最新的，
-		// 但是还是可能会在后续几秒的同步时下载到旧的 latest），所以这里还需要再上传 refs/latest-seqNum-id，
+		// 上传 refs/latest 后可能存在缓存导致后续下载 refs/latest 时返回的是旧数据，所以这里还需要再上传 refs/latest-seqNum-id，
 		// 后续下载 latest 时使用 list 接口返回前缀为 refs/latest- 的对象，然后取最新的一个和下载到的 latest 对比，
 		// 如果不一致则重现下载 refs/latest 进行确认，具体细节参考 downloadCloudLatest()
 		waitGroup.Add(1)
@@ -906,19 +885,6 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	return
 }
 
-func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
-	total := len(files)
-	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, total)
-	for i, file := range files {
-		absPath := repo.absPath(file.Path)
-		if err = filelock.Remove(absPath); nil != err {
-			return
-		}
-		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, i+1, total)
-	}
-	return
-}
-
 func (repo *Repo) getFile(files []*entity.File, file *entity.File) *entity.File {
 	for _, f := range files {
 		if f.ID == file.ID || f.Path == file.Path {
@@ -928,10 +894,10 @@ func (repo *Repo) getFile(files []*entity.File, file *entity.File) *entity.File 
 	return nil
 }
 
-func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (data []byte, uploadBytes int64, err error) {
+func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, ref)
 	absFilePath := filepath.Join(repo.cloud.GetConf().RepoPath, ref)
-	data, err = os.ReadFile(absFilePath)
+	data, err := os.ReadFile(absFilePath)
 	if nil != err {
 		logging.LogErrorf("read ref [%s] failed: %s", ref, err)
 		return
@@ -1600,7 +1566,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 	if !isSameDevice && isS3OrSiYuan {
 		// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
 		seqNumLatestID, _, _ := repo.getSeqNumLatest()
-		if "" != seqNumLatestID && latestID != seqNumLatestID {
+		if "" != seqNumLatestID && "" != index.ID && latestID != seqNumLatestID {
 			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
 			// 以时间较新的为准
 			_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
@@ -1608,8 +1574,8 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 				logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
 			} else {
 				if seqNumLatest.Created > index.Created {
-					index = seqNumLatest
 					logging.LogWarnf("use seq num latest [%s] instead of cloud latest [%s]", seqNumLatest, index)
+					index = seqNumLatest
 				} else {
 					logging.LogWarnf("still use cloud latest [%s] rather than seq num latest [%s]", index, seqNumLatest)
 				}

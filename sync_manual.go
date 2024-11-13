@@ -18,7 +18,6 @@ package dejavu
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"sync"
 	"time"
@@ -119,7 +118,8 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	localUpserts, _ := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
+	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
+	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	// 在单向同步的情况下该结果可直接作为合并结果
@@ -166,47 +166,10 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		}
 	}
 
-	// 数据变更后需要还原工作区并创建 merge 快照
-	if 0 < len(mergeResult.Upserts) || 0 < len(mergeResult.Removes) {
-		if 0 < len(mergeResult.Upserts) {
-			// 迁出到工作区
-			err = repo.checkoutFiles(mergeResult.Upserts, context)
-			if nil != err {
-				logging.LogErrorf("checkout files failed: %s", err)
-				return
-			}
-		}
-
-		if 0 < len(mergeResult.Removes) {
-			// 删除工作区文件
-			err = repo.removeFiles(mergeResult.Removes, context)
-			if nil != err {
-				logging.LogErrorf("remove files failed: %s", err)
-				return
-			}
-		}
-	}
-
-	// 创建 merge 快照
-	mergeStart := time.Now()
-	latest, err = repo.index("[Sync] Cloud sync merge", context)
+	// 处理合并
+	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context)
 	if nil != err {
-		logging.LogErrorf("merge index failed: %s", err)
-		return
-	}
-	mergeElapsed := time.Since(mergeStart)
-	mergeMemo := fmt.Sprintf("[Sync] Cloud sync merge, completed in %.2fs", mergeElapsed.Seconds())
-	latest.Memo = mergeMemo
-	err = repo.store.PutIndex(latest)
-	if nil != err {
-		logging.LogErrorf("put merge index failed: %s", err)
-		return
-	}
-
-	// 更新本地同步点
-	err = repo.UpdateLatestSync(latest)
-	if nil != err {
-		logging.LogErrorf("update latest sync failed: %s", err)
+		logging.LogErrorf("merge sync failed: %s", err)
 		return
 	}
 
@@ -308,7 +271,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	trafficStat.APIPut += trafficStat.UploadChunkCount
 
 	// 更新云端索引信息
-	err = repo.updateCloudIndexes(latest, cloudLatest, trafficStat, context)
+	err = repo.updateCloudIndexes(latest, trafficStat, context)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return

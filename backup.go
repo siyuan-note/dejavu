@@ -214,7 +214,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	apiPut++
 
 	// 上传标签
-	_, length, err = repo.updateCloudRef("refs/tags/"+tag, context)
+	length, err = repo.updateCloudRef("refs/tags/"+tag, context)
 	uploadFileCount++
 	uploadBytes += length
 	apiPut++

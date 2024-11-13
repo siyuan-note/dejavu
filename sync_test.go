@@ -28,7 +28,7 @@ func TestSync(t *testing.T) {
 	userId := "0"
 	token := ""
 
-	return
+	return // 注释掉不跑
 
 	repo.cloud = &cloud.SiYuan{BaseCloud: &cloud.BaseCloud{Conf: &cloud.Conf{
 		Dir:           "test",

@@ -969,7 +969,28 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 	return
 }
 
+func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	total := len(files)
+	if 1 > total {
+		return
+	}
+
+	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, total)
+	for i, file := range files {
+		absPath := repo.absPath(file.Path)
+		if err = filelock.Remove(absPath); nil != err {
+			return
+		}
+		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, i+1, total)
+	}
+	return
+}
+
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
+	if 1 > len(files) {
+		return
+	}
+
 	//now := time.Now()
 
 	var dotSiYuans, assets, emojis, storage, plugins, widgets, templates, public, others, all []*entity.File
