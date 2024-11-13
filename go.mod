@@ -17,7 +17,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20240724034355-d1ed7bf21d04
-	github.com/siyuan-note/httpclient v0.0.0-20241101092545-63ac2e89a49d
+	github.com/siyuan-note/httpclient v0.0.0-20241113084556-839baaab03f6
 	github.com/siyuan-note/logging v0.0.0-20240505035402-6430d57006a2
 	github.com/studio-b12/gowebdav v0.9.0
 )
@@ -31,7 +31,7 @@ require (
 	github.com/getsentry/sentry-go v0.29.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
-	github.com/google/pprof v0.0.0-20241029153458-d1b30febd7db // indirect
+	github.com/google/pprof v0.0.0-20241101162523-b92577c0c142 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imroc/req/v3 v3.48.0 // indirect
@@ -42,14 +42,14 @@ require (
 	github.com/quic-go/quic-go v0.48.1 // indirect
 	github.com/refraction-networking/utls v1.6.7 // indirect
 	go.uber.org/mock v0.5.0 // indirect
-	golang.org/x/crypto v0.28.0 // indirect
-	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
-	golang.org/x/mod v0.21.0 // indirect
-	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
-	golang.org/x/tools v0.26.0 // indirect
+	golang.org/x/crypto v0.29.0 // indirect
+	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f // indirect
+	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/net v0.31.0 // indirect
+	golang.org/x/sync v0.9.0 // indirect
+	golang.org/x/sys v0.27.0 // indirect
+	golang.org/x/text v0.20.0 // indirect
+	golang.org/x/tools v0.27.0 // indirect
 )
 
 //replace github.com/siyuan-note/filelock => D:\88250\filelock
