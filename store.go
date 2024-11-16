@@ -57,8 +57,8 @@ func NewStore(path string, aesKey []byte) (ret *Store, err error) {
 	return
 }
 
-func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
-	logging.LogInfof("purging data repo [%s]", store.Path)
+func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
+	logging.LogInfof("purging data repo [%s], retention indexes [%d]", store.Path, len(retentionIndexIDs))
 
 	objectsDir := filepath.Join(store.Path, "objects")
 	if !gulu.File.IsDir(objectsDir) {
@@ -72,6 +72,7 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 		return
 	}
 
+	// 收集所有数据对象
 	objIDs := map[string]bool{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -93,6 +94,7 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 		}
 	}
 
+	// 收集所有索引对象
 	indexIDs := map[string]bool{}
 	indexesDir := filepath.Join(store.Path, "indexes")
 	if gulu.File.IsDir(indexesDir) {
@@ -112,12 +114,17 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 		}
 	}
 
+	// 收集所有引用的索引对象
 	refIndexIDs, err := store.readRefs()
 	if nil != err {
 		logging.LogErrorf("read refs failed: %s", err)
 		return
 	}
+	for _, retentionIndexID := range retentionIndexIDs { // 指定保留的索引对象算作被引用
+		refIndexIDs[retentionIndexID] = true
+	}
 
+	// 收集所有引用的索引对象
 	unreferencedIndexIDs := map[string]bool{}
 	for indexID := range indexIDs {
 		if !refIndexIDs[indexID] {
@@ -125,22 +132,21 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 		}
 	}
 
+	// 收集所有引用的数据对象
 	referencedObjIDs := map[string]bool{}
 	for refID := range refIndexIDs {
 		index, getErr := store.GetIndex(refID)
 		if nil != getErr {
-			err = getErr
-			logging.LogErrorf("get index [%s] failed: %s", refID, err)
-			return
+			logging.LogWarnf("get index [%s] failed: %s", refID, getErr)
+			continue
 		}
 
 		for _, fileID := range index.Files {
 			referencedObjIDs[fileID] = true
 			file, getFileErr := store.GetFile(fileID)
 			if nil != getFileErr {
-				err = getFileErr
-				logging.LogErrorf("get file [%s] failed: %s", fileID, err)
-				return
+				logging.LogWarnf("get file [%s] failed: %s", fileID, getFileErr)
+				continue
 			}
 
 			for _, chunkID := range file.Chunks {
@@ -149,41 +155,44 @@ func (store *Store) Purge() (ret *entity.PurgeStat, err error) {
 		}
 	}
 
-	unreferencedIDs := map[string]bool{}
+	// 收集所有未引用的数据对象
+	unreferencedObjIDs := map[string]bool{}
 	for objID := range objIDs {
 		if !referencedObjIDs[objID] {
-			unreferencedIDs[objID] = true
+			unreferencedObjIDs[objID] = true
 		}
 	}
 
 	ret = &entity.PurgeStat{}
 	ret.Indexes = len(unreferencedIndexIDs)
 
-	for unreferencedID := range unreferencedIDs {
-		stat, statErr := store.Stat(unreferencedID)
+	// 清理未引用的数据对象
+	for unreferencedObjID := range unreferencedObjIDs {
+		stat, statErr := store.Stat(unreferencedObjID)
 		if nil != statErr {
-			err = statErr
-			logging.LogErrorf("stat [%s] failed: %s", unreferencedID, err)
-			return
+			logging.LogErrorf("stat [%s] failed: %s", unreferencedObjID, statErr)
+			continue
 		}
 
 		ret.Size += stat.Size()
 		ret.Objects++
 
-		if err = store.Remove(unreferencedID); nil != err {
-			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedID, err)
-			return
-		}
-	}
-	for unreferencedID := range unreferencedIndexIDs {
-		indexPath := filepath.Join(store.Path, "indexes", unreferencedID)
-		if err = os.RemoveAll(indexPath); nil != err {
-			logging.LogErrorf("remove unreferenced index [%s] failed: %s", unreferencedID, err)
+		if err = store.Remove(unreferencedObjID); nil != err {
+			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedObjID, err)
 			return
 		}
 	}
 
-	// 上面清理完索引了，最后再清理校验索引
+	// 清理未引用的索引对象
+	for unreferencedIndexID := range unreferencedIndexIDs {
+		indexPath := filepath.Join(store.Path, "indexes", unreferencedIndexID)
+		if err = os.RemoveAll(indexPath); nil != err {
+			logging.LogErrorf("remove unreferenced index [%s] failed: %s", unreferencedIndexID, err)
+			return
+		}
+	}
+
+	// 清理完索引后最后再清理校验索引
 	// Clear check index when purging data repo https://github.com/siyuan-note/siyuan/issues/9665
 	checkIndexesDir := filepath.Join(store.Path, "check", "indexes")
 	if gulu.File.IsDir(checkIndexesDir) {

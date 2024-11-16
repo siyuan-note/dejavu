@@ -30,7 +30,7 @@ import (
 )
 
 type Log struct {
-	ID          string         `json:"id"`          // Hash
+	ID          string         `json:"id"`          // 索引 ID
 	Memo        string         `json:"memo"`        // 索引备注
 	Created     int64          `json:"created"`     // 索引时间
 	HCreated    string         `json:"hCreated"`    // 索引时间 "2006-01-02 15:04:05"

@@ -133,11 +133,11 @@ func (repo *Repo) Reset() (err error) {
 	return
 }
 
-// Purge 清理所有未引用数据。
-func (repo *Repo) Purge() (ret *entity.PurgeStat, err error) {
+// Purge 清理所有未引用数据，retentionIndexIDs 为保留的索引 ID 列表，如果不传入的话则清理所有未引用数据。
+func (repo *Repo) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
-	return repo.store.Purge()
+	return repo.store.Purge(retentionIndexIDs...)
 }
 
 // PurgeCloud 清理云端所有未引用数据。
