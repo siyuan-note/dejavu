@@ -427,15 +427,6 @@ func (webdav *WebDAV) parseErr(err error) error {
 }
 
 func (webdav *WebDAV) mkdirAll(folder string) (err error) {
-	if 1 > cache.Metrics.KeysAdded() {
-		// 预热缓存
-		infos, _ := webdav.Client.ReadDir(path.Join(webdav.Dir, "siyuan", "repo", "objects"))
-		for _, info := range infos {
-			k := "webdav.dir." + path.Join(webdav.Dir, "siyuan", "repo", "objects", info.Name())
-			cache.Set(k, true, 1)
-		}
-	}
-
 	cacheKey := "webdav.dir." + folder
 	_, ok := cache.Get(cacheKey)
 	if ok {
@@ -463,12 +454,25 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 		return
 	}
 
-	err = webdav.Client.MkdirAll(folder, 0755)
-	err = webdav.parseErr(err)
-	if nil != err {
-		logging.LogErrorf("mkdir [%s] failed: %s", folder, err)
-	} else {
-		cache.Set(cacheKey, true, 1)
+	paths := strings.Split(folder, "/")
+	sub := "/"
+	for _, e := range paths {
+		if e == "" {
+			continue
+		}
+		sub += e + "/"
+
+		if _, ok := cache.Get("webdav.dir." + sub); ok {
+			continue
+		}
+
+		err = webdav.Client.Mkdir(sub, 0755)
+		err = webdav.parseErr(err)
+		if nil != err {
+			logging.LogErrorf("mkdir [%s] failed: %s", folder, err)
+		} else {
+			cache.Set("webdav.dir."+sub, true, 1)
+		}
 	}
 	return
 }
