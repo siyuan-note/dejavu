@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -490,6 +491,63 @@ func (repo *Repo) GetFile(fileID string) (ret *entity.File, err error) {
 
 func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 	ret, err = repo.openFile(file)
+	return
+}
+
+func (repo *Repo) GetIndexes(page, pageSize int) (ret []*entity.Index, totalCount, pageCount int, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	dir := filepath.Join(repo.Path, "indexes")
+	entries, err := os.ReadDir(dir)
+	if nil != err {
+		logging.LogErrorf("read dir [%s] failed: %s", dir, err)
+		return
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		infoI, _ := entries[i].Info()
+		infoJ, _ := entries[j].Info()
+		if nil == infoI || nil == infoJ {
+			return false
+		}
+		return infoI.ModTime().After(infoJ.ModTime())
+	})
+
+	i := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if 40 == len(name) {
+			entries[i] = entry
+			i++
+		}
+	}
+	for j := i; j < len(entries); j++ {
+		entries[j] = nil
+	}
+	entries = entries[:i]
+	totalCount = i
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+
+	start := (page - 1) * pageSize
+	end := page * pageSize
+
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+
+	for _, entry := range entries[start:end] {
+		index, getErr := repo.store.GetIndex(entry.Name())
+		if nil != getErr {
+			err = getErr
+			return
+		}
+
+		ret = append(ret, index)
+	}
 	return
 }
 

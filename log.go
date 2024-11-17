@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -143,57 +142,12 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 }
 
 func (repo *Repo) GetIndexLogs(page, pageSize int) (ret []*Log, pageCount, totalCount int, err error) {
-	indexesDir := filepath.Join(repo.store.Path, "indexes")
-	if !gulu.File.IsDir(indexesDir) {
-		return
-	}
-
-	entries, err := os.ReadDir(indexesDir)
+	indexes, totalCount, pageCount, err := repo.GetIndexes(page, pageSize)
 	if nil != err {
 		return
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		infoI, _ := entries[i].Info()
-		infoJ, _ := entries[j].Info()
-		if nil == infoI || nil == infoJ {
-			return false
-		}
-		return infoI.ModTime().After(infoJ.ModTime())
-	})
-
-	i := 0
-	for _, entry := range entries {
-		name := entry.Name()
-		if 40 == len(name) {
-			entries[i] = entry
-			i++
-		}
-	}
-	for j := i; j < len(entries); j++ {
-		entries[j] = nil
-	}
-	entries = entries[:i]
-	totalCount = i
-	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
-
-	start := (page - 1) * pageSize
-	end := page * pageSize
-
-	if start > totalCount {
-		start = totalCount
-	}
-	if end > totalCount {
-		end = totalCount
-	}
-
-	for _, entry := range entries[start:end] {
-		index, getErr := repo.GetIndex(entry.Name())
-		if nil != getErr {
-			err = getErr
-			return
-		}
-
+	for _, index := range indexes {
 		var log *Log
 		log, err = repo.getLog(index, true)
 		if nil != err {
