@@ -166,23 +166,6 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 	ret = &entity.PurgeStat{}
 	ret.Indexes = len(unreferencedIndexIDs)
 
-	// 清理未引用的数据对象
-	for unreferencedObjID := range unreferencedObjIDs {
-		stat, statErr := store.Stat(unreferencedObjID)
-		if nil != statErr {
-			logging.LogErrorf("stat [%s] failed: %s", unreferencedObjID, statErr)
-			continue
-		}
-
-		ret.Size += stat.Size()
-		ret.Objects++
-
-		if err = store.Remove(unreferencedObjID); nil != err {
-			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedObjID, err)
-			return
-		}
-	}
-
 	// 清理未引用的索引对象
 	for unreferencedIndexID := range unreferencedIndexIDs {
 		indexPath := filepath.Join(store.Path, "indexes", unreferencedIndexID)
@@ -192,7 +175,7 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 		}
 	}
 
-	// 清理完索引后最后再清理校验索引
+	// 清理校验索引
 	// Clear check index when purging data repo https://github.com/siyuan-note/siyuan/issues/9665
 	checkIndexesDir := filepath.Join(store.Path, "check", "indexes")
 	if gulu.File.IsDir(checkIndexesDir) {
@@ -223,12 +206,33 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 					continue
 				}
 
+				if !unreferencedIndexIDs[checkIndex.IndexID] {
+					continue
+				}
+
 				if _, statErr := os.Stat(filepath.Join(store.Path, "indexes", checkIndex.IndexID)); os.IsNotExist(statErr) {
 					if removeErr := os.RemoveAll(filepath.Join(store.Path, "check", "indexes", checkIndex.ID)); nil != removeErr {
 						logging.LogErrorf("remove check index [%s] failed: %s", checkIndex.ID, removeErr)
 					}
 				}
 			}
+		}
+	}
+
+	// 清理未引用的数据对象
+	for unreferencedObjID := range unreferencedObjIDs {
+		stat, statErr := store.Stat(unreferencedObjID)
+		if nil != statErr {
+			logging.LogErrorf("stat [%s] failed: %s", unreferencedObjID, statErr)
+			continue
+		}
+
+		ret.Size += stat.Size()
+		ret.Objects++
+
+		if err = store.Remove(unreferencedObjID); nil != err {
+			logging.LogErrorf("remove unreferenced object [%s] failed: %s", unreferencedObjID, err)
+			return
 		}
 	}
 

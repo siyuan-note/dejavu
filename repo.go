@@ -217,9 +217,8 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	for refID := range refIndexIDs {
 		index, getErr := repo.cloud.GetIndex(refID)
 		if nil != getErr {
-			err = getErr
-			logging.LogErrorf("get index [%s] failed: %s", refID, err)
-			return
+			logging.LogWarnf("get index [%s] failed: %s", refID, err)
+			continue
 		}
 
 		for _, fileID := range index.Files {
