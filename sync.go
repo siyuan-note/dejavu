@@ -81,11 +81,19 @@ type TrafficStat struct {
 	m *sync.Mutex
 }
 
-func (repo *Repo) GetSyncCloudFiles(context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
+func (repo *Repo) GetSyncCloudFiles(cloudLatest *entity.Index, context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	fetchedFiles, err = repo.getSyncCloudFiles(context)
+	fetchedFiles, err = repo.getSyncCloudFiles(cloudLatest, context)
+	return
+}
+
+func (repo *Repo) GetCloudLatest(context map[string]interface{}) (cloudLatest *entity.Index, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	_, cloudLatest, err = repo.downloadCloudLatest(context)
 	return
 }
 
@@ -702,27 +710,12 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 	return
 }
 
-func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
+func (repo *Repo) getSyncCloudFiles(cloudLatest *entity.Index, context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
 	latest, err := repo.Latest()
 	if nil != err {
 		logging.LogErrorf("get latest failed: %s", err)
 		return
 	}
-
-	// 从云端获取最新索引
-	length, cloudLatest, err := repo.downloadCloudLatest(context)
-	if nil != err {
-		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
-			logging.LogErrorf("download cloud latest failed: %s", err)
-			return
-		}
-	}
-	trafficStat := &TrafficStat{m: &sync.Mutex{}}
-	trafficStat.m.Lock()
-	trafficStat.DownloadFileCount++
-	trafficStat.DownloadBytes += length
-	trafficStat.APIGet++
-	trafficStat.m.Unlock()
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
@@ -743,11 +736,12 @@ func (repo *Repo) getSyncCloudFiles(context map[string]interface{}) (fetchedFile
 	}
 
 	// 从云端下载缺失文件并入库
-	length, fetchedFiles, err = repo.downloadCloudFilesPut(fetchFileIDs, context)
+	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
+	trafficStat := &TrafficStat{m: &sync.Mutex{}}
 	trafficStat.DownloadBytes += length
 	trafficStat.DownloadFileCount += len(fetchFileIDs)
 	trafficStat.APIGet += len(fetchFileIDs)
@@ -1536,6 +1530,7 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 }
 
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
+	start := time.Now()
 	index = &entity.Index{}
 
 	key := path.Join("refs", "latest")
@@ -1582,7 +1577,7 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		}
 	}
 
-	logging.LogInfof("got cloud latest [%s]", index.String())
+	logging.LogInfof("got cloud latest [%s], cost [%s]", index.String(), time.Since(start))
 	return
 }
 

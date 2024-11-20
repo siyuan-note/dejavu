@@ -681,6 +681,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 	workerErrLock := sync.Mutex{}
 	var upserts, removes, latestFiles []*entity.File
 	if !init {
+		start = time.Now()
 		count := atomic.Int32{}
 		total := len(files)
 		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
@@ -751,7 +752,7 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 		}
 		waitGroup.Wait()
 		p.Release()
-
+		logging.LogInfof("get latest files [files=%d] cost [%s]", len(latestFiles), time.Since(start))
 		if 0 < len(workerErrs) {
 			err = workerErrs[0]
 			logging.LogErrorf("get latest files failed: %s", err)
