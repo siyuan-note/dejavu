@@ -524,6 +524,14 @@ func (siyuan *SiYuan) GetStat() (stat *Stat, err error) {
 }
 
 func (siyuan *SiYuan) AddTraffic(traffic *Traffic) {
+	if nil == traffic {
+		return
+	}
+
+	if 0 == traffic.UploadBytes && 0 == traffic.DownloadBytes && 0 == traffic.APIGet && 0 == traffic.APIPut {
+		return
+	}
+
 	token := siyuan.Conf.Token
 	server := siyuan.Conf.Server
 
