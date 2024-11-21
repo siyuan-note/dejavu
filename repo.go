@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"path"
@@ -417,7 +418,13 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtCheckoutBeforeWalkData, context, repo.DataPath)
-	err = filelock.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
+	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
+		if nil != err {
+			logging.LogErrorf("walk data failed: %s", err)
+			return err
+		}
+
+		info, err := d.Info()
 		if nil != err {
 			logging.LogErrorf("walk data failed: %s", err)
 			return err
@@ -618,13 +625,19 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	start := time.Now()
-	err = filelock.Walk(repo.DataPath, func(path string, info os.FileInfo, err error) error {
+	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
 		if nil != err {
 			if isNoSuchFileOrDirErr(err) {
 				// An error `Failed to create data snapshot` is occasionally reported during automatic data sync https://github.com/siyuan-note/siyuan/issues/8998
 				logging.LogInfof("ignore not exist err [%s]", err)
 				return nil
 			}
+			logging.LogErrorf("walk data failed: %s", err)
+			return err
+		}
+
+		info, err := d.Info()
+		if nil != err {
 			logging.LogErrorf("walk data failed: %s", err)
 			return err
 		}
