@@ -486,7 +486,7 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 		}
 	}
 
-	if localChanged && needSyncCloud {
+	if (localChanged && needSyncCloud) || "" == cloudLatest.ID {
 		err = repo.updateCloudIndexes(latest, trafficStat, context)
 		if nil != err {
 			logging.LogErrorf("update cloud indexes failed: %s", err)
