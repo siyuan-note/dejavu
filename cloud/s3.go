@@ -272,7 +272,7 @@ func (s3 *S3) GetChunks(checkChunkIDs []string) (chunkIDs []string, err error) {
 }
 
 func (s3 *S3) GetIndex(id string) (index *entity.Index, err error) {
-	//index, err = s3.repoIndex(id)
+	index, err = s3.repoIndex(id)
 	if nil != err {
 		logging.LogErrorf("get index [%s] failed: %s", id, err)
 		return
