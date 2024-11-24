@@ -64,7 +64,7 @@ func TestIndexEmpty(t *testing.T) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	_, err = repo.Index("Index 1", map[string]interface{}{})
+	_, err = repo.Index("Index 1", true, map[string]interface{}{})
 	if !errors.Is(err, ErrEmptyIndex) {
 		t.Fatalf("should be empty index")
 		return
@@ -90,7 +90,7 @@ func TestIndexCheckout(t *testing.T) {
 	subscribeEvents(t)
 
 	repo, index := initIndex(t)
-	index2, err := repo.Index("Index 2", map[string]interface{}{})
+	index2, err := repo.Index("Index 2", true, map[string]interface{}{})
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return
@@ -183,7 +183,7 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 		t.Fatalf("new repo failed: %s", err)
 		return
 	}
-	index, err = repo.Index("Index 1", map[string]interface{}{})
+	index, err = repo.Index("Index 1", true, map[string]interface{}{})
 	if nil != err {
 		t.Fatalf("index failed: %s", err)
 		return

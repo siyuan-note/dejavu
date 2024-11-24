@@ -443,7 +443,7 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 		if localChanged { // 如果云端和本地都改变了，则需要创建合并索引并再次同步
 			logging.LogInfof("creating merge index [%s]", latest.ID)
 			mergeStart := time.Now()
-			mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", context)
+			mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", false, context)
 			if nil != mergeIndexErr {
 				logging.LogErrorf("merge index failed: %s", mergeIndexErr)
 				err = mergeIndexErr

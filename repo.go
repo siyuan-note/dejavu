@@ -476,11 +476,11 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 }
 
 // Index 将 repo 数据文件夹中的文件索引到仓库中。context 参数用于发布事件时传递调用上下文。
-func (repo *Repo) Index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
+func (repo *Repo) Index(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	ret, err = repo.index(memo, context)
+	ret, err = repo.index(memo, checkChunks, context)
 	return
 }
 
@@ -602,9 +602,9 @@ func (repo *Repo) removeCloudObjects(objects []string) (err error) {
 	return
 }
 
-func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
+func (repo *Repo) index(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
 	for i := 0; i < 7; i++ {
-		ret, err = repo.index0(memo, context)
+		ret, err = repo.index0(memo, checkChunks, context)
 		if nil == err {
 			return
 		}
@@ -620,7 +620,7 @@ func (repo *Repo) index(memo string, context map[string]interface{}) (ret *entit
 	return
 }
 
-func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *entity.Index, err error) {
+func (repo *Repo) index0(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
@@ -720,37 +720,39 @@ func (repo *Repo) index0(memo string, context map[string]interface{}) (ret *enti
 			latestFiles = append(latestFiles, file)
 			lock.Unlock()
 
-			// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
-			for _, chunk := range file.Chunks {
-				info, statErr := repo.store.Stat(chunk)
-				if nil == statErr {
-					continue
-				}
-
-				if nil != info {
-					logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s, perm=%04o] failed: %s",
-						file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, info.Mode().Perm(), statErr)
-				} else {
-					logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s] failed: %s",
-						file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, statErr)
-				}
-
-				if errors.Is(statErr, os.ErrPermission) {
-					// 如果是权限问题，则尝试修改权限，不认为是分块文件损坏
-					// Improve checking local data chunk integrity before data sync https://github.com/siyuan-note/siyuan/issues/9688
-					if chmodErr := os.Chmod(chunk, 0644); nil != chmodErr {
-						logging.LogWarnf("chmod file [%s] failed: %s", chunk, chmodErr)
-					} else {
-						logging.LogInfof("chmod file [%s] to [0644]", chunk)
+			if checkChunks { // 仅在非移动端校验，因为移动端私有数据空间不会存在外部操作导致分块损坏的情况 https://github.com/siyuan-note/siyuan/issues/13216
+				// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
+				for _, chunk := range file.Chunks {
+					info, statErr := repo.store.Stat(chunk)
+					if nil == statErr {
+						continue
 					}
-					continue
-				}
 
-				if errors.Is(statErr, os.ErrNotExist) {
-					workerErrLock.Lock()
-					workerErrs = append(workerErrs, ErrRepoFatal)
-					workerErrLock.Unlock()
-					return
+					if nil != info {
+						logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s, perm=%04o] failed: %s",
+							file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, info.Mode().Perm(), statErr)
+					} else {
+						logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s] failed: %s",
+							file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, statErr)
+					}
+
+					if errors.Is(statErr, os.ErrPermission) {
+						// 如果是权限问题，则尝试修改权限，不认为是分块文件损坏
+						// Improve checking local data chunk integrity before data sync https://github.com/siyuan-note/siyuan/issues/9688
+						if chmodErr := os.Chmod(chunk, 0644); nil != chmodErr {
+							logging.LogWarnf("chmod file [%s] failed: %s", chunk, chmodErr)
+						} else {
+							logging.LogInfof("chmod file [%s] to [0644]", chunk)
+						}
+						continue
+					}
+
+					if errors.Is(statErr, os.ErrNotExist) {
+						workerErrLock.Lock()
+						workerErrs = append(workerErrs, ErrRepoFatal)
+						workerErrLock.Unlock()
+						return
+					}
 				}
 			}
 		})
