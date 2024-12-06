@@ -277,6 +277,13 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 		return
 	}
 
+	// 更新本地同步点
+	err = repo.UpdateLatestSync(latest)
+	if nil != err {
+		logging.LogErrorf("update latest sync failed: %s", err)
+		return
+	}
+
 	// 统计流量
 	go repo.cloud.AddTraffic(&cloud.Traffic{
 		UploadBytes: trafficStat.UploadBytes,
