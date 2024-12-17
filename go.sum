@@ -50,8 +50,8 @@ github.com/hashicorp/errwrap v1.1.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brv
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
-github.com/imroc/req/v3 v3.48.0 h1:IYuMGetuwLzOOTzDCquDqs912WNwpsPK0TBXWPIvoqg=
-github.com/imroc/req/v3 v3.48.0/go.mod h1:weam9gmyb00QnOtu6HXSnk44dNFkIUQb5QdMx13FeUU=
+github.com/imroc/req/v3 v3.49.0 h1:5Rac2qvz7Dq0E3PeBo/c2szV3hagPQIGLoHtfBmYhu4=
+github.com/imroc/req/v3 v3.49.0/go.mod h1:XZf4t94DNJzcA0UOBlA68hmSrWsAyvN407ADdH4mzCA=
 github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9YPoQUg=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGwWFoC7ycTf1rcQZHOlsJ6N8=
@@ -100,8 +100,8 @@ github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtb
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97/go.mod h1:1/nGgthl89FPA7GzAcEWKl6zRRnfgyTjzLZj9bW7kuw=
 github.com/siyuan-note/filelock v0.0.0-20241212013445-c66518cdacfa h1:NM/0m8/hmFZGo0v+xNnjEeoqTtZShcVadWS0WYah+yI=
 github.com/siyuan-note/filelock v0.0.0-20241212013445-c66518cdacfa/go.mod h1:OmJuq0Dm+S8I713lmfmZNFwtQ/o4mdZHSfsEra39lfY=
-github.com/siyuan-note/httpclient v0.0.0-20241212013326-2b23123573c3 h1:9iSRzXsEmDgofy11kjtiWFC83wqHsGSHZ0meW0qiCJw=
-github.com/siyuan-note/httpclient v0.0.0-20241212013326-2b23123573c3/go.mod h1:PJNk4sdv+CQFjlAFJhv821asNZhJmBoa1Jbe4TAGQlg=
+github.com/siyuan-note/httpclient v0.0.0-20241217094627-0dbb1d2d7698 h1:vds4JlCUMdLlpaobBJTgojpCaxJVbk7zVrZpP2RZrxM=
+github.com/siyuan-note/httpclient v0.0.0-20241217094627-0dbb1d2d7698/go.mod h1:z9ala5zx8ivq8UaySAFkfk1ItSUoV8I0196Fu5NnpeE=
 github.com/siyuan-note/logging v0.0.0-20241212013108-623e0bb0bcd9 h1:DYF4JZFiVTy1hmFvrpyRxc+8qaymm/THwdyow/xWark=
 github.com/siyuan-note/logging v0.0.0-20241212013108-623e0bb0bcd9/go.mod h1:jZ4dO1KQBl3mqarQCwL8bnAyWz3SeZsySLT6HjSuZjY=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
@@ -127,8 +127,8 @@ golang.org/x/crypto v0.1.0/go.mod h1:RecgLatLF4+eUMCP1PoPZQb+cVrJcOPbHkTkbkB9sbw
 golang.org/x/crypto v0.17.0/go.mod h1:gCAAfMLgwOJRpTjQ2zCCt2OcSfYMTeZVSRtQlPC7Nq4=
 golang.org/x/crypto v0.31.0 h1:ihbySMvVjLAeSH1IbfcRTkD/iNscyz8rGzjF/E5hV6U=
 golang.org/x/crypto v0.31.0/go.mod h1:kDsLvtWBEx7MV9tJOj9bnXsPbxwJQ6csT/x4KIN4Ssk=
-golang.org/x/exp v0.0.0-20241210194714-1829a127f884 h1:Y/Mj/94zIQQGHVSv1tTtQBDaQaJe62U9bkDZKKyhPCU=
-golang.org/x/exp v0.0.0-20241210194714-1829a127f884/go.mod h1:qj5a5QZpwLU2NLQudwIN5koi3beDhSAlJwa67PuM98c=
+golang.org/x/exp v0.0.0-20241215155358-4a5509556b9e h1:4qufH0hlUYs6AO6XmZC3GqfDPGSXHVXUFR6OND+iJX4=
+golang.org/x/exp v0.0.0-20241215155358-4a5509556b9e/go.mod h1:qj5a5QZpwLU2NLQudwIN5koi3beDhSAlJwa67PuM98c=
 golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
 golang.org/x/mod v0.8.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
 golang.org/x/mod v0.22.0 h1:D4nJWe9zXqHOmWqj4VMOJhvzj7bEZg4wEYa759z1pH4=
