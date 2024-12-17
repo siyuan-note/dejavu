@@ -253,6 +253,11 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
+	latestFileMap := map[string]*entity.File{}
+	for _, file := range latestFiles {
+		latestFileMap[file.Path] = file
+	}
+
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
@@ -319,8 +324,17 @@ func (repo *Repo) sync0(context map[string]interface{},
 				continue
 			}
 
-			mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-			logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+			// 如果云端 upsert 早于本地已经存在的文件 7 分钟，则以本地文件为准
+			cloudUpsertTooOld := false
+			if localFile := latestFileMap[cloudUpsert.Path]; nil != localFile && localFile.Updated > cloudUpsert.Updated+7*60*1000 {
+				logging.LogWarnf("ignored cloud upsert [%s, %s, %s] because local file is newer", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+				cloudUpsertTooOld = true
+			}
+
+			if !cloudUpsertTooOld {
+				mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
+				logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+			}
 		}
 	}
 
@@ -1554,25 +1568,39 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		return
 	}
 
-	downloadBytes, index, err = repo.downloadCloudIndex(latestID, context)
-	isSameDevice := index.SystemID == repo.DeviceID
 	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
-	if !isSameDevice && isS3OrSiYuan {
-		// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
-		seqNumLatestID, _, _ := repo.getSeqNumLatest()
-		if "" != seqNumLatestID && "" != index.ID && latestID != seqNumLatestID {
-			logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
-			// 以时间较新的为准
-			_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
-			if nil != downloadErr {
-				logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		downloadBytes, index, err = repo.downloadCloudIndex(latestID, context)
+	}()
+
+	var seqNumLatestID string
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+
+		if isS3OrSiYuan {
+			// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
+			seqNumLatestID, _, _ = repo.getSeqNumLatest()
+		}
+	}()
+	waitGroup.Wait()
+
+	if isS3OrSiYuan && ("" != seqNumLatestID && "" != index.ID && latestID != seqNumLatestID) {
+		logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
+		// 以时间较新的为准
+		_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
+		if nil != downloadErr {
+			logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
+		} else {
+			if seqNumLatest.Created > index.Created {
+				logging.LogWarnf("use seq num latest [%s] instead of cloud latest [%s]", seqNumLatest, index)
+				index = seqNumLatest
 			} else {
-				if seqNumLatest.Created > index.Created {
-					logging.LogWarnf("use seq num latest [%s] instead of cloud latest [%s]", seqNumLatest, index)
-					index = seqNumLatest
-				} else {
-					logging.LogWarnf("still use cloud latest [%s] rather than seq num latest [%s]", index, seqNumLatest)
-				}
+				logging.LogWarnf("still use cloud latest [%s] rather than seq num latest [%s]", index, seqNumLatest)
 			}
 		}
 	}
