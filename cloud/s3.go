@@ -19,6 +19,7 @@ package cloud
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"math"
 	"net/http"
@@ -31,11 +32,12 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	as3 "github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	as3 "github.com/aws/aws-sdk-go-v2/service/s3"
+	as3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/panjf2000/ants/v2"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/logging"
@@ -82,7 +84,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 	}
 	defer file.Close()
 	key := path.Join("repo", filePath)
-	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
+	_, err = svc.PutObject(ctx, &as3.PutObjectInput{
 		Bucket:       aws.String(s3.Conf.S3.Bucket),
 		Key:          aws.String(key),
 		CacheControl: aws.String("no-cache"),
@@ -103,7 +105,7 @@ func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length 
 	defer cancelFn()
 
 	key := path.Join("repo", filePath)
-	_, err = svc.PutObjectWithContext(ctx, &as3.PutObjectInput{
+	_, err = svc.PutObject(ctx, &as3.PutObjectInput{
 		Bucket:       aws.String(s3.Conf.S3.Bucket),
 		Key:          aws.String(key),
 		CacheControl: aws.String("no-cache"),
@@ -127,7 +129,7 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 		Key:                  aws.String(key),
 		ResponseCacheControl: aws.String("no-cache"),
 	}
-	resp, err := svc.GetObjectWithContext(ctx, input)
+	resp, err := svc.GetObject(ctx, input)
 	if nil != err {
 		if s3.isErrNotFound(err) {
 			err = ErrCloudObjectNotFound
@@ -149,7 +151,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 	svc := s3.getService()
 	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
-	_, err = svc.DeleteObjectWithContext(ctx, &as3.DeleteObjectInput{
+	_, err = svc.DeleteObject(ctx, &as3.DeleteObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
 		Key:    aws.String(key),
 	})
@@ -304,15 +306,23 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 	if endWithSlash {
 		pathPrefix += "/"
 	}
-	limit := int64(1000)
+	limit := int32(1000)
 	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
-	err = svc.ListObjectsPagesWithContext(ctx, &as3.ListObjectsInput{
+	paginator := as3.NewListObjectsV2Paginator(svc, &as3.ListObjectsV2Input{
 		Bucket:  &s3.Conf.S3.Bucket,
 		Prefix:  &pathPrefix,
 		MaxKeys: &limit,
-	}, func(output *as3.ListObjectsOutput, last bool) bool {
+	})
+
+	for paginator.HasMorePages() {
+		output, pErr := paginator.NextPage(ctx)
+		if nil != pErr {
+			logging.LogErrorf("list objects failed: %s", pErr)
+			return nil, pErr
+		}
+
 		for _, entry := range output.Contents {
 			filePath := strings.TrimPrefix(*entry.Key, pathPrefix)
 			ret[filePath] = &entity.ObjectInfo{
@@ -320,12 +330,6 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 				Size: *entry.Size,
 			}
 		}
-		return true
-	})
-
-	if nil != err {
-		logging.LogErrorf("list objects failed: %s", err)
-		return
 	}
 	return
 }
@@ -358,11 +362,14 @@ func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 
 func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	svc := s3.getService()
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	defer cancelFn()
+
 	prefix := path.Join("repo", "refs", refPrefix)
-	limit := int64(32)
+	limit := int32(32)
 	marker := ""
 	for {
-		output, listErr := svc.ListObjects(&as3.ListObjectsInput{
+		output, listErr := svc.ListObjects(ctx, &as3.ListObjectsInput{
 			Bucket:  &s3.Conf.S3.Bucket,
 			Prefix:  &prefix,
 			Marker:  &marker,
@@ -408,7 +415,10 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 
 func (s3 *S3) listRepos() (ret []*Repo, err error) {
 	svc := s3.getService()
-	output, err := svc.ListBuckets(&as3.ListBucketsInput{})
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	defer cancelFn()
+
+	output, err := svc.ListBuckets(ctx, &as3.ListBucketsInput{})
 	if nil != err {
 		return
 	}
@@ -427,8 +437,10 @@ func (s3 *S3) listRepos() (ret []*Repo, err error) {
 
 func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 	svc := s3.getService()
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	defer cancelFn()
 
-	header, err := svc.HeadObject(&as3.HeadObjectInput{
+	header, err := svc.HeadObject(ctx, &as3.HeadObjectInput{
 		Bucket: &s3.Conf.S3.Bucket,
 		Key:    &key,
 	})
@@ -479,27 +491,36 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 	return
 }
 
-func (s3 *S3) getService() *as3.S3 {
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials:      credentials.NewStaticCredentials(s3.Conf.S3.AccessKey, s3.Conf.S3.SecretKey, ""),
-		Endpoint:         aws.String(s3.Conf.S3.Endpoint),
-		Region:           aws.String(s3.Conf.S3.Region),
-		S3ForcePathStyle: aws.Bool(s3.Conf.S3.PathStyle),
-		HTTPClient:       s3.HTTPClient,
-	}))
-	return as3.New(sess)
+func (s3 *S3) getService() *as3.Client {
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		logging.LogErrorf("load default config failed: %s", err)
+	}
+
+	return as3.NewFromConfig(cfg, func(o *as3.Options) {
+		o.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(s3.Conf.S3.AccessKey, s3.Conf.S3.SecretKey, ""))
+		o.BaseEndpoint = aws.String(s3.Conf.S3.Endpoint)
+		o.Region = s3.Conf.S3.Region
+		o.UsePathStyle = s3.Conf.S3.PathStyle
+		o.HTTPClient = s3.HTTPClient
+	})
 }
 
 func (s3 *S3) isErrNotFound(err error) bool {
-	switch err.(type) {
-	case awserr.Error:
-		code := err.(awserr.Error).Code()
-		switch code {
-		case as3.ErrCodeNoSuchKey:
-			return true
-		}
+	var nsk *as3Types.NoSuchKey
+	if errors.As(err, &nsk) {
+		return true
 	}
 
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "does not exist") || strings.Contains(msg, "404") || strings.Contains(msg, "no such file or directory")
+	var nf *as3Types.NotFound
+	if errors.As(err, &nf) {
+		return true
+	}
+
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		msg := strings.ToLower(apiErr.ErrorMessage())
+		return strings.Contains(msg, "does not exist") || strings.Contains(msg, "404") || strings.Contains(msg, "no such file or directory")
+	}
+	return false
 }
