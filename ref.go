@@ -20,11 +20,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/88250/go-humanize"
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 var ErrNotFoundIndex = errors.New("not found index")
@@ -51,7 +54,16 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 	return
 }
 
+// FullIndex 描述了完整的索引结构。
+type FullIndex struct {
+	ID    string         `json:"id"`
+	Files []*entity.File `json:"files"`
+	Spec  int            `json:"spec"`
+}
+
 func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
+	start := time.Now()
+
 	refs := filepath.Join(repo.Path, "refs")
 	err = os.MkdirAll(refs, 0755)
 	if nil != err {
@@ -61,7 +73,61 @@ func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
 	if nil != err {
 		return
 	}
-	logging.LogInfof("updated local latest to [%s]", index.String())
+
+	fullLatestPath := filepath.Join(repo.Path, "full-latest.json")
+	files, err := repo.GetFiles(index)
+	if nil != err {
+		return
+	}
+
+	fullIndex := &FullIndex{ID: index.ID, Files: files, Spec: 0}
+	data, err := msgpack.Marshal(fullIndex)
+	if nil != err {
+		return
+	}
+	err = gulu.File.WriteFileSafer(fullLatestPath, data, 0644)
+	if nil != err {
+		return
+	}
+
+	logging.LogInfof("updated local latest to [%s], full latest [size=%s], cost [%s]", index.String(), humanize.Bytes(uint64(len(data))), time.Since(start))
+	return
+}
+
+func (repo *Repo) getFullLatest(latest *entity.Index) (ret *FullIndex) {
+	start := time.Now()
+
+	fullLatestPath := filepath.Join(repo.Path, "full-latest.json")
+	if !gulu.File.IsExist(fullLatestPath) {
+		return
+	}
+
+	data, err := os.ReadFile(fullLatestPath)
+	if nil != err {
+		logging.LogErrorf("read full latest failed: %s", err)
+		return
+	}
+
+	ret = &FullIndex{}
+	if err = msgpack.Unmarshal(data, ret); nil != err {
+		logging.LogErrorf("unmarshal full latest [%s] failed: %s", fullLatestPath, err)
+		ret = nil
+		if err = os.RemoveAll(fullLatestPath); nil != err {
+			logging.LogErrorf("remove full latest [%s] failed: %s", fullLatestPath, err)
+		}
+		return
+	}
+
+	if ret.ID != latest.ID {
+		logging.LogErrorf("full latest ID [%s] not match latest ID [%s]", ret.ID, latest.ID)
+		ret = nil
+		if err = os.RemoveAll(fullLatestPath); nil != err {
+			logging.LogErrorf("remove full latest [%s] failed: %s", fullLatestPath, err)
+		}
+		return
+	}
+
+	logging.LogInfof("got local full latest [size=%s], cost [%s]", humanize.Bytes(uint64(len(data))), time.Since(start))
 	return
 }
 

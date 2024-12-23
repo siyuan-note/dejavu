@@ -690,90 +690,96 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 		init = true
 	}
 
-	var workerErrs []error
-	workerErrLock := sync.Mutex{}
 	var upserts, removes, latestFiles []*entity.File
-	if !init {
-		start = time.Now()
-		count := atomic.Int32{}
-		total := len(files)
-		eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
-		lock := &sync.Mutex{}
-		waitGroup := &sync.WaitGroup{}
-		p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
-			defer waitGroup.Done()
+	fullLatest := repo.getFullLatest(latest)
+	if nil != fullLatest {
+		latestFiles = fullLatest.Files
+	} else {
+		var workerErrs []error
+		workerErrLock := sync.Mutex{}
+		if !init {
+			start = time.Now()
+			count := atomic.Int32{}
+			total := len(files)
+			eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
+			lock := &sync.Mutex{}
+			waitGroup := &sync.WaitGroup{}
+			p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
+				defer waitGroup.Done()
 
-			count.Add(1)
-			eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, int(count.Load()), total)
+				count.Add(1)
+				eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, int(count.Load()), total)
 
-			fileID := arg.(string)
-			file, getErr := repo.store.GetFile(fileID)
-			if nil != getErr {
-				logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
-				workerErrLock.Lock()
-				workerErrs = append(workerErrs, ErrRepoFatal)
-				workerErrLock.Unlock()
-				return
-			}
+				fileID := arg.(string)
+				file, getErr := repo.store.GetFile(fileID)
+				if nil != getErr {
+					logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
+					workerErrLock.Lock()
+					workerErrs = append(workerErrs, ErrRepoFatal)
+					workerErrLock.Unlock()
+					return
+				}
 
-			lock.Lock()
-			latestFiles = append(latestFiles, file)
-			lock.Unlock()
+				lock.Lock()
+				latestFiles = append(latestFiles, file)
+				lock.Unlock()
 
-			if checkChunks { // 仅在非移动端校验，因为移动端私有数据空间不会存在外部操作导致分块损坏的情况 https://github.com/siyuan-note/siyuan/issues/13216
-				// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
-				for _, chunk := range file.Chunks {
-					info, statErr := repo.store.Stat(chunk)
-					if nil == statErr {
-						continue
-					}
-
-					if nil != info {
-						logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s, perm=%04o] failed: %s",
-							file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, info.Mode().Perm(), statErr)
-					} else {
-						logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s] failed: %s",
-							file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, statErr)
-					}
-
-					if errors.Is(statErr, os.ErrPermission) {
-						// 如果是权限问题，则尝试修改权限，不认为是分块文件损坏
-						// Improve checking local data chunk integrity before data sync https://github.com/siyuan-note/siyuan/issues/9688
-						if chmodErr := os.Chmod(chunk, 0644); nil != chmodErr {
-							logging.LogWarnf("chmod file [%s] failed: %s", chunk, chmodErr)
-						} else {
-							logging.LogInfof("chmod file [%s] to [0644]", chunk)
+				if checkChunks { // 仅在非移动端校验，因为移动端私有数据空间不会存在外部操作导致分块损坏的情况 https://github.com/siyuan-note/siyuan/issues/13216
+					// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
+					for _, chunk := range file.Chunks {
+						info, statErr := repo.store.Stat(chunk)
+						if nil == statErr {
+							continue
 						}
-						continue
-					}
 
-					if errors.Is(statErr, os.ErrNotExist) {
-						workerErrLock.Lock()
-						workerErrs = append(workerErrs, ErrRepoFatal)
-						workerErrLock.Unlock()
-						return
+						if nil != info {
+							logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s, perm=%04o] failed: %s",
+								file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, info.Mode().Perm(), statErr)
+						} else {
+							logging.LogWarnf("stat file [%s, %s, %s, %d] chunk [%s] failed: %s",
+								file.ID, file.Path, time.UnixMilli(file.Updated).Format("2006-01-02 15:04:05"), file.Size, chunk, statErr)
+						}
+
+						if errors.Is(statErr, os.ErrPermission) {
+							// 如果是权限问题，则尝试修改权限，不认为是分块文件损坏
+							// Improve checking local data chunk integrity before data sync https://github.com/siyuan-note/siyuan/issues/9688
+							if chmodErr := os.Chmod(chunk, 0644); nil != chmodErr {
+								logging.LogWarnf("chmod file [%s] failed: %s", chunk, chmodErr)
+							} else {
+								logging.LogInfof("chmod file [%s] to [0644]", chunk)
+							}
+							continue
+						}
+
+						if errors.Is(statErr, os.ErrNotExist) {
+							workerErrLock.Lock()
+							workerErrs = append(workerErrs, ErrRepoFatal)
+							workerErrLock.Unlock()
+							return
+						}
 					}
 				}
-			}
-		})
+			})
 
-		for _, f := range latest.Files {
-			waitGroup.Add(1)
-			err = p.Invoke(f)
-			if nil != err {
-				logging.LogErrorf("invoke failed: %s", err)
+			for _, f := range latest.Files {
+				waitGroup.Add(1)
+				err = p.Invoke(f)
+				if nil != err {
+					logging.LogErrorf("invoke failed: %s", err)
+					return
+				}
+			}
+			waitGroup.Wait()
+			p.Release()
+			logging.LogInfof("get latest files [files=%d] cost [%s]", len(latestFiles), time.Since(start))
+			if 0 < len(workerErrs) {
+				err = workerErrs[0]
+				logging.LogErrorf("get latest files failed: %s", err)
 				return
 			}
 		}
-		waitGroup.Wait()
-		p.Release()
-		logging.LogInfof("get latest files [files=%d] cost [%s]", len(latestFiles), time.Since(start))
-		if 0 < len(workerErrs) {
-			err = workerErrs[0]
-			logging.LogErrorf("get latest files failed: %s", err)
-			return
-		}
 	}
+
 	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false)
 	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
@@ -795,7 +801,8 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 
 	count := atomic.Int32{}
 	total := len(upserts)
-	workerErrs = nil
+	var workerErrs []error
+	workerErrLock := sync.Mutex{}
 	eventbus.Publish(eventbus.EvtIndexUpsertFiles, context, total)
 	waitGroup := &sync.WaitGroup{}
 	p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
