@@ -127,7 +127,7 @@ func (repo *Repo) getFullLatest(latest *entity.Index) (ret *FullIndex) {
 		return
 	}
 
-	logging.LogInfof("got local full latest [size=%s], cost [%s]", humanize.Bytes(uint64(len(data))), time.Since(start))
+	logging.LogInfof("got local full latest [files=%d, size=%s], cost [%s]", len(ret.Files), humanize.Bytes(uint64(len(data))), time.Since(start))
 	return
 }
 
