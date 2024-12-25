@@ -483,3 +483,7 @@ var indexCache, _ = ristretto.NewCache[string, any](&ristretto.Config[string, an
 	MaxCost:     1000 * 1000 * 128, // 1 个文件按 300K 字节（大约 1.5W 个文件）计算，128MB 大概可以缓存 400 个索引
 	BufferItems: 64,
 })
+
+func (store *Store) cacheFile(file *entity.File) {
+	fileCache.Set(file.ID, file, 256 /* 直接使用合理的均值以免进行实际计算消耗性能 */)
+}
