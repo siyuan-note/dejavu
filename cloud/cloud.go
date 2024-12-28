@@ -39,6 +39,9 @@ type Conf struct {
 	// WebDAV 协议所需配置
 	WebDAV *ConfWebDAV
 
+	// 本地存储服务配置
+	Local *ConfLocal
+
 	// 以下值非官方存储服务不必传入
 	Token         string // 云端接口鉴权令牌
 	AvailableSize int64  // 云端存储可用空间字节数
@@ -64,6 +67,13 @@ type ConfWebDAV struct {
 	Username       string // 用户名
 	Password       string // 密码
 	SkipTlsVerify  bool   // 是否跳过 TLS 验证
+	Timeout        int    // 超时时间，单位：秒
+	ConcurrentReqs int    // 并发请求数
+}
+
+// ConfLocal 用于描述本地存储服务配置信息。
+type ConfLocal struct {
+	Endpoint       string // 服务端点 (本地文件系统目录)
 	Timeout        int    // 超时时间，单位：秒
 	ConcurrentReqs int    // 并发请求数
 }
