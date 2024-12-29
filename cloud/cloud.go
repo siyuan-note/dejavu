@@ -245,7 +245,7 @@ func (baseCloud *BaseCloud) GetIndexes(page int) (indexes []*entity.Index, pageC
 	return
 }
 
-func (baseCloud *BaseCloud) GetRefsFiles() (fileIDs []string, err error) {
+func (baseCloud *BaseCloud) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
 	err = ErrUnsupported
 	return
 }
