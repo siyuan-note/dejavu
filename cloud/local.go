@@ -19,11 +19,14 @@ package cloud
 import (
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/ricochet2200/go-disk-usage/du"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/logging"
 )
 
 // Local 描述了本地文件系统服务实现。
@@ -65,27 +68,110 @@ func (local *Local) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (local *Local) UploadObject(filePath string, overwrite bool) (err error) {
-	// TODO
-	err = ErrUnsupported
+func (local *Local) UploadObject(filePath string, overwrite bool) (length int64, err error) {
+	absFilePath := filepath.Join(local.Conf.RepoPath, filePath)
+	data, err := os.ReadFile(absFilePath)
+	if nil != err {
+		return
+	}
+
+	length, err = local.UploadBytes(filePath, data, overwrite)
 	return
 }
 
-func (local *Local) UploadBytes(filePath string, data []byte, overwrite bool) (err error) {
-	// TODO
-	err = ErrUnsupported
+func (local *Local) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
+	length = int64(len(data))
+
+	key := local.getCurrentRepoObjectFilePath(filePath)
+
+	folder := path.Dir(key)
+	err = os.MkdirAll(folder, 0755)
+	if nil != err {
+		return
+	}
+
+	if !overwrite { // not overwrite the file
+		_, err = os.Stat(key)
+		if err != nil {
+			if os.IsNotExist(err) { // file not exist
+				// do nothing and continue
+				err = nil
+			} else { // other error
+				logging.LogErrorf("upload object [%s] failed: %s", key, err)
+				return
+			}
+		}
+	}
+
+	err = os.WriteFile(key, data, 0644)
+	if nil != err {
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
+		return
+	}
+
+	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
 
 func (local *Local) DownloadObject(filePath string) (data []byte, err error) {
-	// TODO
-	err = ErrUnsupported
+	key := local.getCurrentRepoObjectFilePath(filePath)
+
+	data, err = os.ReadFile(key)
+	if nil != err {
+		return
+	}
+
+	//logging.LogInfof("downloaded object [%s]", key)
 	return
 }
 
-func (local *Local) RemoveObject(key string) (err error) {
-	// TODO
-	err = ErrUnsupported
+func (local *Local) RemoveObject(filePath string) (err error) {
+	key := local.getCurrentRepoObjectFilePath(filePath)
+
+	err = os.Remove(key)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		} else {
+			logging.LogErrorf("remove object [%s] failed: %s", key, err)
+		}
+		return
+	}
+
+	//logging.LogInfof("removed object [%s]", key)
+	return
+}
+
+func (local *Local) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo, err error) {
+	ret = map[string]*entity.ObjectInfo{}
+
+	endWithSlash := strings.HasSuffix(pathPrefix, "/")
+	pathPrefix = local.getCurrentRepoObjectFilePath(pathPrefix)
+	if endWithSlash {
+		pathPrefix += "/"
+	}
+
+	entries, err := os.ReadDir(pathPrefix)
+	if err != nil {
+		logging.LogErrorf("list objects [%s] failed: %s", pathPrefix, err)
+		return
+	}
+
+	for _, entry := range entries {
+		entryInfo, err := entry.Info()
+		if nil != err {
+			logging.LogErrorf("get object [%s] info failed: %s", path.Join(pathPrefix, entry.Name()), err)
+			continue
+		}
+
+		filePath := entry.Name()
+		ret[filePath] = &entity.ObjectInfo{
+			Path: filePath,
+			Size: entryInfo.Size(),
+		}
+	}
+
+	//logging.LogInfof("list objects [%s]", pathPrefix)
 	return
 }
 
@@ -119,12 +205,6 @@ func (local *Local) GetStat() (stat *Stat, err error) {
 	return
 }
 
-func (local *Local) ListObjects(pathPrefix string) (objInfos map[string]*entity.ObjectInfo, err error) {
-	// TODO
-	err = ErrUnsupported
-	return
-}
-
 func (local *Local) GetIndex(id string) (index *entity.Index, err error) {
 	// TODO
 	err = ErrUnsupported
@@ -151,6 +231,7 @@ func (local *Local) AddTraffic(*Traffic) {
 func (local *Local) listRepos() (ret []*Repo, err error) {
 	entries, err := os.ReadDir(local.Local.Endpoint)
 	if err != nil {
+		logging.LogErrorf("list repos [%s] failed: %s", local.Local.Endpoint, err)
 		return
 	}
 
@@ -161,6 +242,7 @@ func (local *Local) listRepos() (ret []*Repo, err error) {
 
 		entryInfo, err := entry.Info()
 		if nil != err {
+			logging.LogErrorf("get repo [%s] info failed: %s", path.Join(local.Local.Endpoint, entry.Name()), err)
 			continue
 		}
 		ret = append(ret, &Repo{
@@ -171,4 +253,8 @@ func (local *Local) listRepos() (ret []*Repo, err error) {
 	}
 	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
 	return
+}
+
+func (local *Local) getCurrentRepoObjectFilePath(filePath string) string {
+	return path.Join(local.Local.Endpoint, local.Dir, "repo", filePath)
 }

@@ -69,20 +69,7 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 		return
 	}
 
-	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
-	folder := path.Dir(key)
-	err = webdav.mkdirAll(folder)
-	if nil != err {
-		return
-	}
-
-	err = webdav.Client.Write(key, data, 0644)
-	err = webdav.parseErr(err)
-	if nil != err {
-		logging.LogErrorf("upload object [%s] failed: %s", key, err)
-		return
-	}
-	//logging.LogInfof("uploaded object [%s]", key)
+	length, err = webdav.UploadBytes(filePath, data, overwrite)
 	return
 }
 
@@ -271,7 +258,7 @@ func (webdav *WebDAV) ListObjects(pathPrefix string) (ret map[string]*entity.Obj
 
 	infos, err := webdav.Client.ReadDir(pathPrefix)
 	if nil != err {
-		logging.LogErrorf("list objects failed: %s", err)
+		logging.LogErrorf("list objects [%s] failed: %s", pathPrefix, err)
 		return
 	}
 

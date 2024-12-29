@@ -215,12 +215,12 @@ func (baseCloud *BaseCloud) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (err error) {
+func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	err = ErrUnsupported
 	return
 }
 
-func (baseCloud *BaseCloud) UploadBytes(filePath string, data []byte, overwrite bool) (err error) {
+func (baseCloud *BaseCloud) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
 	err = ErrUnsupported
 	return
 }
@@ -230,7 +230,7 @@ func (baseCloud *BaseCloud) DownloadObject(filePath string) (data []byte, err er
 	return
 }
 
-func (baseCloud *BaseCloud) RemoveObject(key string) (err error) {
+func (baseCloud *BaseCloud) RemoveObject(filePath string) (err error) {
 	err = ErrUnsupported
 	return
 }
