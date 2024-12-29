@@ -17,6 +17,9 @@
 package cloud
 
 import (
+	"os"
+	"path"
+	"sort"
 	"sync"
 
 	"github.com/ricochet2200/go-disk-usage/du"
@@ -39,20 +42,26 @@ func NewLocal(baseCloud *BaseCloud) (ret *Local) {
 }
 
 func (local *Local) CreateRepo(name string) (err error) {
-	// TODO
-	err = ErrUnsupported
+	repoPath := path.Join(local.Local.Endpoint, name)
+	err = os.MkdirAll(repoPath, 0755)
 	return
 }
 
 func (local *Local) RemoveRepo(name string) (err error) {
-	// TODO
-	err = ErrUnsupported
+	repoPath := path.Join(local.Local.Endpoint, name)
+	err = os.RemoveAll(repoPath)
 	return
 }
 
 func (local *Local) GetRepos() (repos []*Repo, size int64, err error) {
-	// TODO
-	err = ErrUnsupported
+	repos, err = local.listRepos()
+	if nil != err {
+		return
+	}
+
+	for _, repo := range repos {
+		size += repo.Size
+	}
 	return
 }
 
@@ -136,5 +145,30 @@ func (local *Local) GetAvailableSize() int64 {
 }
 
 func (local *Local) AddTraffic(*Traffic) {
+	return
+}
+
+func (local *Local) listRepos() (ret []*Repo, err error) {
+	entries, err := os.ReadDir(local.Local.Endpoint)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		entryInfo, err := entry.Info()
+		if nil != err {
+			continue
+		}
+		ret = append(ret, &Repo{
+			Name:    entry.Name(),
+			Size:    entryInfo.Size(),
+			Updated: entryInfo.ModTime().Local().Format("2006-01-02 15:04:05"),
+		})
+	}
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Name < ret[j].Name })
 	return
 }
