@@ -120,6 +120,9 @@ func (local *Local) DownloadObject(filePath string) (data []byte, err error) {
 
 	data, err = os.ReadFile(key)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = ErrCloudObjectNotFound
+		}
 		return
 	}
 
@@ -296,8 +299,8 @@ func (local *Local) GetConcurrentReqs() (ret int) {
 	if ret < 1 {
 		ret = 16
 	}
-	if ret > 256 {
-		ret = 256
+	if ret > 1024 {
+		ret = 1024
 	}
 	return
 }
