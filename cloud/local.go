@@ -147,11 +147,7 @@ func (local *Local) RemoveObject(filePath string) (err error) {
 func (local *Local) ListObjects(pathPrefix string) (objects map[string]*entity.ObjectInfo, err error) {
 	objects = map[string]*entity.ObjectInfo{}
 
-	endWithSlash := strings.HasSuffix(pathPrefix, "/")
 	pathPrefix = path.Join(local.getCurrentRepoDirPath(), pathPrefix)
-	if endWithSlash {
-		pathPrefix += "/"
-	}
 
 	entries, err := os.ReadDir(pathPrefix)
 	if err != nil {
@@ -295,8 +291,15 @@ func (local *Local) GetIndex(id string) (index *entity.Index, err error) {
 	return
 }
 
-func (local *Local) GetConcurrentReqs() int {
-	return local.Local.ConcurrentReqs
+func (local *Local) GetConcurrentReqs() (ret int) {
+	ret = local.Local.ConcurrentReqs
+	if ret < 1 {
+		ret = 16
+	}
+	if ret > 256 {
+		ret = 256
+	}
+	return
 }
 
 func (local *Local) GetConf() *Conf {
