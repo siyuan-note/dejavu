@@ -73,9 +73,13 @@ type ConfWebDAV struct {
 
 // ConfLocal 用于描述本地存储服务配置信息。
 type ConfLocal struct {
-	Endpoint       string // 服务端点 (本地文件系统目录)
-	Timeout        int    // 超时时间，单位：秒
-	ConcurrentReqs int    // 并发请求数
+	// 服务端点 (本地文件系统目录)
+	//
+	//	"D:/path/to/repos/directory" // Windows
+	//	"/path/to/repos/directory"   // Unix
+	Endpoint       string
+	Timeout        int // 超时时间，单位：秒
+	ConcurrentReqs int // 并发请求数
 }
 
 // Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。
