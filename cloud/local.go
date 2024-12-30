@@ -289,8 +289,8 @@ func (local *Local) GetConcurrentReqs() (ret int) {
 	if ret < 1 {
 		ret = 16
 	}
-	if ret > 32 {
-		ret = 32
+	if ret > 1024 {
+		ret = 1024
 	}
 	return
 }
