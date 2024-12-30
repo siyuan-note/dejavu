@@ -23,10 +23,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/88250/gulu"
-	"github.com/ricochet2200/go-disk-usage/du"
+	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/logging"
 )
@@ -34,14 +33,11 @@ import (
 // Local 描述了本地文件系统服务实现。
 type Local struct {
 	*BaseCloud
-
-	lock sync.Mutex
 }
 
 func NewLocal(baseCloud *BaseCloud) (local *Local) {
 	local = &Local{
 		BaseCloud: baseCloud,
-		lock:      sync.Mutex{},
 	}
 	return
 }
@@ -82,10 +78,7 @@ func (local *Local) UploadObject(filePath string, overwrite bool) (length int64,
 }
 
 func (local *Local) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
-	length = int64(len(data))
-
 	key := path.Join(local.getCurrentRepoDirPath(), filePath)
-
 	folder := path.Dir(key)
 	err = os.MkdirAll(folder, 0755)
 	if err != nil {
@@ -111,6 +104,8 @@ func (local *Local) UploadBytes(filePath string, data []byte, overwrite bool) (l
 		return
 	}
 
+	length = int64(len(data))
+
 	//logging.LogInfof("uploaded object [%s]", key)
 	return
 }
@@ -132,7 +127,6 @@ func (local *Local) DownloadObject(filePath string) (data []byte, err error) {
 
 func (local *Local) RemoveObject(filePath string) (err error) {
 	key := path.Join(local.getCurrentRepoDirPath(), filePath)
-
 	err = os.Remove(key)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -149,9 +143,7 @@ func (local *Local) RemoveObject(filePath string) (err error) {
 
 func (local *Local) ListObjects(pathPrefix string) (objects map[string]*entity.ObjectInfo, err error) {
 	objects = map[string]*entity.ObjectInfo{}
-
 	pathPrefix = path.Join(local.getCurrentRepoDirPath(), pathPrefix)
-
 	entries, err := os.ReadDir(pathPrefix)
 	if err != nil {
 		logging.LogErrorf("list objects [%s] failed: %s", pathPrefix, err)
@@ -209,7 +201,6 @@ func (local *Local) GetIndexes(page int) (indexes []*entity.Index, pageCount, to
 
 	totalCount = len(indexesJSON.Indexes)
 	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
-
 	start := (page - 1) * pageSize
 	end := page * pageSize
 	if end > totalCount {
@@ -310,8 +301,12 @@ func (local *Local) GetConf() *Conf {
 }
 
 func (local *Local) GetAvailableSize() int64 {
-	info := du.NewDiskUsage(local.Local.Endpoint)
-	return int64(info.Free())
+	usage, err := disk.Usage(local.Local.Endpoint)
+	if err != nil {
+		return math.MaxInt64
+	}
+
+	return int64(usage.Free)
 }
 
 func (local *Local) AddTraffic(*Traffic) {
