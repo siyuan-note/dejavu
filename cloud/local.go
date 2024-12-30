@@ -289,8 +289,8 @@ func (local *Local) GetConcurrentReqs() (ret int) {
 	if ret < 1 {
 		ret = 16
 	}
-	if ret > 1024 {
-		ret = 1024
+	if ret > 32 {
+		ret = 32
 	}
 	return
 }
@@ -304,7 +304,6 @@ func (local *Local) GetAvailableSize() int64 {
 	if err != nil {
 		return math.MaxInt64
 	}
-
 	return int64(usage.Free)
 }
 
@@ -380,7 +379,6 @@ func (local *Local) listRepoRefs(refPrefix string) (refs []*Ref, err error) {
 
 func (local *Local) repoIndex(id string) (index *entity.Index, err error) {
 	indexFilePath := path.Join(local.getCurrentRepoDirPath(), "indexes", id)
-
 	indexFileInfo, err := os.Stat(indexFilePath)
 	if err != nil {
 		return
@@ -404,7 +402,6 @@ func (local *Local) repoIndex(id string) (index *entity.Index, err error) {
 	if err != nil {
 		return
 	}
-
 	return
 }
 
