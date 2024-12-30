@@ -112,7 +112,6 @@ func (local *Local) UploadBytes(filePath string, data []byte, overwrite bool) (l
 
 func (local *Local) DownloadObject(filePath string) (data []byte, err error) {
 	key := path.Join(local.getCurrentRepoDirPath(), filePath)
-
 	data, err = os.ReadFile(key)
 	if err != nil {
 		if os.IsNotExist(err) {
