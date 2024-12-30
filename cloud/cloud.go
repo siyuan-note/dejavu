@@ -39,6 +39,9 @@ type Conf struct {
 	// WebDAV 协议所需配置
 	WebDAV *ConfWebDAV
 
+	// 本地存储服务配置
+	Local *ConfLocal
+
 	// 以下值非官方存储服务不必传入
 	Token         string // 云端接口鉴权令牌
 	AvailableSize int64  // 云端存储可用空间字节数
@@ -66,6 +69,17 @@ type ConfWebDAV struct {
 	SkipTlsVerify  bool   // 是否跳过 TLS 验证
 	Timeout        int    // 超时时间，单位：秒
 	ConcurrentReqs int    // 并发请求数
+}
+
+// ConfLocal 用于描述本地存储服务配置信息。
+type ConfLocal struct {
+	// 服务端点 (本地文件系统目录)
+	//
+	//	"D:/path/to/repos/directory" // Windows
+	//	"/path/to/repos/directory"   // Unix
+	Endpoint       string
+	Timeout        int // 超时时间，单位：秒
+	ConcurrentReqs int // 并发请求数
 }
 
 // Cloud 描述了云端存储服务，接入云端存储服务时需要实现该接口。
@@ -205,12 +219,12 @@ func (baseCloud *BaseCloud) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (err error) {
+func (baseCloud *BaseCloud) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	err = ErrUnsupported
 	return
 }
 
-func (baseCloud *BaseCloud) UploadBytes(filePath string, data []byte, overwrite bool) (err error) {
+func (baseCloud *BaseCloud) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
 	err = ErrUnsupported
 	return
 }
@@ -220,7 +234,7 @@ func (baseCloud *BaseCloud) DownloadObject(filePath string) (data []byte, err er
 	return
 }
 
-func (baseCloud *BaseCloud) RemoveObject(key string) (err error) {
+func (baseCloud *BaseCloud) RemoveObject(filePath string) (err error) {
 	err = ErrUnsupported
 	return
 }
@@ -235,7 +249,7 @@ func (baseCloud *BaseCloud) GetIndexes(page int) (indexes []*entity.Index, pageC
 	return
 }
 
-func (baseCloud *BaseCloud) GetRefsFiles() (fileIDs []string, err error) {
+func (baseCloud *BaseCloud) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
 	err = ErrUnsupported
 	return
 }

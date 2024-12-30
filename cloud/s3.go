@@ -230,6 +230,7 @@ func (s3 *S3) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) {
 	for _, ref := range refs {
 		index, getErr := s3.repoIndex(ref.ID)
 		if nil != getErr {
+			err = getErr
 			return
 		}
 		if nil == index {
