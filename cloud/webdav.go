@@ -179,6 +179,7 @@ func (webdav *WebDAV) GetRefsFiles() (fileIDs []string, refs []*Ref, err error) 
 	for _, ref := range refs {
 		index, getErr := webdav.repoIndex(repoKey, ref.ID)
 		if nil != getErr {
+			err = getErr
 			return
 		}
 		if nil == index {
