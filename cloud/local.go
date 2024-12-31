@@ -25,8 +25,8 @@ import (
 	"strings"
 
 	"github.com/88250/gulu"
-	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/logging"
 )
 
@@ -300,11 +300,7 @@ func (local *Local) GetConf() *Conf {
 }
 
 func (local *Local) GetAvailableSize() int64 {
-	usage, err := disk.Usage(local.Local.Endpoint)
-	if err != nil {
-		return math.MaxInt64
-	}
-	return int64(usage.Free)
+	return util.GetFreeDiskSpace(local.Local.Endpoint)
 }
 
 func (local *Local) AddTraffic(*Traffic) {
