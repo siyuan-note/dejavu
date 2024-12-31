@@ -18,6 +18,8 @@
 
 package util
 
+import "math"
+
 func GetFreeDiskSpace(p string) (free int64) {
 	return math.MaxInt64
 }
