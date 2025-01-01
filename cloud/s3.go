@@ -426,6 +426,10 @@ func (s3 *S3) listRepos() (ret []*Repo, err error) {
 
 	ret = []*Repo{}
 	for _, bucket := range output.Buckets {
+		if *bucket.Name != s3.S3.Bucket {
+			continue
+		}
+
 		ret = append(ret, &Repo{
 			Name:    *bucket.Name,
 			Size:    0,
