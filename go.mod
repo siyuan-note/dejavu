@@ -22,7 +22,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20231219001248-1e028a4d13b4
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20241212013445-c66518cdacfa
-	github.com/siyuan-note/httpclient v0.0.0-20241220030420-75c76bea8a71
+	github.com/siyuan-note/httpclient v0.0.0-20250117095608-db68228420f3
 	github.com/siyuan-note/logging v0.0.0-20241218085028-6514639a9742
 	github.com/studio-b12/gowebdav v0.9.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
