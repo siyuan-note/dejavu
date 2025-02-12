@@ -508,6 +508,8 @@ func (s3 *S3) getService() *as3.Client {
 		o.Region = s3.Conf.S3.Region
 		o.UsePathStyle = s3.Conf.S3.PathStyle
 		o.HTTPClient = s3.HTTPClient
+		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
 }
 
