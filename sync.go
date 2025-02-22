@@ -313,6 +313,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
 				// 冲突列表在外部单独处理生成副本
 				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
+				logging.LogInfof("sync merge conflict [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 			}
 			continue
 		}

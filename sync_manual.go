@@ -135,6 +135,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	for _, localUpsert := range localUpserts {
 		if nil != repo.getFile(mergeResult.Upserts, localUpsert) || nil != repo.getFile(mergeResult.Removes, localUpsert) {
 			mergeResult.Conflicts = append(mergeResult.Conflicts, localUpsert)
+			logging.LogInfof("sync download conflict [%s, %s, %s]", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
 	}
 
