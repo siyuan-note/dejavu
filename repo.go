@@ -1209,7 +1209,7 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 
 	updated := time.UnixMilli(file.Updated)
 	if err = os.Chtimes(absPath, updated, updated); nil != err {
-		logging.LogErrorf("change [%s] time failed: %s", absPath, err)
+		logging.LogErrorf("change [%s] time [file.Updated=%d, updated=%v] failed: %s", absPath, file.Updated, updated, err)
 		return
 	}
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, count, total)
