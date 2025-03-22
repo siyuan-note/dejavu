@@ -283,13 +283,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 
 	// 删除所有遗留的校验索引
 	// S3/WebDAV 不上传校验索引 S3/WebDAV data sync no longer uploads check index https://github.com/siyuan-note/siyuan/issues/10180
-	checkIndexIDs, listErr := repo.cloud.ListObjects("check/indexes/")
-	if nil != listErr {
-		logging.LogErrorf("list indexes failed: %s", listErr)
-		err = listErr
-		return
-	}
-
+	checkIndexIDs, _ := repo.cloud.ListObjects("check/indexes/")
 	var unreferencedCheckIndexPaths []string
 	for checkIndexID := range checkIndexIDs {
 		checkIndexPath := path.Join("check", "indexes", checkIndexID)
