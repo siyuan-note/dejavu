@@ -75,7 +75,7 @@ require (
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/tools v0.32.0 // indirect
-	modernc.org/fileutil v1.3.0 // indirect
+	modernc.org/fileutil v1.3.1 // indirect
 )
 
 //replace github.com/siyuan-note/filelock => D:\88250\filelock
