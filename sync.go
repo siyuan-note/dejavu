@@ -720,7 +720,7 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 		if 1 > len(ret) {
 			buf.WriteString("  []")
 		}
-		logging.LogWarnf(buf.String())
+		logging.LogWarn(buf.String())
 	}
 	return
 }
