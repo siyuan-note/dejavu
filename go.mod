@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.67
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.2
 	github.com/aws/smithy-go v1.22.3
-	github.com/dgraph-io/ristretto v1.0.0
+	github.com/dgraph-io/ristretto v0.2.0
 	github.com/klauspost/compress v1.18.0
 	github.com/panjf2000/ants/v2 v2.11.3
 	github.com/qiniu/go-sdk/v7 v7.25.3
