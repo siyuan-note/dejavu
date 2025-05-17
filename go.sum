@@ -94,8 +94,12 @@ github.com/hashicorp/errwrap v1.1.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brv
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
+github.com/icholy/digest v1.1.0 h1:HfGg9Irj7i+IX1o1QAmPfIBNu/Q5A5Tu3n/MED9k9H4=
+github.com/icholy/digest v1.1.0/go.mod h1:QNrsSGQ5v7v9cReDI0+eyjsXGUoRSUZQHeQ5C4XLa0Y=
 github.com/imroc/req/v3 v3.51.0 h1:GyJxJUrvTVkhGH3v5h2UC04hqU6P465kJQNa9QeyECg=
 github.com/imroc/req/v3 v3.51.0/go.mod h1:sYQMvAjeoDrAdijR8ty71qiAHOBsF8XroF4YVddPdgQ=
+github.com/imroc/req/v3 v3.52.0 h1:NrjqsiaMqryio4sIJFejCbiph0G6KmK0JLR6B6D1SdQ=
+github.com/imroc/req/v3 v3.52.0/go.mod h1:dBGsDloOSZJcFs6PnTjZXYBJK70OXbZpizHBLNqcH2k=
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
 github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
@@ -148,6 +152,8 @@ github.com/siyuan-note/filelock v0.0.0-20250227145141-7d111cdf3c57 h1:gRFbRUgTFP
 github.com/siyuan-note/filelock v0.0.0-20250227145141-7d111cdf3c57/go.mod h1:oJhBKYrxS8WRsTZhOafG3FfGgCSOyxFzboBvQxcDX9s=
 github.com/siyuan-note/httpclient v0.0.0-20250516020454-d05b1da93770 h1:pWyZYLBejPTcpetxsKh4d7k2P9GIfmY/2KKbqoizGw8=
 github.com/siyuan-note/httpclient v0.0.0-20250516020454-d05b1da93770/go.mod h1:XUUDd4245JPp4kAi/5D+VHjVsbr68htlLgezavJM8Bc=
+github.com/siyuan-note/httpclient v0.0.0-20250517093611-df7ae2ccf5bc h1:GMILP7hgy2jmPc3ljkqY81ehlVIV08hHX9aoI3mNX/c=
+github.com/siyuan-note/httpclient v0.0.0-20250517093611-df7ae2ccf5bc/go.mod h1:JAiu6QIhvy3edgkncQdsT0b//L7ZvB+eSESmfdgd1WQ=
 github.com/siyuan-note/logging v0.0.0-20250425042449-b96c40249b54 h1:bNfLBxasCNYNIiE8YwIDDq0DxFjQ3aDbp25w8F5aShM=
 github.com/siyuan-note/logging v0.0.0-20250425042449-b96c40249b54/go.mod h1:9lb3q2RCdpjoQk7nDQwLSArNtCLafHwWtl8+kNkSISM=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
