@@ -96,8 +96,8 @@ github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
 github.com/icholy/digest v1.1.0 h1:HfGg9Irj7i+IX1o1QAmPfIBNu/Q5A5Tu3n/MED9k9H4=
 github.com/icholy/digest v1.1.0/go.mod h1:QNrsSGQ5v7v9cReDI0+eyjsXGUoRSUZQHeQ5C4XLa0Y=
-github.com/imroc/req/v3 v3.52.1 h1:JhMC+bRIDuGpsGWhGMU7GEBK6/Ql3Ggg8DxZEA16oqk=
-github.com/imroc/req/v3 v3.52.1/go.mod h1:dBGsDloOSZJcFs6PnTjZXYBJK70OXbZpizHBLNqcH2k=
+github.com/imroc/req/v3 v3.52.2 h1:xJocr1aIv0a2K9knfBQ4JnZHk+kWTITdjf0mgDg229I=
+github.com/imroc/req/v3 v3.52.2/go.mod h1:dBGsDloOSZJcFs6PnTjZXYBJK70OXbZpizHBLNqcH2k=
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
 github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
@@ -148,8 +148,8 @@ github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtb
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97/go.mod h1:1/nGgthl89FPA7GzAcEWKl6zRRnfgyTjzLZj9bW7kuw=
 github.com/siyuan-note/filelock v0.0.0-20250227145141-7d111cdf3c57 h1:gRFbRUgTFP+XcV6vfiblGB9oHI/UwzD7cSUNwE1TrpE=
 github.com/siyuan-note/filelock v0.0.0-20250227145141-7d111cdf3c57/go.mod h1:oJhBKYrxS8WRsTZhOafG3FfGgCSOyxFzboBvQxcDX9s=
-github.com/siyuan-note/httpclient v0.0.0-20250524024522-3788ebad4e5e h1:UsMm/C4rmaHCCJvRrIYB1u2tbvxIp5l8brpnerSQzBQ=
-github.com/siyuan-note/httpclient v0.0.0-20250524024522-3788ebad4e5e/go.mod h1:1c0k2fGVl/JjiBBUzOcBF2z7N3b+K15t9Ifc+PueZUc=
+github.com/siyuan-note/httpclient v0.0.0-20250526130146-7be189f1b77b h1:YqK1m9POnIpx8BuKXDRk7AbpeA105sMoDzpabqMe9KU=
+github.com/siyuan-note/httpclient v0.0.0-20250526130146-7be189f1b77b/go.mod h1:he56rJHg2G8/Y6LwqhHLo5Cw8jfHWqjh3mWJVJDYN7I=
 github.com/siyuan-note/logging v0.0.0-20250425042449-b96c40249b54 h1:bNfLBxasCNYNIiE8YwIDDq0DxFjQ3aDbp25w8F5aShM=
 github.com/siyuan-note/logging v0.0.0-20250425042449-b96c40249b54/go.mod h1:9lb3q2RCdpjoQk7nDQwLSArNtCLafHwWtl8+kNkSISM=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
