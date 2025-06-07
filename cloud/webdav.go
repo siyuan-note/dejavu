@@ -120,6 +120,11 @@ func (webdav *WebDAV) GetTags() (tags []*Ref, err error) {
 	tags, err = webdav.listRepoRefs("tags")
 	if nil != err {
 		err = webdav.parseErr(err)
+		if errors.Is(err, ErrCloudObjectNotFound) { // https://ld246.com/article/1749182255326
+			err = nil
+			tags = []*Ref{}
+			return
+		}
 		return
 	}
 	if 1 > len(tags) {
