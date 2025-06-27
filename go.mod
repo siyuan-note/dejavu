@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.36.5
 	github.com/aws/aws-sdk-go-v2/config v1.29.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.70
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.81.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.82.0
 	github.com/aws/smithy-go v1.22.4
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/klauspost/compress v1.18.0
@@ -72,7 +72,7 @@ require (
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
-	modernc.org/fileutil v1.3.7 // indirect
+	modernc.org/fileutil v1.3.8 // indirect
 )
 
 //replace github.com/siyuan-note/filelock => D:\88250\filelock
