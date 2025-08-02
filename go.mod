@@ -22,7 +22,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20250326023622-24a67e6956ec
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20250227145141-7d111cdf3c57
-	github.com/siyuan-note/httpclient v0.0.0-20250710031805-2bc45833ca6b
+	github.com/siyuan-note/httpclient v0.0.0-20250802015313-9470d10738e6
 	github.com/siyuan-note/logging v0.0.0-20250425042449-b96c40249b54
 	github.com/studio-b12/gowebdav v0.10.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -47,7 +47,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.30.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.34.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/gammazero/toposort v0.1.1 // indirect
@@ -60,18 +59,18 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.53.0 // indirect
-	github.com/refraction-networking/utls v1.7.3 // indirect
+	github.com/quic-go/quic-go v0.54.0 // indirect
+	github.com/refraction-networking/utls v1.8.0 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/mock v0.5.2 // indirect
-	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
-	golang.org/x/tools v0.34.0 // indirect
+	golang.org/x/tools v0.35.0 // indirect
 	modernc.org/fileutil v1.3.8 // indirect
 )
 
