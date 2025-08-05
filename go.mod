@@ -1,12 +1,11 @@
 module github.com/siyuan-note/dejavu
 
-go 1.24
-
-toolchain go1.24.1
+go 1.24.4
 
 require (
 	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
 	github.com/88250/gulu v1.2.3-0.20250227144607-7f4570b0d689
+	github.com/88250/lute v1.7.7-0.20250801084148-32f2ef961381
 	github.com/aws/aws-sdk-go-v2 v1.37.1
 	github.com/aws/aws-sdk-go-v2/config v1.30.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.2
@@ -19,6 +18,7 @@ require (
 	github.com/restic/chunker v0.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/shirou/gopsutil/v4 v4.25.7
+	github.com/siyuan-note/dataparser v0.0.0-20250804100744-b41253b236f3
 	github.com/siyuan-note/encryption v0.0.0-20250326023622-24a67e6956ec
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20250227145141-7d111cdf3c57
@@ -30,6 +30,7 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
+	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/alex-ant/gomath v0.0.0-20160516115720-89013a210a82 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
@@ -47,11 +48,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.31.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.35.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/gammazero/toposort v0.1.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
+	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/icholy/digest v1.1.0 // indirect

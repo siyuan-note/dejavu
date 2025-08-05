@@ -2,9 +2,13 @@ github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7 h1:MafIFwSS0x6A4
 github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7/go.mod h1:HrKCCTin3YNDSLBD02K0AOljjV6eNwc3/zyEI+xyV1I=
 github.com/88250/gulu v1.2.3-0.20250227144607-7f4570b0d689 h1:39y5g7vnFAIcXhTN3IXPk7h2xBhC4a9hBTykDhHJqRY=
 github.com/88250/gulu v1.2.3-0.20250227144607-7f4570b0d689/go.mod h1:c8uVw25vW2W4dhJ/j4iYsX5H1hc19spim266jO5x2hU=
+github.com/88250/lute v1.7.7-0.20250801084148-32f2ef961381 h1:On7e0kQ5WCCbY+B+ItjkUyqwzChPXiMpI9hlpbTYwfc=
+github.com/88250/lute v1.7.7-0.20250801084148-32f2ef961381/go.mod h1:WYyUw//5yVw9BJnoVjx7rI/3szsISxNZCYGOqTIrV0o=
 github.com/BurntSushi/toml v1.3.2/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
+github.com/alecthomas/chroma v0.10.0 h1:7XDcGkCQopCNKjZHfYrNLraA+M7e0fMiJ/Mfikbfjek=
+github.com/alecthomas/chroma v0.10.0/go.mod h1:jtJATyUxlIORhUOFNA9NZDWGAQ8wpxQQqNSB4rjA/1s=
 github.com/alex-ant/gomath v0.0.0-20160516115720-89013a210a82 h1:7dONQ3WNZ1zy960TmkxJPuwoolZwL7xKtpcM04MBnt4=
 github.com/alex-ant/gomath v0.0.0-20160516115720-89013a210a82/go.mod h1:nLnM0KdK1CmygvjpDUO6m1TjSsiQtL61juhNsvV/JVI=
 github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
@@ -58,6 +62,9 @@ github.com/dgraph-io/ristretto v0.2.0 h1:XAfl+7cmoUDWW/2Lx8TGZQjjxIQ2Ley9DSf52dr
 github.com/dgraph-io/ristretto v0.2.0/go.mod h1:8uBHCU/PBV4Ag0CJrP47b9Ofby5dqWNh4FicAdoqFNU=
 github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 h1:fAjc9m62+UWV/WAFKLNi6ZS0675eEUC9y3AlwSbQu1Y=
 github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
+github.com/dlclark/regexp2 v1.4.0/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
+github.com/dlclark/regexp2 v1.11.4 h1:rPYF9/LECdNymJufQKmri9gV604RvvABwgOA8un7yAo=
+github.com/dlclark/regexp2 v1.11.4/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/ebitengine/purego v0.8.4 h1:CF7LEKg5FFOsASUj0+QwaXf8Ht6TlFxg09+S9wz0omw=
@@ -73,11 +80,15 @@ github.com/go-playground/locales v0.14.0/go.mod h1:sawfccIbzZTqEDETgFXqTho0QybSa
 github.com/go-playground/universal-translator v0.17.0/go.mod h1:UkSxE5sNxxRwHyU+Scu5vgOQjsIJAF8j9muTVoKLVtA=
 github.com/go-playground/universal-translator v0.18.0/go.mod h1:UvRDBj+xPUEGrFYl+lu/H90nyDXpg0fqeB/AQUGNTVA=
 github.com/go-playground/validator/v10 v10.7.0/go.mod h1:xm76BBt941f7yWdGnI2DVPFFg1UK3YY04qifoXU3lOk=
+github.com/goccy/go-json v0.10.5 h1:Fq85nIqj+gXn/S5ahsiTlK3TmC85qgirsdTP/+DeaC4=
+github.com/goccy/go-json v0.10.5/go.mod h1:oq7eo15ShAhp70Anwd5lgX2pLfOS3QCiwU/PULtXL6M=
 github.com/gofrs/flock v0.8.1/go.mod h1:F1TvTiK9OcQqauNUHlbJvyl9Qa1QvF/gOUDKA14jxHU=
 github.com/gofrs/flock v0.12.1 h1:MTLVXXHf8ekldpJk3AKicLij9MdwOWkZ+a/jHHZby9E=
 github.com/gofrs/flock v0.12.1/go.mod h1:9zxTsyu5xtJ9DK+1tFZyibEV7y3uwDxPPfbxeeHCoD0=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+github.com/gopherjs/gopherjs v1.17.2 h1:fQnZVsXk8uxXIStYb0N4bGk7jeyTalG/wsZjQ25dO0g=
+github.com/gopherjs/gopherjs v1.17.2/go.mod h1:pRRIvn/QzFLrKfvEz3qUuEhtE/zLCWfreZ6J5gM2i+k=
 github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
 github.com/hashicorp/errwrap v1.0.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brvKWEqk/Jc4=
@@ -128,6 +139,8 @@ github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDj
 github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
 github.com/shirou/gopsutil/v4 v4.25.7 h1:bNb2JuqKuAu3tRlPv5piSmBZyMfecwQ+t/ILq+1JqVM=
 github.com/shirou/gopsutil/v4 v4.25.7/go.mod h1:XV/egmwJtd3ZQjBpJVY5kndsiOO4IRqy9TQnmm6VP7U=
+github.com/siyuan-note/dataparser v0.0.0-20250804100744-b41253b236f3 h1:EH063L0HD1f82DvddurUmEXS0obXypv8pQrcaC/zNgI=
+github.com/siyuan-note/dataparser v0.0.0-20250804100744-b41253b236f3/go.mod h1:8lb+SsWAPQblGbjmwEBsBdJszMCcLeECtB95fv6mReg=
 github.com/siyuan-note/encryption v0.0.0-20250326023622-24a67e6956ec h1:D8Sjwa+7WxP3XrIBscT4PxBZZddZ83/O+5nX1sq6g6g=
 github.com/siyuan-note/encryption v0.0.0-20250326023622-24a67e6956ec/go.mod h1:6iAxXPOOAG3+M4bCiKQZTQ+n4gSUx/OyHhsP57dJlS8=
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtbOL5jYwhCdMYBcYtr06IYBKjjSLAPMKTM8=
@@ -141,6 +154,7 @@ github.com/siyuan-note/logging v0.0.0-20250425042449-b96c40249b54/go.mod h1:9lb3
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/studio-b12/gowebdav v0.10.0 h1:Yewz8FFiadcGEu4hxS/AAJQlHelndqln1bns3hcJIYc=

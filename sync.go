@@ -30,8 +30,12 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/88250/lute"
+	"github.com/88250/lute/ast"
+	"github.com/88250/lute/parse"
 	"github.com/panjf2000/ants/v2"
 	ignore "github.com/sabhiram/go-gitignore"
+	"github.com/siyuan-note/dataparser"
 	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
@@ -296,8 +300,10 @@ func (repo *Repo) sync0(context map[string]interface{},
 		fetchedFileIDs = append(fetchedFileIDs, fetchedFile.ID)
 	}
 
+	nowStr := mergeResult.Time.Format("2006-01-02-150405")
+
 	// 计算冲突的 upsert 和无冲突能够合并的 upsert
-	// 冲突的文件以本地 upsert 和 remove 为准
+	// 冲突的文件尽量以本地 upsert 和 remove 为准
 	var tmpMergeConflicts []*entity.File
 	var cloudUpsertIgnore *entity.File
 	for _, cloudUpsert := range cloudUpserts {
@@ -305,13 +311,21 @@ func (repo *Repo) sync0(context map[string]interface{},
 			cloudUpsertIgnore = cloudUpsert
 		}
 
-		if localUpsert := repo.getFile(localUpserts, cloudUpsert); nil != localUpsert {
+		if localUpsert := repo.getFile(localUpserts, cloudUpsert); nil != localUpsert { // 相同的文件本地发生了变更
 			// 无论是否发生实际下载文件，都需要生成本地历史，以确保任何情况下都能够通过数据历史恢复文件
 			tmpMergeConflicts = append(tmpMergeConflicts, cloudUpsert)
 
 			if gulu.Str.Contains(cloudUpsert.ID, fetchedFileIDs) {
-				// 发生实际下载文件的情况下才能认为云端有更新的 upsert 从而导致了冲突
-				// 冲突列表在外部单独处理生成副本
+				// 发生实际下载文件的情况，尝试解决冲突
+
+				if repo.ignoreLocalUpsert(localUpsert, latestSyncFiles, nowStr, context) {
+					// 如果能忽略本地变更的话则不算做冲突，进行正常合并
+					mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
+					logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+					continue
+				}
+
+				// 云端有更新的 upsert 从而导致了冲突，在外部单独处理生成副本
 				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
 				logging.LogInfof("sync merge conflict [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 			}
@@ -331,7 +345,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 				logging.LogWarnf("ignored cloud upsert [%s, %s, %s] because local file is newer", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
 				cloudUpsertTooOld = true
 			}
-
 			if !cloudUpsertTooOld {
 				mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
 				logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
@@ -383,8 +396,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(tmpMergeConflicts) {
-		now := mergeResult.Time.Format("2006-01-02-150405")
-		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
+		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", nowStr)
 		for i, file := range tmpMergeConflicts {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
@@ -400,7 +412,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			}
 
 			absPath := filepath.Join(temp, checkoutTmp.Path)
-			err = repo.genSyncHistory(now, file.Path, absPath)
+			err = repo.genSyncHistory(nowStr, file.Path, absPath)
 			if nil != err {
 				logging.LogErrorf("generate sync history failed: %s", err)
 				err = ErrCloudGenerateConflictHistory
@@ -438,6 +450,118 @@ func (repo *Repo) sync0(context map[string]interface{},
 
 	// 移除空目录
 	gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
+	return
+}
+
+func (repo *Repo) ignoreLocalUpsert(localUpsert *entity.File, latestSyncFiles []*entity.File, now string, context map[string]interface{}) bool {
+	if !strings.HasSuffix(localUpsert.Path, ".sy") {
+		return false // 非 .sy 文件目前不做内容对比，直接认为本地 upsert 是最新的
+	}
+
+	latestSyncFile := repo.getFile(latestSyncFiles, localUpsert)
+	if nil == latestSyncFile {
+		return false // 本地 upsert 是新增的文件
+	}
+
+	// 如果是变更 .sy 文件则需要解析并进行内容对比
+
+	luteEngine := lute.New()
+	temp := filepath.Join(repo.TempPath, "repo", "sync", "resolves", now)
+	localTree, err := repo.checkoutTree(localUpsert, temp, luteEngine, context)
+	if nil != err {
+		return false
+	}
+	localLastSyncTree, err := repo.checkoutTree(latestSyncFile, temp, luteEngine, context)
+	if nil != err {
+		return false
+	}
+
+	localNodes, localLastSyncNodes := map[string]*ast.Node{}, map[string]*ast.Node{}
+	ast.Walk(localTree.Root, func(node *ast.Node, entering bool) ast.WalkStatus {
+		if !entering || !node.IsBlock() || ast.NodeDocument == node.Type {
+			return ast.WalkContinue
+		}
+
+		localNodes[node.ID] = node
+		return ast.WalkContinue
+	})
+	ast.Walk(localLastSyncTree.Root, func(node *ast.Node, entering bool) ast.WalkStatus {
+		if !entering || !node.IsBlock() || ast.NodeDocument == node.Type {
+			return ast.WalkContinue
+		}
+
+		localLastSyncNodes[node.ID] = node
+		return ast.WalkContinue
+	})
+
+	if len(localNodes) != len(localLastSyncNodes) {
+		return false // 本地变更导致块数量不相同
+	}
+
+	for id, localNode := range localNodes {
+		if lastSyncNode, ok := localLastSyncNodes[id]; !ok || localNode.ID != lastSyncNode.ID || localNode.Type != lastSyncNode.Type {
+			return false // 本地变更导致块不相同
+		}
+
+		localLastSyncNode := localLastSyncNodes[id]
+		if !onlyChangeFoldIAL(localNode, localLastSyncNode) {
+			return false // 本地变更导致块不相同
+		}
+	}
+	return true // 本地仅变更了折叠属性，并且云端也有更新的 upsert，所以忽略本地的折叠变更
+}
+
+func onlyChangeFoldIAL(n1, n2 *ast.Node) bool {
+	if n1.Content() != n2.Content() {
+		return false
+	}
+
+	n1Attrs := parse.IAL2Map(n1.KramdownIAL)
+	n2Attrs := parse.IAL2Map(n2.KramdownIAL)
+
+	// 移除折叠属性
+	delete(n1Attrs, "fold")
+	delete(n1Attrs, "heading-fold")
+	delete(n2Attrs, "fold")
+	delete(n2Attrs, "heading-fold")
+
+	// 移除更新时间
+	delete(n1Attrs, "updated")
+	delete(n2Attrs, "updated")
+
+	if len(n1Attrs) != len(n2Attrs) {
+		return false
+	}
+
+	for k, v1 := range n1Attrs {
+		if v2, ok := n2Attrs[k]; !ok || v1 != v2 {
+			return false
+		}
+	}
+	return true
+}
+
+func (repo *Repo) checkoutTree(file *entity.File, checkoutDir string, luteEngine *lute.Lute, context map[string]interface{}) (ret *parse.Tree, err error) {
+	checkoutTmp, err := repo.store.GetFile(file.ID)
+	if nil != err {
+		logging.LogErrorf("get file failed: %s", err)
+		return
+	}
+	if err = repo.checkoutFile(checkoutTmp, checkoutDir, 1, 1, context); nil != err {
+		logging.LogErrorf("checkout file failed: %s", err)
+		return
+	}
+	absPath := filepath.Join(checkoutDir, checkoutTmp.Path)
+	data, err := os.ReadFile(absPath)
+	if nil != err {
+		logging.LogErrorf("read file failed: %s", err)
+		return
+	}
+	ret, err = dataparser.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
+	if nil != err {
+		logging.LogErrorf("parse tree failed: %s", err)
+		return
+	}
 	return
 }
 
