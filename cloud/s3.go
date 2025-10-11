@@ -460,7 +460,9 @@ func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 		return
 	}
 	info.Size = *header.ContentLength
-	if nil != header.LastModified {
+	if nil == header.LastModified {
+		logging.LogWarnf("stat file [%s] header last modified is nil", key)
+	} else {
 		updated = header.LastModified.Format("2006-01-02 15:04:05")
 	}
 	info.Updated = updated
