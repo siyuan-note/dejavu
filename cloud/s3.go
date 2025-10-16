@@ -212,6 +212,9 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
 			continue
 		}
+		if nil == index {
+			continue
+		}
 
 		index.Files = nil // Optimize the performance of obtaining cloud snapshots https://github.com/siyuan-note/siyuan/issues/8387
 		ret = append(ret, index)
@@ -350,10 +353,12 @@ func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 
 	data, err := s3.DownloadObject(path.Join("indexes", id))
 	if nil != err {
+		logging.LogErrorf("download index [%s] failed: %s", id, err)
 		return
 	}
 	data, err = compressDecoder.DecodeAll(data, nil)
 	if nil != err {
+		logging.LogErrorf("decompress index [%s] failed: %s", id, err)
 		return
 	}
 	ret = &entity.Index{}
@@ -460,6 +465,9 @@ func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 		return
 	}
 	info.Size = *header.ContentLength
+	if 1 > info.Size {
+		logging.LogWarnf("stat file [%s] size is [%d]", key, info.Size)
+	}
 	if nil == header.LastModified {
 		logging.LogWarnf("stat file [%s] header last modified is nil", key)
 	} else {
