@@ -54,6 +54,8 @@ var (
 type MergeResult struct {
 	Time                        time.Time
 	Upserts, Removes, Conflicts []*entity.File
+
+	ChangedPetals []string // storage/petal/petals.json 中变更的插件，这个变量会在思源中计算并填充
 }
 
 func (mr *MergeResult) DataChanged() bool {
