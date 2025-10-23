@@ -421,16 +421,10 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 	}
 
-	// 数据变更后还原工作区
-	err = repo.checkoutFiles(mergeResult.Upserts, context)
+	// 数据变更后还原文件
+	err = repo.restoreFiles(mergeResult, context)
 	if nil != err {
-		logging.LogErrorf("checkout files failed: %s", err)
-		return
-	}
-	err = repo.removeFiles(mergeResult.Removes, context)
-	if nil != err {
-		logging.LogErrorf("remove files failed: %s", err)
-		return
+		logging.LogErrorf("restore files failed: %s", err)
 	}
 
 	// 处理合并
@@ -565,8 +559,7 @@ func (repo *Repo) checkoutTree(file *entity.File, checkoutDir string, luteEngine
 	return
 }
 
-func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
-	// 数据变更后还原工作区
+func (repo *Repo) restoreFiles(mergeResult *MergeResult, context map[string]interface{}) (err error) {
 	err = repo.checkoutFiles(mergeResult.Upserts, context)
 	if nil != err {
 		logging.LogErrorf("checkout files failed: %s", err)
@@ -577,7 +570,10 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 		logging.LogErrorf("remove files failed: %s", err)
 		return
 	}
+	return
+}
 
+func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
 	if mergeResult.DataChanged() {
 		if localChanged { // 如果云端和本地都改变了，则需要创建合并索引并再次同步
 			logging.LogInfof("creating merge index [%s]", latest.ID)
