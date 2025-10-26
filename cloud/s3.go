@@ -8,11 +8,11 @@
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Affero General Public License for more details.
 //
 // You should have received a copy of the GNU Affero General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package cloud
 
@@ -47,10 +47,12 @@ import (
 type S3 struct {
 	*BaseCloud
 	HTTPClient *http.Client
+	service    *as3.Client // [增量] 添加 service 字段用于缓存 S3 客户端
+	mux        sync.Mutex  // [增量] 添加 mux 字段用于保护 service 字段的并发访问
 }
 
 func NewS3(baseCloud *BaseCloud, httpClient *http.Client) *S3 {
-	return &S3{baseCloud, httpClient}
+	return &S3{BaseCloud: baseCloud, HTTPClient: httpClient}
 }
 
 func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
@@ -85,10 +87,10 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 	defer file.Close()
 	key := path.Join("repo", filePath)
 	_, err = svc.PutObject(ctx, &as3.PutObjectInput{
-		Bucket:       aws.String(s3.Conf.S3.Bucket),
-		Key:          aws.String(key),
+		Bucket:       aws.String(s3.Conf.S3.Bucket),
+		Key:          aws.String(key),
 		CacheControl: aws.String("no-cache"),
-		Body:         file,
+		Body:         file,
 	})
 	if nil != err {
 		return
@@ -106,10 +108,10 @@ func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length 
 
 	key := path.Join("repo", filePath)
 	_, err = svc.PutObject(ctx, &as3.PutObjectInput{
-		Bucket:       aws.String(s3.Conf.S3.Bucket),
-		Key:          aws.String(key),
+		Bucket:       aws.String(s3.Conf.S3.Bucket),
+		Key:          aws.String(key),
 		CacheControl: aws.String("no-cache"),
-		Body:         bytes.NewReader(data),
+		Body:         bytes.NewReader(data),
 	})
 	if nil != err {
 		return
@@ -125,8 +127,8 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	defer cancelFn()
 	key := path.Join("repo", filePath)
 	input := &as3.GetObjectInput{
-		Bucket:               aws.String(s3.Conf.S3.Bucket),
-		Key:                  aws.String(key),
+		Bucket:               aws.String(s3.Conf.S3.Bucket),
+		Key:                  aws.String(key),
 		ResponseCacheControl: aws.String("no-cache"),
 	}
 	resp, err := svc.GetObject(ctx, input)
@@ -153,7 +155,7 @@ func (s3 *S3) RemoveObject(key string) (err error) {
 	defer cancelFn()
 	_, err = svc.DeleteObject(ctx, &as3.DeleteObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(key),
 	})
 	if nil != err {
 		return
@@ -315,8 +317,8 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 	defer cancelFn()
 
 	paginator := as3.NewListObjectsV2Paginator(svc, &as3.ListObjectsV2Input{
-		Bucket:  &s3.Conf.S3.Bucket,
-		Prefix:  &pathPrefix,
+		Bucket:  &s3.Conf.S3.Bucket,
+		Prefix:  &pathPrefix,
 		MaxKeys: &limit,
 	})
 
@@ -376,9 +378,9 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	marker := ""
 	for {
 		output, listErr := svc.ListObjects(ctx, &as3.ListObjectsInput{
-			Bucket:  &s3.Conf.S3.Bucket,
-			Prefix:  &prefix,
-			Marker:  &marker,
+			Bucket:  &s3.Conf.S3.Bucket,
+			Prefix:  &prefix,
+			Marker:  &marker,
 			MaxKeys: &limit,
 		})
 		if nil != listErr {
@@ -406,8 +408,8 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 			}
 
 			ret = append(ret, &Ref{
-				Name:    path.Base(*entry.Key),
-				ID:      id,
+				Name:    path.Base(*entry.Key),
+				ID:      id,
 				Updated: entry.LastModified.Format("2006-01-02 15:04:05"),
 			})
 		}
@@ -436,8 +438,8 @@ func (s3 *S3) listRepos() (ret []*Repo, err error) {
 		}
 
 		ret = append(ret, &Repo{
-			Name:    *bucket.Name,
-			Size:    0,
+			Name:    *bucket.Name,
+			Size:    0,
 			Updated: (*bucket.CreationDate).Format("2006-01-02 15:04:05"),
 		})
 	}
@@ -452,7 +454,7 @@ func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 
 	header, err := svc.HeadObject(ctx, &as3.HeadObjectInput{
 		Bucket: &s3.Conf.S3.Bucket,
-		Key:    &key,
+		Key:    &key,
 	})
 	if nil != err {
 		return
@@ -511,12 +513,19 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 }
 
 func (s3 *S3) getService() *as3.Client {
+	s3.mux.Lock()
+	defer s3.mux.Unlock()
+
+	if nil != s3.service {
+		return s3.service
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		logging.LogErrorf("load default config failed: %s", err)
 	}
 
-	return as3.NewFromConfig(cfg, func(o *as3.Options) {
+	s3.service = as3.NewFromConfig(cfg, func(o *as3.Options) {
 		o.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(s3.Conf.S3.AccessKey, s3.Conf.S3.SecretKey, ""))
 		o.BaseEndpoint = aws.String(s3.Conf.S3.Endpoint)
 		o.Region = s3.Conf.S3.Region
@@ -524,7 +533,23 @@ func (s3 *S3) getService() *as3.Client {
 		o.HTTPClient = s3.HTTPClient
 		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+
+		// --- START: S3 Compatibility Fix for SigV4 (Cloudflare Tunnel/Proxies) ---
+		// This fix addresses the 'SignatureDoesNotMatch' error encountered when using
+		// S3-compatible endpoints proxied through services like Cloudflare Tunnel.
+		// Proxies may modify headers (like Accept-Encoding), which invalidates the
+		// AWS Signature Version 4 calculation.
+		endpoint := strings.ToLower(s3.Conf.S3.Endpoint)
+
+		// Only apply the compatibility middleware if the endpoint is NOT an official AWS S3 endpoint.
+		if !strings.Contains(endpoint, "amazonaws.com") {
+			// IgnoreSigningHeaders and HeadersToIgnore are defined in s3_middleware.go (same package).
+			IgnoreSigningHeaders(o, HeadersToIgnore)
+			gulu.LogDebugf("Applied S3 compatibility fix for non-AWS endpoint: %s", s3.Conf.S3.Endpoint)
+		}
+		// --- END: S3 Compatibility Fix ---
 	})
+	return s3.service
 }
 
 func (s3 *S3) isErrNotFound(err error) bool {
