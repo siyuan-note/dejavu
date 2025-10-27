@@ -638,13 +638,13 @@ func restoreIgnored() middleware.FinalizeMiddleware {
 	return middleware.FinalizeMiddlewareFunc(
 		"S3CompatRestoreHeaders",
 		func(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (out middleware.FinalizeOutput, metadata middleware.Metadata, err error) {
-			// Execute the next handler first (which includes the signing)
-			out, metadata, err = next.HandleFinalize(ctx, in)
-
 			req, ok := in.Request.(*smithyhttp.Request)
 			if !ok {
 				return out, metadata, errors.New("unexpected request middleware type for restoreIgnored")
 			}
+
+			// Execute the next Handler (which includes signing and the actual network request)
+			out, metadata, err = next.HandleFinalize(ctx, in)
 
 			// Retrieve ignored headers from the context
 			ignored, _ := middleware.GetStackValue(ctx, ignoredHeadersKey{}).(map[string]string)
