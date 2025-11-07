@@ -168,6 +168,10 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 	objIDs := map[string]bool{}
 	for objPath, _ := range objInfos {
 		objID := strings.ReplaceAll(objPath, "/", "")
+		if "" == objID {
+			logging.LogWarnf("got empty object ID [path=%s]", objPath)
+			continue
+		}
 		objIDs[objID] = true
 	}
 
