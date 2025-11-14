@@ -198,11 +198,6 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 
 	refIndexIDs := map[string]bool{}
 	for r := range refs {
-		if "" == r {
-			logging.LogWarnf("got empty ref")
-			continue
-		}
-
 		ref, getErr := repo.cloud.DownloadObject(path.Join("refs", r))
 		if nil != getErr {
 			err = getErr
