@@ -335,6 +335,11 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 
 		for _, entry := range output.Contents {
 			filePath := strings.TrimPrefix(*entry.Key, pathPrefix)
+			if "" == filePath {
+				logging.LogWarnf("skip empty file path for key [%s]", *entry.Key)
+				continue
+			}
+
 			ret[filePath] = &entity.ObjectInfo{
 				Path: filePath,
 				Size: *entry.Size,
