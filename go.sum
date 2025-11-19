@@ -123,8 +123,8 @@ github.com/qiniu/dyn v1.3.0/go.mod h1:E8oERcm8TtwJiZvkQPbcAh0RL8jO1G0VXJMW3FAWdk
 github.com/qiniu/go-sdk/v7 v7.25.4 h1:ulCKlTEyrZzmNytXweOrnva49+Q4+ASjYBCSXhkRWTo=
 github.com/qiniu/go-sdk/v7 v7.25.4/go.mod h1:dmKtJ2ahhPWFVi9o1D5GemmWoh/ctuB9peqTowyTO8o=
 github.com/qiniu/x v1.10.5/go.mod h1:03Ni9tj+N2h2aKnAz+6N0Xfl8FwMEDRC2PAlxekASDs=
-github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
-github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
+github.com/quic-go/qpack v0.5.1 h1:giqksBPnT/HDtZ6VhtFKgoLOWmlyo9Ei6u9PqzIMbhI=
+github.com/quic-go/qpack v0.5.1/go.mod h1:+PC4XFrEskIVkcLzpEkbLqq1uCoxPhQuvK5rH1ZgaEg=
 github.com/quic-go/quic-go v0.56.0 h1:q/TW+OLismmXAehgFLczhCDTYB3bFmua4D9lsNBWxvY=
 github.com/quic-go/quic-go v0.56.0/go.mod h1:9gx5KsFQtw2oZ6GZTyh+7YEvOxWCL9WZAepnHxgAo6c=
 github.com/refraction-networking/utls v1.8.1 h1:yNY1kapmQU8JeM1sSw2H2asfTIwWxIkrMJI0pRUOCAo=
@@ -145,8 +145,8 @@ github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtb
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97/go.mod h1:1/nGgthl89FPA7GzAcEWKl6zRRnfgyTjzLZj9bW7kuw=
 github.com/siyuan-note/filelock v0.0.0-20251107023958-207cad31f0dd h1:7Rr+wH2hy/goTMe5EAZHjpfEudZZXVVaZOkhs/xzX+I=
 github.com/siyuan-note/filelock v0.0.0-20251107023958-207cad31f0dd/go.mod h1:jFSEENJoE+SRZ7xtSpiflL3RMfnxE6CAJFUfBuuGs1A=
-github.com/siyuan-note/httpclient v0.0.0-20251119141814-fb19e5aa22a0 h1:1BViAJbYicX+bv2AJs5p88+NEK33W022rDyGLG5VY8U=
-github.com/siyuan-note/httpclient v0.0.0-20251119141814-fb19e5aa22a0/go.mod h1:1FHEzOBQnCafBGEjOzumLWgiQOFvGNH0WxQFgRC8sPc=
+github.com/siyuan-note/httpclient v0.0.0-20251119144307-63b815d7d198 h1:NCFtk65n+a6oo+nIXnYPx3jCgs3O2uvvihnD7aRy/ZE=
+github.com/siyuan-note/httpclient v0.0.0-20251119144307-63b815d7d198/go.mod h1:w8ZKhKvcOr6lXsfxGmXQQTcIlVYWKhesB5IaXC+3OkA=
 github.com/siyuan-note/logging v0.0.0-20251107023700-cd4339891032 h1:z1r9ZhSTISDom1lvqKuiykfI7YtPCIELABj8onc0n3A=
 github.com/siyuan-note/logging v0.0.0-20251107023700-cd4339891032/go.mod h1:UVFePdmdasN+fLDEYFr2X734G2AIJb6nYS9WcWK5740=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

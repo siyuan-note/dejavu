@@ -22,7 +22,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20250326023622-24a67e6956ec
 	github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97
 	github.com/siyuan-note/filelock v0.0.0-20251107023958-207cad31f0dd
-	github.com/siyuan-note/httpclient v0.0.0-20251119141814-fb19e5aa22a0
+	github.com/siyuan-note/httpclient v0.0.0-20251119144307-63b815d7d198
 	github.com/siyuan-note/logging v0.0.0-20251107023700-cd4339891032
 	github.com/studio-b12/gowebdav v0.11.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -61,7 +61,7 @@ require (
 	github.com/imroc/req/v3 v3.56.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/quic-go/qpack v0.6.0 // indirect
+	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.56.0 // indirect
 	github.com/refraction-networking/utls v1.8.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
