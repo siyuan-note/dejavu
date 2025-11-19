@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
-	github.com/88250/gulu v1.2.3-0.20251107023402-569f52804e3b
+	github.com/88250/gulu v1.2.3-0.20251119142510-7b1583ab4aa0
 	github.com/88250/lute v1.7.7-0.20250801084148-32f2ef961381
 	github.com/aws/aws-sdk-go-v2 v1.39.6
 	github.com/aws/aws-sdk-go-v2/config v1.31.20
