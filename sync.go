@@ -1247,6 +1247,7 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 
 	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
 	if nil != err {
+		logging.LogErrorf("decompress cloud indexes-v2.json failed: %s", err)
 		return
 	}
 
@@ -1254,6 +1255,7 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 	if 0 < len(data) {
 		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
 			logging.LogWarnf("unmarshal cloud indexes-v2.json failed: %s", err)
+			return
 		}
 
 		// Deduplication when uploading cloud snapshot indexes https://github.com/siyuan-note/siyuan/issues/8424
@@ -1285,12 +1287,14 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 		},
 	}, indexes.Indexes...)
 	if data, err = gulu.JSON.MarshalIndentJSON(indexes, "", "\t"); nil != err {
+		logging.LogErrorf("marshal cloud indexes-v2.json failed: %s", err)
 		return
 	}
 
 	data = repo.store.compressEncoder.EncodeAll(data, nil)
 
 	if err = gulu.File.WriteFileSafer(filepath.Join(repo.Path, "indexes-v2.json"), data, 0644); nil != err {
+		logging.LogErrorf("write indexes-v2.json failed: %s", err)
 		return
 	}
 
