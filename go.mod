@@ -7,9 +7,9 @@ require (
 	github.com/88250/gulu v1.2.3-0.20251119142510-7b1583ab4aa0
 	github.com/88250/lute v1.7.7-0.20250801084148-32f2ef961381
 	github.com/aws/aws-sdk-go-v2 v1.40.0
-	github.com/aws/aws-sdk-go-v2/config v1.32.0
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.91.1
+	github.com/aws/aws-sdk-go-v2/config v1.32.1
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.92.0
 	github.com/aws/smithy-go v1.23.2
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/klauspost/compress v1.18.1
@@ -46,7 +46,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
