@@ -428,6 +428,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	err = repo.restoreFiles(mergeResult, context)
 	if nil != err {
 		logging.LogErrorf("restore files failed: %s", err)
+		return
 	}
 
 	// 处理合并

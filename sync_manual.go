@@ -171,6 +171,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	err = repo.restoreFiles(mergeResult, context)
 	if nil != err {
 		logging.LogErrorf("restore files failed: %s", err)
+		return
 	}
 
 	// 处理合并
