@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -133,6 +134,13 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 }
 
 func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
+	if !gulu.File.IsDir(repo.Path) {
+		if err = os.MkdirAll(repo.Path, 0755); nil != err {
+			logging.LogErrorf("create repo dir failed: %s", err)
+			return
+		}
+	}
+
 	lockSyncPath := filepath.Join(repo.Path, lockSyncKey)
 	content := map[string]interface{}{
 		"deviceID": currentDeviceID,
