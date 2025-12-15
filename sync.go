@@ -1588,6 +1588,7 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 	ret, err = repo.store.GetIndex(hash)
 	if nil != err {
 		logging.LogWarnf("get latest sync index failed: %s", err)
+		ret = &entity.Index{}
 		return
 	}
 	logging.LogInfof("got latest sync [%s]", ret.String())
