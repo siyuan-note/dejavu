@@ -120,7 +120,7 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 		logging.LogErrorf("read refs failed: %s", err)
 		return
 	}
-	for _, retentionIndexID := range retentionIndexIDs { // 指定保留的索引对象算作被引用
+	for _, retentionIndexID := range retentionIndexIDs { // 指定保留的索引算作被引用
 		refIndexIDs[retentionIndexID] = true
 	}
 	unreferencedIndexIDs := map[string]bool{}
