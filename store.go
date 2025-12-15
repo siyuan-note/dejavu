@@ -114,7 +114,7 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 		}
 	}
 
-	// 收集所有引用的索引对象
+	// 收集所有引用的索引
 	refIndexIDs, err := store.readRefs()
 	if nil != err {
 		logging.LogErrorf("read refs failed: %s", err)
@@ -123,8 +123,6 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 	for _, retentionIndexID := range retentionIndexIDs { // 指定保留的索引对象算作被引用
 		refIndexIDs[retentionIndexID] = true
 	}
-
-	// 收集所有引用的索引对象
 	unreferencedIndexIDs := map[string]bool{}
 	for indexID := range indexIDs {
 		if !refIndexIDs[indexID] {
