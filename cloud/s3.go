@@ -562,7 +562,27 @@ func (s3 *S3) getService() *as3.Client {
 	return s3.service
 }
 
+var notFoundMsgs = []string{
+	"not found",
+	"404",
+	"no such file or directory",
+	"does not exist",
+}
+
+func containsStr(str string, strs []string) bool {
+	for _, s := range strs {
+		if strings.Contains(str, s) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s3 *S3) isErrNotFound(err error) bool {
+	if nil == err {
+		return false
+	}
+
 	var nsk *as3Types.NoSuchKey
 	if errors.As(err, &nsk) {
 		return true
@@ -576,9 +596,11 @@ func (s3 *S3) isErrNotFound(err error) bool {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		msg := strings.ToLower(apiErr.ErrorMessage())
-		return strings.Contains(msg, "does not exist") || strings.Contains(msg, "404") || strings.Contains(msg, "no such file or directory")
+		return containsStr(msg, notFoundMsgs)
 	}
-	return false
+
+	msg := strings.ToLower(err.Error())
+	return containsStr(msg, notFoundMsgs)
 }
 
 // HeadersToIgnore lists headers that frequently cause SignatureDoesNotMatch errors
