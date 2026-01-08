@@ -396,6 +396,11 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 			return
 		}
 
+		if nil == output {
+			logging.LogWarnf("list objects output is nil")
+			return
+		}
+
 		marker = *output.Marker
 
 		for _, entry := range output.Contents {
