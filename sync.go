@@ -1670,6 +1670,12 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 		return
 	}
 	downloadBytes += int64(len(data))
+
+	if !index.VerifyAESKey(repo.store.AesKey) {
+		err = cloud.ErrDecryptFailed
+		logging.LogErrorf("cloud index [%s] verify AES key failed", index.String())
+		return
+	}
 	return
 }
 
