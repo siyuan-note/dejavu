@@ -17,29 +17,62 @@
 package entity
 
 import (
+	"encoding/base64"
 	"fmt"
 	"time"
 
 	"github.com/88250/go-humanize"
+	"github.com/siyuan-note/encryption"
+	"github.com/siyuan-note/logging"
 )
 
 // Index 描述了快照索引。
 type Index struct {
-	ID           string   `json:"id"`           // Hash
-	Memo         string   `json:"memo"`         // 索引备注
-	Created      int64    `json:"created"`      // 索引时间
-	Files        []string `json:"files"`        // 文件列表
-	Count        int      `json:"count"`        // 文件总数
-	Size         int64    `json:"size"`         // 文件总大小
-	SystemID     string   `json:"systemID"`     // 系统 ID
-	SystemName   string   `json:"systemName"`   // 系统名称
-	SystemOS     string   `json:"systemOS"`     // 系统操作系统
-	CheckIndexID string   `json:"checkIndexID"` // Check Index ID
+	ID              string   `json:"id"`              // Hash
+	Memo            string   `json:"memo"`            // 索引备注
+	Created         int64    `json:"created"`         // 索引时间
+	Files           []string `json:"files"`           // 文件列表
+	Count           int      `json:"count"`           // 文件总数
+	Size            int64    `json:"size"`            // 文件总大小
+	SystemID        string   `json:"systemID"`        // 系统 ID
+	SystemName      string   `json:"systemName"`      // 系统名称
+	SystemOS        string   `json:"systemOS"`        // 系统操作系统
+	CheckIndexID    string   `json:"checkIndexID"`    // Check Index ID
+	AesKeyVerifyVal string   `json:"aesKeyVerifyVal"` // Aes Key 校验值
 }
 
 func (index *Index) String() string {
 	return fmt.Sprintf("device=%s/%s, id=%s, files=%d, size=%s, created=%s",
 		index.SystemID, index.SystemOS, index.ID, len(index.Files), humanize.BytesCustomCeil(uint64(index.Size), 2), time.UnixMilli(index.Created).Format("2006-01-02 15:04:05"))
+}
+
+func (index *Index) InitAESKeyVerifyVal(aesKey []byte) {
+	data, err := encryption.AesEncrypt([]byte("siyuan"), aesKey)
+	if nil != err {
+		logging.LogErrorf("init aes key verify val failed: %s", err)
+		return
+	}
+
+	index.AesKeyVerifyVal = base64.StdEncoding.EncodeToString(data)
+}
+
+func (index *Index) VerifyAESKey(aesKey []byte) bool {
+	if "" == index.AesKeyVerifyVal { // 兼容旧版本
+		return true
+	}
+
+	data, err := base64.StdEncoding.DecodeString(index.AesKeyVerifyVal)
+	if nil != err {
+		logging.LogErrorf("decode aes key verify val failed: %s", err)
+		return false
+	}
+
+	plainData, err := encryption.AesDecrypt(data, aesKey)
+	if nil != err {
+		logging.LogErrorf("decrypt aes key verify val failed: %s", err)
+		return false
+	}
+	return "siyuan" == string(plainData)
 }
 
 // CheckIndex 描述了一个 Index 对应的数据 ID，包括 File ID 和 Chunk ID。

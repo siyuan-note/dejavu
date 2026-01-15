@@ -685,6 +685,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 			SystemName: repo.DeviceName,
 			SystemOS:   repo.DeviceOS,
 		}
+		latest.InitAESKeyVerifyVal(repo.store.AesKey)
 		init = true
 	}
 
@@ -795,6 +796,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 			SystemName: repo.DeviceName,
 			SystemOS:   repo.DeviceOS,
 		}
+		ret.InitAESKeyVerifyVal(repo.store.AesKey)
 	}
 
 	count := atomic.Int32{}

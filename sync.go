@@ -1735,6 +1735,12 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 		}
 	}
 
+	if !index.VerifyAESKey(repo.store.AesKey) {
+		err = cloud.ErrDecryptFailed
+		logging.LogErrorf("cloud latest [%s] verify AES key failed", index.String())
+		return
+	}
+
 	logging.LogInfof("got cloud latest [%s], cost [%s]", index.String(), time.Since(start))
 	return
 }
