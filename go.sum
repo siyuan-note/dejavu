@@ -104,8 +104,8 @@ github.com/qiniu/go-sdk/v7 v7.26.8 h1:cucYJLDAQE8KmoPum27ZtfogZpTcHK1lSXUy0FcRKw
 github.com/qiniu/go-sdk/v7 v7.26.8/go.mod h1:ri7fGwbio0pRDFr8EK5TUpx0DbnpIMJ2bMSDxGWfCbk=
 github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
 github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
-github.com/quic-go/quic-go v0.59.0 h1:OLJkp1Mlm/aS7dpKgTc6cnpynnD2Xg7C1pwL6vy/SAw=
-github.com/quic-go/quic-go v0.59.0/go.mod h1:upnsH4Ju1YkqpLXC305eW3yDZ4NfnNbmQRCMWS58IKU=
+github.com/quic-go/quic-go v0.58.0 h1:ggY2pvZaVdB9EyojxL1p+5mptkuHyX5MOSv4dgWF4Ug=
+github.com/quic-go/quic-go v0.58.0/go.mod h1:upnsH4Ju1YkqpLXC305eW3yDZ4NfnNbmQRCMWS58IKU=
 github.com/refraction-networking/utls v1.8.2 h1:j4Q1gJj0xngdeH+Ox/qND11aEfhpgoEvV+S9iJ2IdQo=
 github.com/refraction-networking/utls v1.8.2/go.mod h1:jkSOEkLqn+S/jtpEHPOsVv/4V4EVnelwbMQl4vCWXAM=
 github.com/restic/chunker v0.4.0 h1:YUPYCUn70MYP7VO4yllypp2SjmsRhRJaad3xKu1QFRw=
@@ -122,8 +122,8 @@ github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97 h1:lM5v8BfNtb
 github.com/siyuan-note/eventbus v0.0.0-20240627125516-396fdb0f0f97/go.mod h1:1/nGgthl89FPA7GzAcEWKl6zRRnfgyTjzLZj9bW7kuw=
 github.com/siyuan-note/filelock v0.0.0-20260315122655-36379124744c h1:ABeMDbAvrk4qO+pWQ7F+8X4xNJkKzETMvMsfdKwwWLA=
 github.com/siyuan-note/filelock v0.0.0-20260315122655-36379124744c/go.mod h1:L2iMBH7Mb1VICVlJFw2SxoJwCfyWc0luuZdUuRhzsq4=
-github.com/siyuan-note/httpclient v0.0.0-20260408082913-4de769b7e0f9 h1:G6ceXArQ2yUf8L8/zrlSff26gNLuffdpCu3LtLCWs4A=
-github.com/siyuan-note/httpclient v0.0.0-20260408082913-4de769b7e0f9/go.mod h1:B3XHmoCCsKD3oQ6y02e87kBli9xEczNacenzF/XdWUQ=
+github.com/siyuan-note/httpclient v0.0.0-20260408083825-43e4476ad2b3 h1:zwfpFqYBhV7rPx6yC3AKjYW/5HOaBg2cuy4x4olWwQE=
+github.com/siyuan-note/httpclient v0.0.0-20260408083825-43e4476ad2b3/go.mod h1:XxprEfaOoufvhLkI6rjfJrsNPFUAaCV6HI4M0e/Fr5w=
 github.com/siyuan-note/logging v0.0.0-20260117134552-88b424dfe7f1 h1:C2Y1XhBrrGegnHvWOeVVRFkMRzB6EqJSytHheq+T6mU=
 github.com/siyuan-note/logging v0.0.0-20260117134552-88b424dfe7f1/go.mod h1:t3Tmt3DgQx0zqJmrckszJ+JBZ7iJrD1Ktp8FDBQ249E=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
