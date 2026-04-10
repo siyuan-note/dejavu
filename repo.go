@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/88250/lute"
 	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
@@ -488,6 +489,21 @@ func (repo *Repo) GetFiles(index *entity.Index) (ret []*entity.File, err error) 
 	return
 }
 
+func (repo *Repo) GetFilesIter(index *entity.Index, handler func(file *entity.File) error) (err error) {
+	for _, fileID := range index.Files {
+		file, getErr := repo.GetFile(fileID)
+		if nil != getErr {
+			err = getErr
+			return
+		}
+
+		if err = handler(file); nil != err {
+			return
+		}
+	}
+	return
+}
+
 func (repo *Repo) GetFile(fileID string) (ret *entity.File, err error) {
 	ret, err = repo.store.GetFile(fileID)
 	return
@@ -495,6 +511,159 @@ func (repo *Repo) GetFile(fileID string) (ret *entity.File, err error) {
 
 func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 	ret, err = repo.openFile(file)
+	return
+}
+
+func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*entity.File, totalCount, pageCount int, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 32
+	}
+
+	luteEngine := lute.New()
+	temp := filepath.Join(repo.TempPath, "repo", "search", fmt.Sprintf("%d", time.Now().UnixMilli()))
+	if mkErr := os.MkdirAll(temp, 0755); mkErr != nil {
+		err = mkErr
+		return
+	}
+	defer func() {
+		os.RemoveAll(temp)
+	}()
+
+	keyword = strings.ToLower(keyword)
+	context := map[string]interface{}{}
+
+	var matches []*entity.File
+	seen := map[string]bool{} // 按 file.ID 去重
+
+	_, _, err = repo.getIndexesIter(1, math.MaxInt, func(index *entity.Index) error {
+		return repo.GetFilesIter(index, func(file *entity.File) error {
+			if seen[file.ID] {
+				return nil
+			}
+
+			name := path.Base(file.Path)
+			if strings.HasSuffix(name, ".sy") {
+				tree, cErr := repo.checkoutTree(file, temp, luteEngine, context)
+				if nil != cErr {
+					logging.LogErrorf("checkout tree for search file [%s] failed: %s", file.Path, cErr)
+					return nil
+				}
+
+				name = tree.Root.IALAttr("title")
+			}
+
+			if strings.Contains(strings.ToLower(name), keyword) {
+				matches = append(matches, file)
+				seen[file.ID] = true
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return
+	}
+
+	totalCount = len(matches)
+	if totalCount == 0 {
+		pageCount = 0
+		return
+	}
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+	start := (page - 1) * pageSize
+	end := page * pageSize
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+	ret = matches[start:end]
+	return
+}
+
+func (repo *Repo) GetIndexesIter(page, pageSize int, handler func(index *entity.Index) error) (totalCount, pageCount int, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	return repo.getIndexesIter(page, pageSize, handler)
+}
+
+func (repo *Repo) getIndexesIter(page, pageSize int, handler func(index *entity.Index) error) (totalCount, pageCount int, err error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 32
+	}
+	if handler == nil {
+		return 0, 0, fmt.Errorf("handler is nil")
+	}
+
+	dir := filepath.Join(repo.Path, "indexes")
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		logging.LogErrorf("read dir [%s] failed: %s", dir, readErr)
+		err = readErr
+		return
+	}
+
+	type idxEntry struct {
+		id  string
+		mod time.Time
+	}
+	var list []idxEntry
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if len(name) != 40 {
+			continue
+		}
+		info, infoErr := e.Info()
+		if infoErr != nil {
+			logging.LogWarnf("get info for index file [%s] failed: %s", name, infoErr)
+			continue
+		}
+		list = append(list, idxEntry{id: name, mod: info.ModTime()})
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].mod.After(list[j].mod)
+	})
+
+	totalCount = len(list)
+	if totalCount == 0 {
+		pageCount = 0
+		return
+	}
+	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+
+	start := (page - 1) * pageSize
+	end := page * pageSize
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+
+	for _, it := range list[start:end] {
+		index, getErr := repo.store.GetIndex(it.id)
+		if getErr != nil {
+			err = getErr
+			return
+		}
+		if hErr := handler(index); hErr != nil {
+			err = hErr
+			return
+		}
+	}
 	return
 }
 

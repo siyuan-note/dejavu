@@ -118,6 +118,22 @@ func TestIndexCheckout(t *testing.T) {
 	}
 }
 
+func TestSearchFile(t *testing.T) {
+	clearTestdata(t)
+	subscribeEvents(t)
+
+	repo, _ := initIndex(t)
+
+	ret, _, _, err := repo.SearchFile("foo", 1, 32)
+	if nil != err {
+		t.Fatalf("search failed: %s", err)
+	}
+
+	if "/foo" != ret[0].Path {
+		t.Fatalf("search failed")
+	}
+}
+
 func clearTestdata(t *testing.T) {
 	err := os.RemoveAll(testRepoPath)
 	if nil != err {
