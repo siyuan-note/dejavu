@@ -52,5 +52,23 @@
     "final": {
       "b": {"files": {"doc.txt": "same\n"}}
     }
+  },
+  {
+    "name": "sync download remote blank line insert conflicts with local line edit",
+    "seed": {
+      "doc.txt": "first\nsecond\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "first\n\nsecond\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a inserts blank line"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "first\nsecond changed\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits another line"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 1}}
+    ],
+    "final": {
+      "b": {"files": {"doc.txt": "first\n\nsecond\n"}}
+    }
   }
 ]
