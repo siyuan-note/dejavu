@@ -1,0 +1,120 @@
+[
+  {
+    "name": "remote update applies without conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from a\n"}
+    ]
+  },
+  {
+    "name": "independent edits merge without conflict",
+    "seed": {
+      "a.txt": "a base\n",
+      "b.txt": "b base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "a.txt", "content": "a changed\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "b.txt", "content": "b changed\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b update"},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "assert", "path": "a.txt", "content": "a changed\n"},
+      {"client": "b", "op": "assert", "path": "b.txt", "content": "b changed\n"},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "a.txt", "content": "a changed\n"},
+      {"client": "a", "op": "assert", "path": "b.txt", "content": "b changed\n"}
+    ]
+  },
+  {
+    "name": "same file divergence reports conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "from b\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b update"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from b\n"}
+    ]
+  },
+  {
+    "name": "same path create reports conflict",
+    "seed": {
+      "anchor.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "new.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a create"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "new.txt", "content": "from b\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b create"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1}},
+      {"client": "b", "op": "assert", "path": "new.txt", "content": "from b\n"}
+    ]
+  },
+  {
+    "name": "remote delete applies without conflict",
+    "seed": {
+      "keep.txt": "keep\n",
+      "delete.txt": "delete\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "remove", "path": "delete.txt"},
+      {"client": "a", "op": "index", "memo": "a delete"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 1, "conflicts": 0}},
+      {"client": "b", "op": "assert_missing", "path": "delete.txt"},
+      {"client": "b", "op": "assert", "path": "keep.txt", "content": "keep\n"}
+    ]
+  },
+  {
+    "name": "delete vs local edit keeps local change",
+    "seed": {
+      "shared.txt": "base\n",
+      "anchor.txt": "anchor\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "remove", "path": "shared.txt"},
+      {"client": "a", "op": "index", "memo": "a delete"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "shared.txt", "content": "from b\n", "minutes": 10},
+      {"client": "b", "op": "index", "memo": "b edit"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "assert", "path": "shared.txt", "content": "from b\n"},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "shared.txt", "content": "from b\n"}
+    ]
+  },
+  {
+    "name": "same file same content and same timestamp does not conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 10},
+      {"client": "b", "op": "index", "memo": "b same content same timestamp"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "same\n"}
+    ]
+  }
+]

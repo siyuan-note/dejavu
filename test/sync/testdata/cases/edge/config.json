@@ -1,0 +1,108 @@
+[
+  {
+    "name": "local delete suppresses remote edit",
+    "seed": {
+      "doc.txt": "base\n",
+      "anchor.txt": "anchor\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edit"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "remove", "path": "doc.txt"},
+      {"client": "b", "op": "index", "memo": "b delete"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 1, "conflicts": 0}}
+    ],
+    "final": {
+      "a": {"files": {"anchor.txt": "anchor\n"}, "missing": ["doc.txt"]},
+      "b": {"files": {"anchor.txt": "anchor\n"}, "missing": ["doc.txt"]}
+    }
+  },
+  {
+    "name": "both clients delete same file",
+    "seed": {
+      "doc.txt": "base\n",
+      "anchor.txt": "anchor\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "remove", "path": "doc.txt"},
+      {"client": "a", "op": "index", "memo": "a delete"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "remove", "path": "doc.txt"},
+      {"client": "b", "op": "index", "memo": "b delete"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}}
+    ],
+    "final": {
+      "a": {"files": {"anchor.txt": "anchor\n"}, "missing": ["doc.txt"]},
+      "b": {"files": {"anchor.txt": "anchor\n"}, "missing": ["doc.txt"]}
+    }
+  },
+  {
+    "name": "rename is remove plus create",
+    "seed": {
+      "old.txt": "old\n",
+      "anchor.txt": "anchor\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "remove", "path": "old.txt"},
+      {"client": "a", "op": "write", "path": "new.txt", "content": "new\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a rename"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 1, "conflicts": 0}}
+    ],
+    "final": {
+      "a": {"files": {"anchor.txt": "anchor\n", "new.txt": "new\n"}, "missing": ["old.txt"]},
+      "b": {"files": {"anchor.txt": "anchor\n", "new.txt": "new\n"}, "missing": ["old.txt"]}
+    }
+  },
+  {
+    "name": "three clients converge after independent edits",
+    "seed": {
+      "a.txt": "a base\n",
+      "b.txt": "b base\n",
+      "c.txt": "c base\n"
+    },
+    "clients": ["a", "b", "c"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "a.txt", "content": "a changed\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edit"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "b.txt", "content": "b changed\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edit"},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "c", "op": "sync", "want": {"upserts": 2, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}}
+    ],
+    "final": {
+      "a": {"files": {"a.txt": "a changed\n", "b.txt": "b changed\n", "c.txt": "c base\n"}},
+      "b": {"files": {"a.txt": "a changed\n", "b.txt": "b changed\n", "c.txt": "c base\n"}},
+      "c": {"files": {"a.txt": "a changed\n", "b.txt": "b changed\n", "c.txt": "c base\n"}}
+    }
+  },
+  {
+    "name": "local older edit is filtered by newer cloud edit",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "newer cloud\n", "minutes": 20},
+      {"client": "b", "op": "index", "memo": "b newer edit"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "older local\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a older edit"},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}}
+    ],
+    "final": {
+      "a": {"files": {"doc.txt": "newer cloud\n"}},
+      "b": {"files": {"doc.txt": "newer cloud\n"}}
+    }
+  }
+]
