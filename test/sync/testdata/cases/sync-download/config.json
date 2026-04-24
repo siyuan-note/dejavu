@@ -1,0 +1,48 @@
+[
+  {
+    "name": "sync download applies remote update",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from a\n"}
+    ]
+  },
+  {
+    "name": "sync download applies remote delete",
+    "seed": {
+      "keep.txt": "keep\n",
+      "delete.txt": "delete\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "remove", "path": "delete.txt"},
+      {"client": "a", "op": "index", "memo": "a delete"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 0, "removes": 1, "conflicts": 0}},
+      {"client": "b", "op": "assert_missing", "path": "delete.txt"},
+      {"client": "b", "op": "assert", "path": "keep.txt", "content": "keep\n"}
+    ]
+  },
+  {
+    "name": "sync download remote update conflicts with local update",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "from b\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b update"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 1}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from a\n"}
+    ]
+  }
+]

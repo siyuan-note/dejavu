@@ -1,0 +1,56 @@
+[
+  {
+    "name": "same file same content but different timestamp reports conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b same content different timestamp"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1}}
+    ],
+    "final": {
+      "b": {"files": {"doc.txt": "same\n"}}
+    }
+  },
+  {
+    "name": "same path create same content but different timestamp reports conflict",
+    "seed": {
+      "anchor.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "new.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a create same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "new.txt", "content": "same\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b create same content different timestamp"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1}}
+    ],
+    "final": {
+      "b": {"files": {"anchor.txt": "base\n", "new.txt": "same\n"}}
+    }
+  },
+  {
+    "name": "sync download same content but different timestamp reports conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b same content different timestamp"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 1}}
+    ],
+    "final": {
+      "b": {"files": {"doc.txt": "same\n"}}
+    }
+  }
+]
