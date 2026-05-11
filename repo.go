@@ -516,9 +516,6 @@ func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 }
 
 func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*entity.File, totalCount, pageCount int, err error) {
-	lock.Lock()
-	defer lock.Unlock()
-
 	if page <= 0 {
 		page = 1
 	}
@@ -528,53 +525,122 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 
 	keyword = strings.ToLower(keyword)
 
-	var matches []*entity.File
-	seen := map[string]bool{} // 按 file.ID 去重
-
-	_, _, err = repo.getIndexesIter(1, math.MaxInt, func(index *entity.Index) error {
-		return repo.GetFilesIter(index, func(file *entity.File) error {
-			if seen[file.ID] {
-				return nil
-			}
-
-			name := path.Base(file.Path)
-			if strings.HasSuffix(name, ".sy") {
-				data, oErr := repo.openFile(file)
-				if nil != oErr {
-					logging.LogErrorf("open file [%s] failed: %s", file.Path, oErr)
-					return nil
+	// Phase 1: 持有锁收集所有索引中的文件 ID（去重）
+	var allFileIDs []string
+	idSet := map[string]bool{}
+	var collectErr error
+	lock.Lock()
+	{
+		_, _, collectErr = repo.getIndexesIter(1, math.MaxInt, func(index *entity.Index) error {
+			for _, fileID := range index.Files {
+				if !idSet[fileID] {
+					idSet[fileID] = true
+					allFileIDs = append(allFileIDs, fileID)
 				}
-
-				docIAL := map[string]string{}
-				iter := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
-				for field := iter.ReadObject(); field != ""; field = iter.ReadObject() {
-					if field == "Properties" {
-						iter.ReadVal(&docIAL)
-						break
-					} else {
-						iter.Skip()
-					}
-				}
-
-				for k, v := range docIAL {
-					docIAL[k] = html.UnescapeAttrVal(v)
-				}
-				if title := docIAL["title"]; "" != title {
-					name = title
-				}
-			}
-
-			if strings.Contains(strings.ToLower(name), keyword) {
-				matches = append(matches, file)
-				seen[file.ID] = true
 			}
 			return nil
 		})
-	})
-	if err != nil {
+	}
+	lock.Unlock()
+	if nil != collectErr {
+		err = collectErr
+		return
+	}
+	idSet = nil // 释放给 GC
+
+	if 0 == len(allFileIDs) {
 		return
 	}
 
+	// Phase 2: 并发搜索匹配文件
+	var matches []*entity.File
+	matchSeen := map[string]bool{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var workerErrs []error
+	var errMu sync.Mutex
+
+	poolSize := 4
+	if len(allFileIDs) < poolSize {
+		poolSize = len(allFileIDs)
+	}
+
+	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer wg.Done()
+
+		fileID := arg.(string)
+		file, getErr := repo.store.GetFile(fileID)
+		if nil != getErr {
+			logging.LogErrorf("get file [%s] failed: %s", fileID, getErr)
+			return
+		}
+
+		mu.Lock()
+		if matchSeen[file.ID] {
+			mu.Unlock()
+			return
+		}
+		mu.Unlock()
+
+		name := path.Base(file.Path)
+		if strings.HasSuffix(name, ".sy") {
+			var data []byte
+			for _, c := range file.Chunks {
+				chunk, chunkErr := repo.store.GetChunk(c)
+				if nil != chunkErr {
+					logging.LogErrorf("get chunk [%s] for file [%s] failed: %s", c, file.Path, chunkErr)
+					errMu.Lock()
+					workerErrs = append(workerErrs, chunkErr)
+					errMu.Unlock()
+					return
+				}
+				data = append(data, chunk.Data...)
+			}
+
+			docIAL := map[string]string{}
+			iter := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
+			for field := iter.ReadObject(); field != ""; field = iter.ReadObject() {
+				if field == "Properties" {
+					iter.ReadVal(&docIAL)
+					break
+				} else {
+					iter.Skip()
+				}
+			}
+
+			for k, v := range docIAL {
+				docIAL[k] = html.UnescapeAttrVal(v)
+			}
+			if title := docIAL["title"]; "" != title {
+				name = title
+			}
+		}
+
+		if strings.Contains(strings.ToLower(name), keyword) {
+			mu.Lock()
+			if !matchSeen[file.ID] {
+				matches = append(matches, file)
+				matchSeen[file.ID] = true
+			}
+			mu.Unlock()
+		}
+	})
+
+	for _, fileID := range allFileIDs {
+		wg.Add(1)
+		p.Invoke(fileID)
+	}
+	wg.Wait()
+	p.Release()
+
+	if 0 < len(workerErrs) {
+		err = workerErrs[0]
+		return
+	}
+
+	sort.Slice(matches, func(i, j int) bool { return matches[i].Updated > matches[j].Updated })
+
+	// Phase 3: 分页
 	totalCount = len(matches)
 	if totalCount == 0 {
 		pageCount = 0
