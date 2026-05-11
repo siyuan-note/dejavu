@@ -526,15 +526,6 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 		pageSize = 32
 	}
 
-	temp := filepath.Join(repo.TempPath, "repo", "search", fmt.Sprintf("%d", time.Now().UnixMilli()))
-	if mkErr := os.MkdirAll(temp, 0755); mkErr != nil {
-		err = mkErr
-		return
-	}
-	defer func() {
-		os.RemoveAll(temp)
-	}()
-
 	keyword = strings.ToLower(keyword)
 
 	var matches []*entity.File
@@ -551,7 +542,7 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 				data, oErr := repo.openFile(file)
 				if nil != oErr {
 					logging.LogErrorf("open file [%s] failed: %s", file.Path, oErr)
-					return oErr
+					return nil
 				}
 
 				docIAL := map[string]string{}
@@ -568,7 +559,9 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 				for k, v := range docIAL {
 					docIAL[k] = html.UnescapeAttrVal(v)
 				}
-				name = docIAL["title"]
+				if title := docIAL["title"]; "" != title {
+					name = title
+				}
 			}
 
 			if strings.Contains(strings.ToLower(name), keyword) {
