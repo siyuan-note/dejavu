@@ -32,7 +32,8 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
-	"github.com/88250/lute"
+	"github.com/88250/lute/html"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/panjf2000/ants/v2"
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
@@ -525,7 +526,6 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 		pageSize = 32
 	}
 
-	luteEngine := lute.New()
 	temp := filepath.Join(repo.TempPath, "repo", "search", fmt.Sprintf("%d", time.Now().UnixMilli()))
 	if mkErr := os.MkdirAll(temp, 0755); mkErr != nil {
 		err = mkErr
@@ -536,7 +536,6 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 	}()
 
 	keyword = strings.ToLower(keyword)
-	context := map[string]interface{}{}
 
 	var matches []*entity.File
 	seen := map[string]bool{} // 按 file.ID 去重
@@ -549,13 +548,27 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 
 			name := path.Base(file.Path)
 			if strings.HasSuffix(name, ".sy") {
-				tree, cErr := repo.checkoutTree(file, temp, luteEngine, context)
-				if nil != cErr {
-					logging.LogErrorf("checkout tree for search file [%s] failed: %s", file.Path, cErr)
-					return nil
+				data, oErr := repo.openFile(file)
+				if nil != oErr {
+					logging.LogErrorf("open file [%s] failed: %s", file.Path, oErr)
+					return oErr
 				}
 
-				name = tree.Root.IALAttr("title")
+				docIAL := map[string]string{}
+				iter := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
+				for field := iter.ReadObject(); field != ""; field = iter.ReadObject() {
+					if field == "Properties" {
+						iter.ReadVal(&docIAL)
+						break
+					} else {
+						iter.Skip()
+					}
+				}
+
+				for k, v := range docIAL {
+					docIAL[k] = html.UnescapeAttrVal(v)
+				}
+				name = docIAL["title"]
 			}
 
 			if strings.Contains(strings.ToLower(name), keyword) {
