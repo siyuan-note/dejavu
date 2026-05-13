@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/88250/gulu"
+	"github.com/88250/lute/ast"
 	"github.com/88250/lute/html"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/panjf2000/ants/v2"
@@ -583,7 +584,7 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 		mu.Unlock()
 
 		name := path.Base(file.Path)
-		if strings.HasSuffix(name, ".sy") {
+		if strings.HasSuffix(name, ".sy") && !ast.IsNodeIDPattern(keyword) {
 			var data []byte
 			for _, c := range file.Chunks {
 				chunk, chunkErr := repo.store.GetChunk(c)
