@@ -124,7 +124,7 @@ func TestSearchFile(t *testing.T) {
 
 	repo, _ := initIndex(t)
 
-	ret, _, _, err := repo.SearchFile("foo", 1, 32)
+	ret, _, _, _, err := repo.SearchFile("foo", 1, 32)
 	if nil != err {
 		t.Fatalf("search failed: %s", err)
 	}

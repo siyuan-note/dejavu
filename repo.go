@@ -516,7 +516,7 @@ func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 	return
 }
 
-func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*entity.File, totalCount, pageCount int, err error) {
+func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*entity.File, fileIndexIDs map[string]string, totalCount, pageCount int, err error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -526,9 +526,10 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 
 	keyword = strings.ToLower(keyword)
 
-	// Phase 1: 持有锁收集所有索引中的文件 ID（去重）
+	// Phase 1: 持有锁收集所有索引中的文件 ID（去重），同时记录文件所属的最新快照 ID
 	var allFileIDs []string
 	idSet := map[string]bool{}
+	fileIndexIDsMap := map[string]string{}
 	var collectErr error
 	lock.Lock()
 	{
@@ -537,6 +538,7 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 				if !idSet[fileID] {
 					idSet[fileID] = true
 					allFileIDs = append(allFileIDs, fileID)
+					fileIndexIDsMap[fileID] = index.ID
 				}
 			}
 			return nil
@@ -657,6 +659,10 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 		end = totalCount
 	}
 	ret = matches[start:end]
+	fileIndexIDs = make(map[string]string, len(ret))
+	for _, f := range ret {
+		fileIndexIDs[f.ID] = fileIndexIDsMap[f.ID]
+	}
 	return
 }
 
