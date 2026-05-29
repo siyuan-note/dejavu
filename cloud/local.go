@@ -142,18 +142,50 @@ func (local *Local) RemoveObject(filePath string) (err error) {
 
 func (local *Local) ListObjects(pathPrefix string) (objects map[string]*entity.ObjectInfo, err error) {
 	objects = map[string]*entity.ObjectInfo{}
-	pathPrefix = path.Join(local.getCurrentRepoDirPath(), pathPrefix)
-	entries, err := os.ReadDir(pathPrefix)
+	// objects/ 为两级目录 objects/XX/<id>，需递归列出以匹配 PurgeCloud 与 S3 的路径格式
+	isObjectsDir := strings.HasPrefix(pathPrefix, "objects")
+	absPathPrefix := path.Join(local.getCurrentRepoDirPath(), pathPrefix)
+	entries, err := os.ReadDir(absPathPrefix)
 	if err != nil {
-		logging.LogErrorf("list objects [%s] failed: %s", pathPrefix, err)
+		if os.IsNotExist(err) {
+			return
+		}
+		logging.LogErrorf("list objects [%s] failed: %s", absPathPrefix, err)
 		return
 	}
 
 	for _, entry := range entries {
+		if isObjectsDir && entry.IsDir() {
+			subDir := path.Join(absPathPrefix, entry.Name())
+			subEntries, subErr := os.ReadDir(subDir)
+			if subErr != nil {
+				err = subErr
+				logging.LogErrorf("list objects [%s] failed: %s", subDir, err)
+				return
+			}
+			for _, subEntry := range subEntries {
+				if subEntry.IsDir() {
+					continue
+				}
+				subInfo, subInfoErr := subEntry.Info()
+				if subInfoErr != nil {
+					err = subInfoErr
+					logging.LogErrorf("get object [%s] info failed: %s", path.Join(subDir, subEntry.Name()), err)
+					return
+				}
+				relPath := path.Join(entry.Name(), subEntry.Name())
+				objects[relPath] = &entity.ObjectInfo{
+					Path: relPath,
+					Size: subInfo.Size(),
+				}
+			}
+			continue
+		}
+
 		entryInfo, infoErr := entry.Info()
 		if infoErr != nil {
 			err = infoErr
-			logging.LogErrorf("get object [%s] info failed: %s", path.Join(pathPrefix, entry.Name()), err)
+			logging.LogErrorf("get object [%s] info failed: %s", path.Join(absPathPrefix, entry.Name()), err)
 			return
 		}
 
