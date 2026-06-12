@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -57,7 +58,16 @@ func NewStore(path string, aesKey []byte) (ret *Store, err error) {
 	return
 }
 
-func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
+func isCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+func (store *Store) Purge(ctx context.Context, retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
 	logging.LogInfof("purging data repo [%s], retention indexes [%d]", store.Path, len(retentionIndexIDs))
 
 	objectsDir := filepath.Join(store.Path, "objects")
@@ -94,6 +104,11 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 		}
 	}
 
+	if isCancelled(ctx) {
+		logging.LogWarnf("purging data repo [%s] cancelled after collecting objects", store.Path)
+		return
+	}
+
 	// 收集所有索引对象
 	indexIDs := map[string]bool{}
 	indexesDir := filepath.Join(store.Path, "indexes")
@@ -112,6 +127,11 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 
 			indexIDs[id] = true
 		}
+	}
+
+	if isCancelled(ctx) {
+		logging.LogWarnf("purging data repo [%s] cancelled after collecting indexes", store.Path)
+		return
 	}
 
 	// 收集所有引用的索引
@@ -133,6 +153,11 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 	// 收集所有引用的数据对象
 	referencedObjIDs := map[string]bool{}
 	for refID := range refIndexIDs {
+		if isCancelled(ctx) {
+			logging.LogWarnf("purging data repo [%s] cancelled while collecting referenced objects", store.Path)
+			return
+		}
+
 		index, getErr := store.GetIndex(refID)
 		if nil != getErr {
 			logging.LogWarnf("get index [%s] failed: %s", refID, getErr)
@@ -164,6 +189,11 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 	ret = &entity.PurgeStat{}
 	ret.Indexes = len(unreferencedIndexIDs)
 
+	if isCancelled(ctx) {
+		logging.LogWarnf("purging data repo [%s] cancelled after collecting unreferenced objects", store.Path)
+		return
+	}
+
 	// 清理未引用的索引对象
 	for unreferencedIndexID := range unreferencedIndexIDs {
 		indexPath := filepath.Join(store.Path, "indexes", unreferencedIndexID)
@@ -182,6 +212,11 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 			logging.LogErrorf("read check indexes dir [%s] failed: %s", checkIndexesDir, err)
 		} else {
 			for _, entry := range entries {
+				if isCancelled(ctx) {
+					logging.LogWarnf("purging data repo [%s] cancelled while cleaning check indexes", store.Path)
+					return
+				}
+
 				id := entry.Name()
 				if 40 != len(id) {
 					continue
@@ -219,6 +254,11 @@ func (store *Store) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, e
 
 	// 清理未引用的数据对象
 	for unreferencedObjID := range unreferencedObjIDs {
+		if isCancelled(ctx) {
+			logging.LogWarnf("purging data repo [%s] cancelled while removing unreferenced objects", store.Path)
+			return
+		}
+
 		stat, statErr := store.Stat(unreferencedObjID)
 		if nil != statErr {
 			logging.LogErrorf("stat [%s] failed: %s", unreferencedObjID, statErr)

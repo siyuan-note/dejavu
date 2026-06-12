@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func TestPurge(t *testing.T) {
 	subscribeEvents(t)
 
 	repo, _ := initIndex(t)
-	stat, err := repo.Purge()
+	stat, err := repo.Purge(context.Background())
 	if nil != err {
 		t.Fatalf("purge failed: %s", err)
 		return

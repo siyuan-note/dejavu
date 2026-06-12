@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -139,10 +140,10 @@ func (repo *Repo) Reset() (err error) {
 }
 
 // Purge 清理所有未引用数据，retentionIndexIDs 为保留的索引 ID 列表，如果不传入的话则清理所有未引用数据。
-func (repo *Repo) Purge(retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
+func (repo *Repo) Purge(ctx context.Context, retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
-	return repo.store.Purge(retentionIndexIDs...)
+	return repo.store.Purge(ctx, retentionIndexIDs...)
 }
 
 // PurgeCloud 清理云端所有未引用数据。
