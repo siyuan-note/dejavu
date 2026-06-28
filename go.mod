@@ -6,17 +6,17 @@ require (
 	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
 	github.com/88250/gulu v1.2.3-0.20260409163331-8c1dab1828ba
 	github.com/88250/lute v1.7.7-0.20260528111250-a50880cc4c95
-	github.com/aws/aws-sdk-go-v2 v1.41.8
+	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.19
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.18
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.1
-	github.com/aws/smithy-go v1.26.0
+	github.com/aws/smithy-go v1.27.1
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.18.6
 	github.com/panjf2000/ants/v2 v2.12.1
-	github.com/qiniu/go-sdk/v7 v7.26.12
-	github.com/restic/chunker v0.4.0
+	github.com/qiniu/go-sdk/v7 v7.26.13
+	github.com/restic/chunker v0.5.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/shirou/gopsutil/v4 v4.26.4
 	github.com/siyuan-note/dataparser v0.0.0-20260115084335-b57cb8bc7c17
