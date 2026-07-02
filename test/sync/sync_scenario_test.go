@@ -355,7 +355,11 @@ func (env *syncScenarioEnv) newRepo(client *syncScenarioClient) *dejavu.Repo {
 func (client *syncScenarioClient) writeFile(relPath, content string, modTime time.Time) {
 	client.env.t.Helper()
 
-	absPath := filepath.Join(client.dataPath, filepath.FromSlash(relPath))
+	relPath = filepath.FromSlash(relPath)
+	if relPath == "" || !filepath.IsLocal(relPath) {
+		client.env.t.Fatalf("[%s] invalid relative path [%s]", client.name, relPath)
+	}
+	absPath := filepath.Join(client.dataPath, relPath)
 	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
 		client.env.t.Fatalf("[%s] mkdir file parent failed: %s", client.name, err)
 	}
