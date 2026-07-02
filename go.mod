@@ -23,7 +23,7 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20251120032857-3ddc3c2cc49f
 	github.com/siyuan-note/eventbus v0.0.0-20260530125927-d77c74260dce
 	github.com/siyuan-note/filelock v0.0.0-20260411141728-bf44452627c0
-	github.com/siyuan-note/httpclient v0.0.0-20260701233146-a2d59f04eb5b
+	github.com/siyuan-note/httpclient v0.0.0-20260702062154-364e4027842f
 	github.com/siyuan-note/logging v0.0.0-20260513050044-06b8e04d5490
 	github.com/studio-b12/gowebdav v0.12.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -59,13 +59,13 @@ require (
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/gopherjs/gopherjs v1.21.0 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
-	github.com/imroc/req/v3 v3.58.0 // indirect
+	github.com/imroc/req/v3 v3.59.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
