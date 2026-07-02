@@ -355,7 +355,7 @@ func (env *syncScenarioEnv) newRepo(client *syncScenarioClient) *dejavu.Repo {
 func (client *syncScenarioClient) writeFile(relPath, content string, modTime time.Time) {
 	client.env.t.Helper()
 
-	absPath := filepath.Join(client.dataPath, filepath.FromSlash(relPath))
+	absPath := syncScenarioLocalPath(client.env.t, client.dataPath, relPath, "data")
 	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
 		client.env.t.Fatalf("[%s] mkdir file parent failed: %s", client.name, err)
 	}
@@ -370,7 +370,7 @@ func (client *syncScenarioClient) writeFile(relPath, content string, modTime tim
 func (client *syncScenarioClient) removeFile(relPath string) {
 	client.env.t.Helper()
 
-	err := os.Remove(filepath.Join(client.dataPath, filepath.FromSlash(relPath)))
+	err := os.Remove(syncScenarioLocalPath(client.env.t, client.dataPath, relPath, "data"))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		client.env.t.Fatalf("[%s] remove file failed: %s", client.name, err)
 	}
@@ -425,7 +425,7 @@ func (client *syncScenarioClient) assertMergeResult(mergeResult *dejavu.MergeRes
 func (client *syncScenarioClient) assertFile(relPath, want string) {
 	client.env.t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(client.dataPath, filepath.FromSlash(relPath)))
+	data, err := os.ReadFile(syncScenarioLocalPath(client.env.t, client.dataPath, relPath, "data"))
 	if err != nil {
 		client.env.t.Fatalf("[%s] read file failed: %s", client.name, err)
 	}
@@ -437,7 +437,7 @@ func (client *syncScenarioClient) assertFile(relPath, want string) {
 func (client *syncScenarioClient) assertMissing(relPath string) {
 	client.env.t.Helper()
 
-	_, err := os.Stat(filepath.Join(client.dataPath, filepath.FromSlash(relPath)))
+	_, err := os.Stat(syncScenarioLocalPath(client.env.t, client.dataPath, relPath, "data"))
 	if err == nil {
 		client.env.t.Fatalf("[%s] expected [%s] to be missing", client.name, relPath)
 	}
@@ -453,10 +453,20 @@ func syncScenarioBaseTime() time.Time {
 func syncScenarioFixturePath(t *testing.T, baseDir, relPath string) string {
 	t.Helper()
 
+	return syncScenarioLocalPath(t, baseDir, relPath, "fixture")
+}
+
+func syncScenarioLocalPath(t *testing.T, baseDir, relPath, kind string) string {
+	t.Helper()
+
 	if relPath == "" || !filepath.IsLocal(relPath) {
-		t.Fatalf("invalid fixture path [%s]", relPath)
+		t.Fatalf("invalid %s path [%s]", kind, relPath)
 	}
-	return filepath.Join(baseDir, filepath.FromSlash(relPath))
+	relPath = filepath.FromSlash(relPath)
+	if !filepath.IsLocal(relPath) {
+		t.Fatalf("invalid %s path [%s]", kind, relPath)
+	}
+	return filepath.Join(baseDir, relPath)
 }
 
 func syncScenarioCopyDirInto(t *testing.T, src, dst string) {
