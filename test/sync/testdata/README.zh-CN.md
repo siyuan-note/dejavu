@@ -1,7 +1,7 @@
 # 同步场景测试用例
 
 `TestSyncScenariosFromJSON` 会从 `test/sync/testdata/cases` 加载测试用例。
-待修复清单见 `test/TODO_zh_CN.md`。
+待修复清单见 `test/TODO.zh-CN.md`。
 支持两种布局：
 
 ```text
