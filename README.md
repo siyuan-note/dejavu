@@ -4,7 +4,7 @@
 
 ## 💡 Introduction
 
-[DejaVu](https://github.com/siyuan-note/dejavu) is the component of data snapshot and sync for SiYuan.
+[DejaVu](https://github.com/siyuan-note/dejavu) is the component of data snapshot and sync for [SiYuan](https://github.com/siyuan-note/siyuan).
 
 ## ✨ Features
 

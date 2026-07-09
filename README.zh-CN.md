@@ -4,7 +4,7 @@
 
 ## 💡 简介
 
-[DejaVu](https://github.com/siyuan-note/dejavu) 是思源笔记的数据快照和同步组件。
+[DejaVu](https://github.com/siyuan-note/dejavu) 是[思源笔记](https://github.com/siyuan-note/siyuan)的数据快照和同步组件。
 
 ## ✨ 特性
 
