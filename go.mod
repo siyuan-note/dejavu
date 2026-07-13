@@ -1,11 +1,11 @@
 module github.com/siyuan-note/dejavu
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
 	github.com/88250/gulu v1.2.3-0.20260409163331-8c1dab1828ba
-	github.com/88250/lute v1.7.7-0.20260528111250-a50880cc4c95
+	github.com/88250/lute v1.7.7-0.20260713050253-52f9755b423c
 	github.com/aws/aws-sdk-go-v2 v1.42.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.29
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.28
@@ -23,9 +23,9 @@ require (
 	github.com/siyuan-note/encryption v0.0.0-20251120032857-3ddc3c2cc49f
 	github.com/siyuan-note/eventbus v0.0.0-20260530125927-d77c74260dce
 	github.com/siyuan-note/filelock v0.0.0-20260411141728-bf44452627c0
-	github.com/siyuan-note/httpclient v0.0.0-20260709070238-d9bb3ab4df0d
+	github.com/siyuan-note/httpclient v0.0.0-20260713023353-9c69b62d9749
 	github.com/siyuan-note/logging v0.0.0-20260513050044-06b8e04d5490
-	github.com/studio-b12/gowebdav v0.12.0
+	github.com/studio-b12/gowebdav v0.13.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 )
 
