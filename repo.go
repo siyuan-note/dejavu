@@ -1148,6 +1148,10 @@ func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool,
 			// 数据同步忽略最近文档存储 https://github.com/siyuan-note/siyuan/issues/7246
 			return true, nil
 		}
+		if strings.HasSuffix(slashAbsPath, "data/storage/ref-used.json") {
+			// 数据同步忽略最近引用存储 https://github.com/siyuan-note/siyuan/issues/16468
+			return true, nil
+		}
 	}
 
 	if gulu.File.IsHidden(absPath) {
