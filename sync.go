@@ -97,9 +97,6 @@ func (repo *Repo) GetSyncCloudFiles(cloudLatest *entity.Index, context map[strin
 }
 
 func (repo *Repo) GetCloudLatest(context map[string]interface{}) (cloudLatest *entity.Index, err error) {
-	lock.Lock()
-	defer lock.Unlock()
-
 	_, cloudLatest, err = repo.downloadCloudLatest(context)
 	return
 }
@@ -107,6 +104,33 @@ func (repo *Repo) GetCloudLatest(context map[string]interface{}) (cloudLatest *e
 func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+
+	skipCloudPreflight, _ := context["skipCloudPreflight"].(bool)
+	if !skipCloudPreflight {
+		mergeResult = &MergeResult{Time: time.Now()}
+		trafficStat = &TrafficStat{m: &sync.Mutex{}}
+		latest, latestErr := repo.Latest()
+		if nil != latestErr {
+			logging.LogErrorf("get latest failed: %s", latestErr)
+			err = latestErr
+			return
+		}
+		length, cloudLatest, latestErr := repo.downloadCloudLatest(context)
+		if nil != latestErr {
+			if !errors.Is(latestErr, cloud.ErrCloudObjectNotFound) {
+				logging.LogErrorf("download cloud latest failed: %s", latestErr)
+				err = latestErr
+				return
+			}
+		}
+		trafficStat.DownloadFileCount++
+		trafficStat.DownloadBytes += length
+		trafficStat.APIGet++
+		if cloudLatest.ID == latest.ID {
+			// 数据一致时不获取云端锁，减少无变更同步的远程请求。
+			return
+		}
+	}
 
 	// 锁定云端，防止其他设备并发上传数据
 	err = repo.tryLockCloud(repo.DeviceID, context)
@@ -207,25 +231,32 @@ func (repo *Repo) sync0(context map[string]interface{},
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(1)
 	var errs []error
+	errsLock := sync.Mutex{}
 	go func() { // 从云端下载缺失分块并入库
 		defer waitGroup.Done()
 
 		fetchChunkIDs, downloadErr := repo.localNotFoundChunks(cloudChunkIDs)
 		if nil != downloadErr {
 			logging.LogErrorf("get local not found chunks failed: %s", downloadErr)
+			errsLock.Lock()
 			errs = append(errs, downloadErr)
+			errsLock.Unlock()
 			return
 		}
 
 		length, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
 		if nil != downloadErr {
 			logging.LogErrorf("download cloud chunks put failed: %s", downloadErr)
+			errsLock.Lock()
 			errs = append(errs, downloadErr)
+			errsLock.Unlock()
 			return
 		}
+		trafficStat.m.Lock()
 		trafficStat.DownloadBytes += length
 		trafficStat.DownloadChunkCount += len(fetchChunkIDs)
 		trafficStat.APIGet += trafficStat.DownloadChunkCount
+		trafficStat.m.Unlock()
 	}()
 
 	waitGroup.Add(1)
@@ -235,15 +266,20 @@ func (repo *Repo) sync0(context map[string]interface{},
 		uploadErr := repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 		if nil != uploadErr {
 			logging.LogErrorf("upload cloud failed: %s", uploadErr)
+			errsLock.Lock()
 			errs = append(errs, uploadErr)
+			errsLock.Unlock()
 			return
 		}
 	}()
 	waitGroup.Wait()
+	errsLock.Lock()
 	if 0 < len(errs) {
 		err = errs[0]
+		errsLock.Unlock()
 		return
 	}
+	errsLock.Unlock()
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -288,6 +324,24 @@ func (repo *Repo) sync0(context map[string]interface{},
 	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
 	localUpserts = repo.filterLocalUpserts(localUpserts, cloudUpserts)
 	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
+	localUpsertsByID := map[string]*entity.File{}
+	localUpsertsByPath := map[string]*entity.File{}
+	for _, localUpsert := range localUpserts {
+		localUpsertsByID[localUpsert.ID] = localUpsert
+		localUpsertsByPath[localUpsert.Path] = localUpsert
+	}
+	localRemovesByID := map[string]*entity.File{}
+	localRemovesByPath := map[string]*entity.File{}
+	for _, localRemove := range localRemoves {
+		localRemovesByID[localRemove.ID] = localRemove
+		localRemovesByPath[localRemove.Path] = localRemove
+	}
+	latestSyncFilesByID := map[string]*entity.File{}
+	latestSyncFilesByPath := map[string]*entity.File{}
+	for _, latestSyncFile := range latestSyncFiles {
+		latestSyncFilesByID[latestSyncFile.ID] = latestSyncFile
+		latestSyncFilesByPath[latestSyncFile.Path] = latestSyncFile
+	}
 
 	// 记录本地 syncignore 变更
 	var localUpsertIgnore *entity.File
@@ -298,9 +352,9 @@ func (repo *Repo) sync0(context map[string]interface{},
 		}
 	}
 
-	var fetchedFileIDs []string
+	fetchedFileIDs := map[string]bool{}
 	for _, fetchedFile := range fetchedFiles {
-		fetchedFileIDs = append(fetchedFileIDs, fetchedFile.ID)
+		fetchedFileIDs[fetchedFile.ID] = true
 	}
 
 	nowStr := mergeResult.Time.Format("2006-01-02-150405")
@@ -314,14 +368,22 @@ func (repo *Repo) sync0(context map[string]interface{},
 			cloudUpsertIgnore = cloudUpsert
 		}
 
-		if localUpsert := repo.getFile(localUpserts, cloudUpsert); nil != localUpsert { // 相同的文件本地发生了变更
+		localUpsert := localUpsertsByPath[cloudUpsert.Path]
+		if nil == localUpsert {
+			localUpsert = localUpsertsByID[cloudUpsert.ID]
+		}
+		if nil != localUpsert { // 相同的文件本地发生了变更
 			// 无论是否发生实际下载文件，都需要生成本地历史，以确保任何情况下都能够通过数据历史恢复文件
 			tmpMergeConflicts = append(tmpMergeConflicts, cloudUpsert)
 
-			if gulu.Str.Contains(cloudUpsert.ID, fetchedFileIDs) {
+			if fetchedFileIDs[cloudUpsert.ID] {
 				// 发生实际下载文件的情况，尝试解决冲突
 
-				if repo.ignoreLocalUpsert(localUpsert, latestSyncFiles, nowStr, context) {
+				latestSyncFile := latestSyncFilesByPath[localUpsert.Path]
+				if nil == latestSyncFile {
+					latestSyncFile = latestSyncFilesByID[localUpsert.ID]
+				}
+				if repo.ignoreLocalUpsert(localUpsert, latestSyncFile, nowStr, context) {
 					// 如果能忽略本地变更的话则不算做冲突，进行正常合并
 					mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
 					logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
@@ -335,7 +397,11 @@ func (repo *Repo) sync0(context map[string]interface{},
 			continue
 		}
 
-		if nil == repo.getFile(localRemoves, cloudUpsert) {
+		localRemove := localRemovesByPath[cloudUpsert.Path]
+		if nil == localRemove {
+			localRemove = localRemovesByID[cloudUpsert.ID]
+		}
+		if nil == localRemove {
 			if strings.HasSuffix(cloudUpsert.Path, ".tmp") {
 				// 数据仓库不迁出 `.tmp` 临时文件 https://github.com/siyuan-note/siyuan/issues/7087
 				logging.LogWarnf("ignored tmp file [%s]", cloudUpsert.Path)
@@ -357,7 +423,11 @@ func (repo *Repo) sync0(context map[string]interface{},
 
 	// 计算能够无冲突合并的 remove，冲突的文件以本地 upsert 为准
 	for _, cloudRemove := range cloudRemoves {
-		if nil == repo.getFile(localUpserts, cloudRemove) {
+		localUpsert := localUpsertsByPath[cloudRemove.Path]
+		if nil == localUpsert {
+			localUpsert = localUpsertsByID[cloudRemove.ID]
+		}
+		if nil == localUpsert {
 			mergeResult.Removes = append(mergeResult.Removes, cloudRemove)
 		}
 	}
@@ -451,12 +521,11 @@ func (repo *Repo) sync0(context map[string]interface{},
 	return
 }
 
-func (repo *Repo) ignoreLocalUpsert(localUpsert *entity.File, latestSyncFiles []*entity.File, now string, context map[string]interface{}) bool {
+func (repo *Repo) ignoreLocalUpsert(localUpsert, latestSyncFile *entity.File, now string, context map[string]interface{}) bool {
 	if !strings.HasSuffix(localUpsert.Path, ".sy") {
 		return false // 非 .sy 文件目前不做内容对比，直接认为本地 upsert 是最新的
 	}
 
-	latestSyncFile := repo.getFile(latestSyncFiles, localUpsert)
 	if nil == latestSyncFile {
 		return false // 本地 upsert 是新增的文件
 	}
@@ -813,11 +882,11 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 		cloudUpsertsMap[cloudUpsert.Path] = cloudUpsert
 	}
 
-	var toRemoveLocalUpsertPaths []string
+	toRemoveLocalUpsertPaths := map[string]bool{}
 	for _, localUpsert := range localUpserts {
 		if cloudUpsert := cloudUpsertsMap[localUpsert.Path]; nil != cloudUpsert {
 			if localUpsert.Updated < cloudUpsert.Updated-1000*60*7 { // 本地早于云端 7 分钟
-				toRemoveLocalUpsertPaths = append(toRemoveLocalUpsertPaths, localUpsert.Path) // 使用云端数据覆盖本地数据
+				toRemoveLocalUpsertPaths[localUpsert.Path] = true // 使用云端数据覆盖本地数据
 				logging.LogWarnf("ignored local upsert [%s, %s, %s] because it is older than cloud upsert [%s, %s, %s]",
 					localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"),
 					cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
@@ -826,7 +895,7 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 	}
 
 	for _, localUpsert := range localUpserts {
-		if !gulu.Str.Contains(localUpsert.Path, toRemoveLocalUpsertPaths) {
+		if !toRemoveLocalUpsertPaths[localUpsert.Path] {
 			ret = append(ret, localUpsert)
 		}
 	}
@@ -1015,15 +1084,6 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		return
 	}
 	return
-}
-
-func (repo *Repo) getFile(files []*entity.File, file *entity.File) *entity.File {
-	for _, f := range files {
-		if f.ID == file.ID || f.Path == file.Path {
-			return f
-		}
-	}
-	return nil
 }
 
 func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (uploadBytes int64, err error) {
@@ -1319,6 +1379,8 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
+	uploadErrLock := sync.Mutex{}
+	uploadBytesAtomic := atomic.Int64{}
 	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(upsertFiles) {
 		poolSize = len(upsertFiles)
@@ -1327,9 +1389,12 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 	total := len(upsertFiles)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
+		uploadErrLock.Lock()
 		if nil != uploadErr {
+			uploadErrLock.Unlock()
 			return // 快速失败
 		}
+		uploadErrLock.Unlock()
 
 		upsertFileID := arg.(string)
 		filePath := path.Join("objects", upsertFileID[:2], upsertFileID[2:])
@@ -1337,11 +1402,14 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadFile, context, int(count.Load()), total)
 		length, uoErr := repo.cloud.UploadObject(filePath, false)
 		if nil != uoErr {
-			uploadErr = uoErr
-			err = uploadErr
+			uploadErrLock.Lock()
+			if nil == uploadErr {
+				uploadErr = uoErr
+			}
+			uploadErrLock.Unlock()
 			return
 		}
-		uploadBytes += length
+		uploadBytesAtomic.Add(length)
 		uploadedCount.Add(1)
 		//logging.LogInfof("uploaded file [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
 	})
@@ -1353,16 +1421,20 @@ func (repo *Repo) uploadFiles(upsertFiles []*entity.File, context map[string]int
 	for _, upsertFile := range upsertFiles {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertFile.ID); nil != err {
+			waitGroup.Done()
 			logging.LogErrorf("invoke failed: %s", err)
-			return
-		}
-		if nil != uploadErr {
-			err = uploadErr
-			return
+			break
 		}
 	}
 	waitGroup.Wait()
 	p.Release()
+	uploadBytes = uploadBytesAtomic.Load()
+	if nil != err {
+		return
+	}
+	uploadErrLock.Lock()
+	err = uploadErr
+	uploadErrLock.Unlock()
 	return
 }
 
@@ -1373,6 +1445,8 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 
 	waitGroup := &sync.WaitGroup{}
 	var uploadErr error
+	uploadErrLock := sync.Mutex{}
+	uploadBytesAtomic := atomic.Int64{}
 	poolSize := repo.cloud.GetConcurrentReqs()
 	if poolSize > len(upsertChunkIDs) {
 		poolSize = len(upsertChunkIDs)
@@ -1381,9 +1455,12 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 	total := len(upsertChunkIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
+		uploadErrLock.Lock()
 		if nil != uploadErr {
+			uploadErrLock.Unlock()
 			return // 快速失败
 		}
+		uploadErrLock.Unlock()
 
 		upsertChunkID := arg.(string)
 		filePath := path.Join("objects", upsertChunkID[:2], upsertChunkID[2:])
@@ -1391,11 +1468,14 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 		eventbus.Publish(eventbus.EvtCloudBeforeUploadChunk, context, int(count.Load()), total)
 		length, uoErr := repo.cloud.UploadObject(filePath, false)
 		if nil != uoErr {
-			uploadErr = uoErr
-			err = uploadErr
+			uploadErrLock.Lock()
+			if nil == uploadErr {
+				uploadErr = uoErr
+			}
+			uploadErrLock.Unlock()
 			return
 		}
-		uploadBytes += length
+		uploadBytesAtomic.Add(length)
 		uploadedCount.Add(1)
 		//logging.LogInfof("uploaded chunk [%s, %d/%d]", filePath, int(uploadedCount.Load()), total)
 	})
@@ -1407,16 +1487,20 @@ func (repo *Repo) uploadChunks(upsertChunkIDs []string, context map[string]inter
 	for _, upsertChunkID := range upsertChunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(upsertChunkID); nil != err {
+			waitGroup.Done()
 			logging.LogErrorf("invoke failed: %s", err)
-			return
-		}
-		if nil != uploadErr {
-			err = uploadErr
-			return
+			break
 		}
 	}
 	waitGroup.Wait()
 	p.Release()
+	uploadBytes = uploadBytesAtomic.Load()
+	if nil != err {
+		return
+	}
+	uploadErrLock.Lock()
+	err = uploadErr
+	uploadErrLock.Unlock()
 	return
 }
 
@@ -1548,9 +1632,11 @@ func (repo *Repo) uploadCloud(context map[string]interface{},
 		logging.LogErrorf("upload chunks failed: %s", err)
 		return
 	}
+	trafficStat.m.Lock()
 	trafficStat.UploadChunkCount += len(upsertChunkIDs)
 	trafficStat.UploadBytes += length
-	trafficStat.APIPut += trafficStat.UploadChunkCount
+	trafficStat.APIPut += len(upsertChunkIDs)
+	trafficStat.m.Unlock()
 
 	// 上传文件
 	length, err = repo.uploadFiles(upsertFiles, context)
@@ -1558,9 +1644,11 @@ func (repo *Repo) uploadCloud(context map[string]interface{},
 		logging.LogErrorf("upload files failed: %s", err)
 		return
 	}
+	trafficStat.m.Lock()
 	trafficStat.UploadFileCount += len(upsertFiles)
 	trafficStat.UploadBytes += length
-	trafficStat.APIPut += trafficStat.UploadFileCount
+	trafficStat.APIPut += len(upsertFiles)
+	trafficStat.m.Unlock()
 	return
 }
 
@@ -1679,7 +1767,12 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 	return
 }
 
+var downloadCloudLatestLock = sync.Mutex{}
+
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
+	downloadCloudLatestLock.Lock()
+	defer downloadCloudLatestLock.Unlock()
+
 	start := time.Now()
 	index = &entity.Index{}
 

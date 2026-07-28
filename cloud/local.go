@@ -68,12 +68,45 @@ func (local *Local) GetRepos() (repos []*Repo, size int64, err error) {
 
 func (local *Local) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	absFilePath := filepath.Join(local.Conf.RepoPath, filePath)
-	data, err := os.ReadFile(absFilePath)
+	info, err := os.Stat(absFilePath)
 	if err != nil {
 		return
 	}
 
-	length, err = local.UploadBytes(filePath, data, overwrite)
+	if overwrite {
+		data, readErr := os.ReadFile(absFilePath)
+		if readErr != nil {
+			err = readErr
+			return
+		}
+		length, err = local.UploadBytes(filePath, data, true)
+		return
+	}
+
+	key := path.Join(local.getCurrentRepoDirPath(), filePath)
+	if _, statErr := os.Stat(key); statErr == nil {
+		length = 0
+		return
+	} else if !os.IsNotExist(statErr) {
+		err = statErr
+		return
+	}
+
+	if err = os.MkdirAll(path.Dir(key), 0755); err != nil {
+		return
+	}
+
+	file, openErr := os.Open(absFilePath)
+	if openErr != nil {
+		err = openErr
+		return
+	}
+	defer file.Close()
+
+	err = gulu.File.WriteFileSaferByReader(key, file, 0644)
+	if nil == err {
+		length = info.Size()
+	}
 	return
 }
 

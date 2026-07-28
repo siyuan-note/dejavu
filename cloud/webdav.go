@@ -64,12 +64,29 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	absFilePath := filepath.Join(webdav.Conf.RepoPath, filePath)
-	data, err := os.ReadFile(absFilePath)
+	file, err := os.Open(absFilePath)
 	if nil != err {
 		return
 	}
+	defer file.Close()
 
-	length, err = webdav.UploadBytes(filePath, data, overwrite)
+	info, err := file.Stat()
+	if nil != err {
+		return
+	}
+	length = info.Size()
+
+	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
+	folder := path.Dir(key)
+	if err = webdav.mkdirAll(folder); nil != err {
+		return
+	}
+
+	err = webdav.Client.WriteStreamWithLength(key, file, length, 0644)
+	err = webdav.parseErr(err)
+	if nil != err {
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
+	}
 	return
 }
 

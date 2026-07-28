@@ -1226,8 +1226,8 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	}
 
 	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
+	buf := make([]byte, chunker.MaxSize)
 	for {
-		buf := make([]byte, chunker.MaxSize)
 		chnk, chnkErr := chnkr.Next(buf)
 		if io.EOF == chnkErr {
 			break

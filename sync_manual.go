@@ -74,7 +74,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 从云端下载缺失文件并入库
-	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
+	length, _, err = repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
@@ -125,15 +125,23 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 在单向同步的情况下该结果可直接作为合并结果
 	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
 
-	var fetchedFileIDs []string
-	for _, fetchedFile := range fetchedFiles {
-		fetchedFileIDs = append(fetchedFileIDs, fetchedFile.ID)
-	}
-
 	// 计算冲突的 upsert
 	// 冲突的文件以云端 upsert 和 remove 为准
+	mergeUpsertsByID := map[string]bool{}
+	mergeUpsertsByPath := map[string]bool{}
+	for _, upsert := range mergeResult.Upserts {
+		mergeUpsertsByID[upsert.ID] = true
+		mergeUpsertsByPath[upsert.Path] = true
+	}
+	mergeRemovesByID := map[string]bool{}
+	mergeRemovesByPath := map[string]bool{}
+	for _, remove := range mergeResult.Removes {
+		mergeRemovesByID[remove.ID] = true
+		mergeRemovesByPath[remove.Path] = true
+	}
 	for _, localUpsert := range localUpserts {
-		if nil != repo.getFile(mergeResult.Upserts, localUpsert) || nil != repo.getFile(mergeResult.Removes, localUpsert) {
+		if mergeUpsertsByID[localUpsert.ID] || mergeUpsertsByPath[localUpsert.Path] ||
+			mergeRemovesByID[localUpsert.ID] || mergeRemovesByPath[localUpsert.Path] {
 			mergeResult.Conflicts = append(mergeResult.Conflicts, localUpsert)
 			logging.LogInfof("sync download conflict [%s, %s, %s]", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
