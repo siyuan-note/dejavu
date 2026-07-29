@@ -518,14 +518,59 @@ func (repo *Repo) OpenFile(file *entity.File) (ret []byte, err error) {
 }
 
 func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*entity.File, fileIndexIDs map[string]string, totalCount, pageCount int, err error) {
+	keyword = strings.ToLower(keyword)
+	return repo.searchFile(page, pageSize, func(file *entity.File) (matched bool, matchErr error) {
+		name := path.Base(file.Path)
+		if strings.HasSuffix(name, ".sy") && !ast.IsNodeIDPattern(keyword) {
+			var data []byte
+			for _, c := range file.Chunks {
+				chunk, chunkErr := repo.store.GetChunk(c)
+				if nil != chunkErr {
+					logging.LogErrorf("get chunk [%s] for file [%s] failed: %s", c, file.Path, chunkErr)
+					matchErr = chunkErr
+					return
+				}
+				data = append(data, chunk.Data...)
+			}
+
+			docIAL := map[string]string{}
+			iter := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
+			for field := iter.ReadObject(); field != ""; field = iter.ReadObject() {
+				if field == "Properties" {
+					iter.ReadVal(&docIAL)
+					break
+				}
+				iter.Skip()
+			}
+
+			for k, v := range docIAL {
+				docIAL[k] = html.UnescapeAttrVal(v)
+			}
+			if title := docIAL["title"]; "" != title {
+				name = title
+			}
+		}
+
+		matched = strings.Contains(strings.ToLower(name), keyword)
+		return
+	})
+}
+
+// SearchFileByName 精确搜索所有快照中具有指定文件名的文件版本。
+func (repo *Repo) SearchFileByName(name string, page int, pageSize int) (ret []*entity.File, fileIndexIDs map[string]string, totalCount, pageCount int, err error) {
+	return repo.searchFile(page, pageSize, func(file *entity.File) (matched bool, matchErr error) {
+		matched = strings.EqualFold(path.Base(file.Path), name)
+		return
+	})
+}
+
+func (repo *Repo) searchFile(page int, pageSize int, matcher func(file *entity.File) (matched bool, err error)) (ret []*entity.File, fileIndexIDs map[string]string, totalCount, pageCount int, err error) {
 	if page <= 0 {
 		page = 1
 	}
 	if pageSize <= 0 {
 		pageSize = 32
 	}
-
-	keyword = strings.ToLower(keyword)
 
 	// Phase 1: 持有锁收集所有索引中的文件 ID（去重），同时记录文件所属的最新快照 ID
 	var allFileIDs []string
@@ -586,41 +631,14 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 		}
 		mu.Unlock()
 
-		name := path.Base(file.Path)
-		if strings.HasSuffix(name, ".sy") && !ast.IsNodeIDPattern(keyword) {
-			var data []byte
-			for _, c := range file.Chunks {
-				chunk, chunkErr := repo.store.GetChunk(c)
-				if nil != chunkErr {
-					logging.LogErrorf("get chunk [%s] for file [%s] failed: %s", c, file.Path, chunkErr)
-					errMu.Lock()
-					workerErrs = append(workerErrs, chunkErr)
-					errMu.Unlock()
-					return
-				}
-				data = append(data, chunk.Data...)
-			}
-
-			docIAL := map[string]string{}
-			iter := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
-			for field := iter.ReadObject(); field != ""; field = iter.ReadObject() {
-				if field == "Properties" {
-					iter.ReadVal(&docIAL)
-					break
-				} else {
-					iter.Skip()
-				}
-			}
-
-			for k, v := range docIAL {
-				docIAL[k] = html.UnescapeAttrVal(v)
-			}
-			if title := docIAL["title"]; "" != title {
-				name = title
-			}
+		matched, matchErr := matcher(file)
+		if nil != matchErr {
+			errMu.Lock()
+			workerErrs = append(workerErrs, matchErr)
+			errMu.Unlock()
+			return
 		}
-
-		if strings.Contains(strings.ToLower(name), keyword) {
+		if matched {
 			mu.Lock()
 			if !matchSeen[file.ID] {
 				matches = append(matches, file)
@@ -642,7 +660,12 @@ func (repo *Repo) SearchFile(keyword string, page int, pageSize int) (ret []*ent
 		return
 	}
 
-	sort.Slice(matches, func(i, j int) bool { return matches[i].Updated > matches[j].Updated })
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].Updated == matches[j].Updated {
+			return matches[i].ID > matches[j].ID
+		}
+		return matches[i].Updated > matches[j].Updated
+	})
 
 	// Phase 3: 分页
 	totalCount = len(matches)

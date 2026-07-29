@@ -135,6 +135,54 @@ func TestSearchFile(t *testing.T) {
 	}
 }
 
+func TestSearchFileByName(t *testing.T) {
+	clearTestdata(t)
+	subscribeEvents(t)
+
+	testDir := filepath.Join(testDataPath, "exact-search")
+	if err := os.MkdirAll(filepath.Join(testDir, "a"), 0755); nil != err {
+		t.Fatalf("mkdir failed: %s", err)
+	}
+	if err := os.MkdirAll(filepath.Join(testDir, "b"), 0755); nil != err {
+		t.Fatalf("mkdir failed: %s", err)
+	}
+	defer os.RemoveAll(testDir)
+
+	name := "20260101000000-abcdefg.sy"
+	for _, file := range []string{
+		filepath.Join(testDir, "a", name),
+		filepath.Join(testDir, "b", name),
+		filepath.Join(testDir, "prefix-"+name),
+	} {
+		if err := os.WriteFile(file, []byte("test"), 0644); nil != err {
+			t.Fatalf("write file failed: %s", err)
+		}
+	}
+
+	repo, _ := initIndex(t)
+	first, firstIndexIDs, totalCount, pageCount, err := repo.SearchFileByName(name, 1, 1)
+	if nil != err {
+		t.Fatalf("search failed: %s", err)
+	}
+	if 2 != totalCount || 2 != pageCount || 1 != len(first) {
+		t.Fatalf("unexpected pagination: totalCount=%d, pageCount=%d, files=%d", totalCount, pageCount, len(first))
+	}
+	if name != filepath.Base(first[0].Path) || "" == firstIndexIDs[first[0].ID] {
+		t.Fatalf("unexpected first result: %#v", first[0])
+	}
+
+	second, secondIndexIDs, _, _, err := repo.SearchFileByName(name, 2, 1)
+	if nil != err {
+		t.Fatalf("search failed: %s", err)
+	}
+	if 1 != len(second) || first[0].ID == second[0].ID {
+		t.Fatalf("unexpected second result: %#v", second)
+	}
+	if name != filepath.Base(second[0].Path) || "" == secondIndexIDs[second[0].ID] {
+		t.Fatalf("unexpected second result: %#v", second[0])
+	}
+}
+
 func clearTestdata(t *testing.T) {
 	err := os.RemoveAll(testRepoPath)
 	if nil != err {
