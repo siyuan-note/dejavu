@@ -61,6 +61,13 @@ type Repo struct {
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
 	cloud    cloud.Cloud // 云端存储服务
+
+	chunkSource ChunkSource // 同步时可选的只读分块来源
+}
+
+// SetChunkSource 设置同步时可选的只读分块来源。
+func (repo *Repo) SetChunkSource(source ChunkSource) {
+	repo.chunkSource = source
 }
 
 // NewRepo 创建一个新的仓库。

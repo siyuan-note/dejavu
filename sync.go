@@ -64,9 +64,12 @@ func (mr *MergeResult) DataChanged() bool {
 }
 
 type DownloadTrafficStat struct {
-	DownloadFileCount  int
-	DownloadChunkCount int
-	DownloadBytes      int64
+	DownloadFileCount      int
+	DownloadChunkCount     int
+	DownloadBytes          int64
+	PeerDownloadChunkCount int
+	PeerDownloadBytes      int64
+	PeerFallbackCount      int
 }
 
 type UploadTrafficStat struct {
@@ -244,7 +247,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 			return
 		}
 
-		length, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
+		downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
 		if nil != downloadErr {
 			logging.LogErrorf("download cloud chunks put failed: %s", downloadErr)
 			errsLock.Lock()
@@ -253,9 +256,12 @@ func (repo *Repo) sync0(context map[string]interface{},
 			return
 		}
 		trafficStat.m.Lock()
-		trafficStat.DownloadBytes += length
+		trafficStat.DownloadBytes += downloadStat.CloudBytes
 		trafficStat.DownloadChunkCount += len(fetchChunkIDs)
-		trafficStat.APIGet += trafficStat.DownloadChunkCount
+		trafficStat.APIGet += len(fetchChunkIDs) - downloadStat.PeerCount
+		trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
+		trafficStat.PeerDownloadChunkCount += downloadStat.PeerCount
+		trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 		trafficStat.m.Unlock()
 	}()
 
@@ -963,58 +969,123 @@ func (repo *Repo) getSyncCloudFiles(cloudLatest *entity.Index, context map[strin
 	return
 }
 
-func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]interface{}) (downloadBytes int64, err error) {
+func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]interface{}) (stat *chunkDownloadStat, err error) {
+	stat = &chunkDownloadStat{}
 	if 1 > len(chunkIDs) {
 		return
 	}
 
+	peerChunks := map[string]bool{}
+	if nil != repo.chunkSource {
+		if found, hasErr := repo.chunkSource.HasChunks(chunkIDs); nil == hasErr {
+			peerChunks = found
+		} else {
+			logging.LogWarnf("query chunk source [%s] failed: %s", repo.chunkSource.Name(), hasErr)
+		}
+	}
+
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
-	poolSize := repo.cloud.GetConcurrentReqs()
+	downloadErrLock := sync.Mutex{}
+	cloudConcurrentReqs := repo.cloud.GetConcurrentReqs()
+	if cloudConcurrentReqs < 1 {
+		cloudConcurrentReqs = 1
+	}
+	peerConcurrentReqs := 0
+	if nil != repo.chunkSource {
+		peerConcurrentReqs = repo.chunkSource.GetConcurrentReqs()
+		if peerConcurrentReqs < 1 {
+			peerConcurrentReqs = 1
+		}
+	}
+	poolSize := cloudConcurrentReqs + peerConcurrentReqs
 	if poolSize > len(chunkIDs) {
 		poolSize = len(chunkIDs)
 	}
+	cloudSemaphore := make(chan struct{}, cloudConcurrentReqs)
+	peerSemaphore := make(chan struct{}, peerConcurrentReqs)
 	count := atomic.Int32{}
-	dBytes := atomic.Int64{}
+	cloudBytes := atomic.Int64{}
+	peerBytes := atomic.Int64{}
+	peerCount := atomic.Int32{}
+	peerFallbackCount := atomic.Int32{}
 	total := len(chunkIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
+		downloadErrLock.Lock()
 		if nil != downloadErr {
+			downloadErrLock.Unlock()
 			return // 快速失败
 		}
+		downloadErrLock.Unlock()
 
 		chunkID := arg.(string)
 		count.Add(1)
-		length, chunk, dccErr := repo.downloadCloudChunk(chunkID, int(count.Load()), total, context)
+		var length int64
+		var chunk *entity.Chunk
+		var dccErr error
+		if peerChunks[chunkID] {
+			peerSemaphore <- struct{}{}
+			length, chunk, dccErr = repo.downloadSourceChunk(chunkID)
+			<-peerSemaphore
+			if nil == dccErr {
+				peerBytes.Add(length)
+				peerCount.Add(1)
+			} else {
+				peerFallbackCount.Add(1)
+				logging.LogWarnf("download chunk [%s] from source [%s] failed, falling back to cloud: %s",
+					chunkID, repo.chunkSource.Name(), dccErr)
+			}
+		}
+		if nil == chunk {
+			cloudSemaphore <- struct{}{}
+			length, chunk, dccErr = repo.downloadCloudChunk(chunkID, int(count.Load()), total, context)
+			<-cloudSemaphore
+			if nil == dccErr {
+				cloudBytes.Add(length)
+			}
+		}
 		if nil != dccErr {
-			downloadErr = dccErr
+			downloadErrLock.Lock()
+			if nil == downloadErr {
+				downloadErr = dccErr
+			}
+			downloadErrLock.Unlock()
 			return
 		}
 		if pcErr := repo.store.PutChunk(chunk); nil != pcErr {
-			downloadErr = pcErr
+			downloadErrLock.Lock()
+			if nil == downloadErr {
+				downloadErr = pcErr
+			}
+			downloadErrLock.Unlock()
 			return
 		}
-		dBytes.Add(length)
 	})
 	if nil != err {
 		return
 	}
+	defer p.Release()
 
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunks, context, total)
 	for _, chunkID := range chunkIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(chunkID); nil != err {
+			waitGroup.Done()
 			logging.LogErrorf("invoke failed: %s", err)
-			return
-		}
-		if nil != downloadErr {
-			err = downloadErr
-			return
+			break
 		}
 	}
 	waitGroup.Wait()
-	p.Release()
-	downloadBytes = dBytes.Load()
+	if nil != err {
+		return
+	}
+	stat.CloudBytes = cloudBytes.Load()
+	stat.PeerBytes = peerBytes.Load()
+	stat.PeerCount = int(peerCount.Load())
+	stat.PeerFallbackCount = int(peerFallbackCount.Load())
+	downloadErrLock.Lock()
+	defer downloadErrLock.Unlock()
 	if nil != downloadErr {
 		err = downloadErr
 		return
@@ -1693,6 +1764,30 @@ func (repo *Repo) downloadCloudChunk(id string, count, total int, context map[st
 		return
 	}
 	length = int64(len(data))
+	if util.Hash(data) != id {
+		err = ErrRepoFatal
+		logging.LogErrorf("cloud chunk [%s] hash mismatch", id)
+		return
+	}
+	ret = &entity.Chunk{ID: id, Data: data}
+	return
+}
+
+func (repo *Repo) downloadSourceChunk(id string) (length int64, ret *entity.Chunk, err error) {
+	data, err := repo.chunkSource.DownloadChunk(id)
+	if nil != err {
+		return
+	}
+	key := path.Join("objects", id[:2], id[2:])
+	data, err = repo.decodeDownloadedData(key, data)
+	if nil != err {
+		return
+	}
+	if util.Hash(data) != id {
+		err = fmt.Errorf("%w: source chunk [%s] hash mismatch", ErrRepoFatal, id)
+		return
+	}
+	length = int64(len(data))
 	ret = &entity.Chunk{ID: id, Data: data}
 	return
 }
@@ -1901,11 +1996,16 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, context map[strin
 		return
 	}
 
-	stat.DownloadBytes, err = repo.downloadCloudChunksPut(chunkIDs, context)
+	downloadStat, downloadErr := repo.downloadCloudChunksPut(chunkIDs, context)
+	err = downloadErr
 	if nil != err {
 		return
 	}
+	stat.DownloadBytes = downloadStat.CloudBytes
 	stat.DownloadChunkCount += len(chunkIDs)
+	stat.PeerDownloadBytes += downloadStat.PeerBytes
+	stat.PeerDownloadChunkCount += downloadStat.PeerCount
+	stat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
 	err = repo.checkoutFiles(files, context)
 	return

@@ -101,10 +101,14 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 从云端下载缺失分块并入库
-	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
-	trafficStat.DownloadBytes += length
+	downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
+	err = downloadErr
+	trafficStat.DownloadBytes += downloadStat.CloudBytes
 	trafficStat.DownloadChunkCount += len(fetchChunkIDs)
-	trafficStat.APIGet += trafficStat.DownloadChunkCount
+	trafficStat.APIGet += len(fetchChunkIDs) - downloadStat.PeerCount
+	trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
+	trafficStat.PeerDownloadChunkCount += downloadStat.PeerCount
+	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)

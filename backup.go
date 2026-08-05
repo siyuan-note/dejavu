@@ -90,8 +90,9 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	}
 
 	// 从云端获取分块并入库
-	length, err = repo.downloadCloudChunksPut(fetchChunkIDs, context)
-	downloadBytes += length
+	downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
+	err = downloadErr
+	downloadBytes += downloadStat.CloudBytes
 	downloadChunkCount = len(fetchChunkIDs)
 	apiGet += downloadChunkCount
 
