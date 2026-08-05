@@ -149,6 +149,52 @@ func TestNativeDiscoveryValidation(t *testing.T) {
 	}
 }
 
+func TestRemoveDiscoveredPeer(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	server := newTestManager(t, key, "main", nil)
+	client := newTestManager(t, key, "main", nil)
+	info := server.DiscoveryInfo()
+	if !client.AddDiscoveredPeer(info.Instance, "127.0.0.1", info.Port, info.TXT) {
+		t.Fatal("expected native peer discovery to succeed")
+	}
+	client.peerMu.Lock()
+	var current *peer
+	for _, current = range client.peers {
+		current.deviceID = "device"
+		client.routes["chunk"] = []*peer{current}
+		break
+	}
+	client.peerMu.Unlock()
+	client.sessionMu.Lock()
+	client.sessions["token"] = &serverSession{peerID: "device", expires: time.Now().Add(time.Minute)}
+	client.sessionMu.Unlock()
+
+	if !client.RemoveDiscoveredPeer(info.Instance) {
+		t.Fatal("expected discovered peer to be removed")
+	}
+	if 0 != client.DiscoveredPeerCount() || 0 != len(client.peers) || 0 != len(client.routes) || 0 != len(client.sessions) {
+		t.Fatal("expected peer state to be cleared")
+	}
+	if client.RemoveDiscoveredPeer(info.Instance) {
+		t.Fatal("expected removing an unknown peer to report false")
+	}
+}
+
+func TestRemoveStalePeers(t *testing.T) {
+	manager := newTestManager(t, []byte("0123456789abcdef0123456789abcdef"), "main", nil)
+	manager.peerMu.Lock()
+	manager.peers["stale"] = &peer{key: "stale", instance: "stale", lastSeen: time.Now().Add(-2 * time.Minute)}
+	manager.peers["fresh"] = &peer{key: "fresh", instance: "fresh", lastSeen: time.Now()}
+	manager.peerMu.Unlock()
+
+	manager.removeStalePeers()
+	manager.peerMu.RLock()
+	defer manager.peerMu.RUnlock()
+	if nil != manager.peers["stale"] || nil == manager.peers["fresh"] {
+		t.Fatal("expected only stale peers to be removed")
+	}
+}
+
 func TestGroupDiscoveryTargets(t *testing.T) {
 	wlanIP := net.ParseIP("192.168.1.2")
 	ethernetIP := net.ParseIP("10.0.0.2")

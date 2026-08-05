@@ -109,6 +109,18 @@ func (manager *Manager) discoveryLoop() {
 			return
 		case <-ticker.C:
 			manager.browseOnce()
+		}
+	}
+}
+
+func (manager *Manager) peerCleanupLoop() {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-manager.ctx.Done():
+			return
+		case <-ticker.C:
 			manager.removeStalePeers()
 		}
 	}
@@ -296,14 +308,63 @@ func (manager *Manager) matchesDiscoveryTag(tag string) bool {
 
 func (manager *Manager) removeStalePeers() {
 	cutoff := time.Now().Add(-time.Minute)
+	manager.removePeers(func(current *peer) bool {
+		return current.lastSeen.Before(cutoff)
+	})
+}
+
+func (manager *Manager) removePeers(matches func(current *peer) bool) (ret []*peer) {
 	manager.peerMu.Lock()
 	for key, current := range manager.peers {
 		current.mu.Lock()
-		stale := current.lastSeen.Before(cutoff)
+		remove := matches(current)
 		current.mu.Unlock()
-		if stale {
+		if remove {
 			delete(manager.peers, key)
+			ret = append(ret, current)
+		}
+	}
+	if 0 < len(ret) {
+		for id, routes := range manager.routes {
+			kept := routes[:0]
+			for _, route := range routes {
+				remove := false
+				for _, current := range ret {
+					if route == current {
+						remove = true
+						break
+					}
+				}
+				if !remove {
+					kept = append(kept, route)
+				}
+			}
+			if 0 == len(kept) {
+				delete(manager.routes, id)
+			} else {
+				manager.routes[id] = kept
+			}
 		}
 	}
 	manager.peerMu.Unlock()
+
+	removedDeviceIDs := map[string]bool{}
+	for _, current := range ret {
+		current.mu.Lock()
+		if "" != current.deviceID {
+			removedDeviceIDs[current.deviceID] = true
+		}
+		current.mu.Unlock()
+		manager.clearPeerSession(current)
+	}
+	if 0 < len(removedDeviceIDs) {
+		manager.sessionMu.Lock()
+		for token, session := range manager.sessions {
+			if removedDeviceIDs[session.peerID] {
+				delete(manager.sessions, token)
+			}
+		}
+		manager.sessionMu.Unlock()
+	}
+	return
 }

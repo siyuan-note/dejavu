@@ -151,6 +151,7 @@ func Start(config Config) (ret *Manager, err error) {
 		go ret.discoveryLoop()
 		go ret.advertisementLoop()
 	}
+	go ret.peerCleanupLoop()
 	logging.LogInfof("LAN sync service started [device=%s, port=%d]", ret.identity.id, ret.listener.Addr().(*net.TCPAddr).Port)
 	return
 }
@@ -173,6 +174,16 @@ func (manager *Manager) DiscoveryInfo() *DiscoveryInfo {
 
 func (manager *Manager) AddDiscoveredPeer(instance, address string, port int, txt map[string]string) bool {
 	return manager.addDiscoveredPeerInfo(instance, address, port, txt)
+}
+
+func (manager *Manager) RemoveDiscoveredPeer(instance string) bool {
+	if "" == instance {
+		return false
+	}
+	removed := manager.removePeers(func(current *peer) bool {
+		return current.instance == instance
+	})
+	return 0 < len(removed)
 }
 
 func (manager *Manager) Stop() {
