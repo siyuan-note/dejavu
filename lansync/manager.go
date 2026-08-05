@@ -213,6 +213,23 @@ func (manager *Manager) GetConcurrentReqs() int {
 	return manager.config.MaxConcurrentReqs
 }
 
+func (manager *Manager) DiscoveredPeerCount() int {
+	instances := map[string]bool{}
+	cutoff := time.Now().Add(-time.Minute)
+	manager.peerMu.RLock()
+	for _, current := range manager.peers {
+		current.mu.Lock()
+		instance := current.instance
+		lastSeen := current.lastSeen
+		current.mu.Unlock()
+		if "" != instance && lastSeen.After(cutoff) {
+			instances[instance] = true
+		}
+	}
+	manager.peerMu.RUnlock()
+	return len(instances)
+}
+
 func (manager *Manager) ConnectedPeerCount() int {
 	deviceIDs := map[string]bool{}
 	manager.peerMu.RLock()

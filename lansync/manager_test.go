@@ -36,6 +36,12 @@ func TestPeerChunkTransfer(t *testing.T) {
 	if nil == info || !client.AddDiscoveredPeer(info.Instance, "127.0.0.1", info.Port, info.TXT) {
 		t.Fatal("expected native peer discovery to succeed")
 	}
+	if 1 != client.DiscoveredPeerCount() {
+		t.Fatalf("unexpected discovered peer count: %d", client.DiscoveredPeerCount())
+	}
+	if 0 != client.ConnectedPeerCount() {
+		t.Fatalf("unexpected connected peer count before authentication: %d", client.ConnectedPeerCount())
+	}
 
 	data := []byte("encrypted and compressed chunk")
 	hash := sha1.Sum(data)
