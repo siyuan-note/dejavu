@@ -18,6 +18,8 @@ package lansync
 
 import (
 	"errors"
+	"io"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -27,6 +29,8 @@ import (
 	"github.com/hashicorp/mdns"
 	"github.com/siyuan-note/logging"
 )
+
+var mdnsQueryLogger = log.New(io.Discard, "", 0)
 
 func (manager *Manager) refreshAdvertisement() (err error) {
 	manager.mdnsMu.Lock()
@@ -144,6 +148,7 @@ func (manager *Manager) browseInterface(iface *net.Interface) {
 		Entries:             entries,
 		WantUnicastResponse: true,
 		DisableIPv6:         true,
+		Logger:              mdnsQueryLogger,
 	})
 	close(entries)
 	<-done
