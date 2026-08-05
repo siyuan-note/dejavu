@@ -155,38 +155,52 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 		return
 	}
 
-	// 从云端获取文件列表
-	cloudFileIDs, refs, err := repo.cloud.GetRefsFiles()
-	if nil != err {
-		logging.LogErrorf("get cloud repo refs files failed: %s", err)
-		return
-	}
-	apiGet := len(refs) + 1
-
-	// 计算云端缺失的文件
+	apiGet := 1
 	var uploadFiles []*entity.File
-	for _, localFileID := range index.Files {
-		if !gulu.Str.Contains(localFileID, cloudFileIDs) {
-			var uploadFile *entity.File
-			uploadFile, err = repo.store.GetFile(localFileID)
-			if nil != err {
-				logging.LogErrorf("get file failed: %s", err)
-				return
-			}
-			uploadFiles = append(uploadFiles, uploadFile)
+	var uploadChunkIDs []string
+	_, cloudLatest, latestErr := repo.downloadCloudLatest(context)
+	cloudLatestMatched := nil == latestErr && nil != cloudLatest && "" != index.ID && index.ID == cloudLatest.ID
+	if nil != latestErr {
+		logging.LogWarnf("download cloud latest before uploading tag index failed: %s", latestErr)
+	} else if cloudLatestMatched {
+		logging.LogInfof("cloud latest matches tag index [%s], skipping cloud refs files", index.ID)
+	}
+
+	if !cloudLatestMatched {
+		// 从云端获取文件列表
+		var cloudFileIDs []string
+		var refs []*cloud.Ref
+		cloudFileIDs, refs, err = repo.cloud.GetRefsFiles()
+		if nil != err {
+			logging.LogErrorf("get cloud repo refs files failed: %s", err)
+			return
 		}
-	}
+		apiGet += len(refs) + 1
 
-	// 从文件列表中得到去重后的分块列表
-	uploadChunkIDs := repo.getChunks(uploadFiles)
+		// 计算云端缺失的文件
+		for _, localFileID := range index.Files {
+			if !gulu.Str.Contains(localFileID, cloudFileIDs) {
+				var uploadFile *entity.File
+				uploadFile, err = repo.store.GetFile(localFileID)
+				if nil != err {
+					logging.LogErrorf("get file failed: %s", err)
+					return
+				}
+				uploadFiles = append(uploadFiles, uploadFile)
+			}
+		}
 
-	// 计算云端缺失的分块
-	uploadChunkIDs, err = repo.cloud.GetChunks(uploadChunkIDs)
-	if nil != err {
-		logging.LogErrorf("get cloud repo upload chunks failed: %s", err)
-		return
+		// 从文件列表中得到去重后的分块列表
+		uploadChunkIDs = repo.getChunks(uploadFiles)
+
+		// 计算云端缺失的分块
+		uploadChunkIDs, err = repo.cloud.GetChunks(uploadChunkIDs)
+		if nil != err {
+			logging.LogErrorf("get cloud repo upload chunks failed: %s", err)
+			return
+		}
+		apiGet += len(uploadChunkIDs)
 	}
-	apiGet += len(uploadChunkIDs)
 
 	// 上传分块
 	length, err := repo.uploadChunks(uploadChunkIDs, context)
@@ -210,12 +224,20 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 
 	// 上传索引
 	length, err = repo.uploadIndex(index, context)
+	if nil != err {
+		logging.LogErrorf("upload index failed: %s", err)
+		return
+	}
 	uploadFileCount++
 	uploadBytes += length
 	apiPut++
 
 	// 上传标签
 	length, err = repo.updateCloudRef("refs/tags/"+tag, context)
+	if nil != err {
+		logging.LogErrorf("update cloud tag ref failed: %s", err)
+		return
+	}
 	uploadFileCount++
 	uploadBytes += length
 	apiPut++

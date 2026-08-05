@@ -1167,6 +1167,9 @@ func (repo *Repo) updateCloudRef(ref string, context map[string]interface{}) (up
 	}
 
 	length, err := repo.cloud.UploadObject(ref, true)
+	if nil != err {
+		return
+	}
 	uploadBytes += length
 	logging.LogInfof("uploaded cloud ref [%s, id=%s]", ref, data)
 	return
@@ -1438,6 +1441,9 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 func (repo *Repo) uploadIndex(index *entity.Index, context map[string]interface{}) (uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndex, context, index.ID)
 	length, err := repo.cloud.UploadObject(path.Join("indexes", index.ID), false)
+	if nil != err {
+		return
+	}
 	uploadBytes += length
 	logging.LogInfof("uploaded index [%s]", index.String())
 	return

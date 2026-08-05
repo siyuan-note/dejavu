@@ -382,55 +382,67 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
-	prefix := path.Join("repo", "refs", refPrefix)
+	prefix := path.Join("repo", "refs", refPrefix) + "/"
 	limit := int32(32)
-	marker := ""
-	for {
-		output, listErr := svc.ListObjects(ctx, &as3.ListObjectsInput{
-			Bucket:  &s3.Conf.S3.Bucket,
-			Prefix:  &prefix,
-			Marker:  &marker,
-			MaxKeys: &limit,
+	entries, err := listS3Objects(ctx, svc, &as3.ListObjectsV2Input{
+		Bucket:  &s3.Conf.S3.Bucket,
+		Prefix:  &prefix,
+		MaxKeys: &limit,
+	})
+	if nil != err {
+		return
+	}
+
+	for _, entry := range entries {
+		if nil == entry.Key {
+			logging.LogWarnf("skip repo ref with nil key")
+			continue
+		}
+
+		filePath := strings.TrimPrefix(*entry.Key, "repo/")
+		data, getErr := s3.DownloadObject(filePath)
+		if nil != getErr {
+			err = getErr
+			return
+		}
+
+		id := string(data)
+		info, statErr := s3.statFile(path.Join("repo", "indexes", id))
+		if nil != statErr {
+			err = statErr
+			return
+		}
+		if 1 > info.Size {
+			continue
+		}
+
+		updated := ""
+		if nil != entry.LastModified {
+			updated = entry.LastModified.Format("2006-01-02 15:04:05")
+		}
+		ret = append(ret, &Ref{
+			Name:    path.Base(*entry.Key),
+			ID:      id,
+			Updated: updated,
 		})
+	}
+	return
+}
+
+func listS3Objects(ctx context.Context, svc as3.ListObjectsV2APIClient, input *as3.ListObjectsV2Input) (ret []as3Types.Object, err error) {
+	paginator := as3.NewListObjectsV2Paginator(svc, input)
+	for paginator.HasMorePages() {
+		output, listErr := paginator.NextPage(ctx)
 		if nil != listErr {
+			err = listErr
 			return
 		}
-
 		if nil == output {
-			logging.LogWarnf("list objects output is nil")
+			err = errors.New("list objects output is nil")
 			return
 		}
 
-		marker = *output.Marker
-
-		for _, entry := range output.Contents {
-			filePath := strings.TrimPrefix(*entry.Key, "repo/")
-			data, getErr := s3.DownloadObject(filePath)
-			if nil != getErr {
-				err = getErr
-				return
-			}
-
-			id := string(data)
-			info, statErr := s3.statFile(path.Join("repo", "indexes", id))
-			if nil != statErr {
-				err = statErr
-				return
-			}
-			if 1 > info.Size {
-				continue
-			}
-
-			ret = append(ret, &Ref{
-				Name:    path.Base(*entry.Key),
-				ID:      id,
-				Updated: entry.LastModified.Format("2006-01-02 15:04:05"),
-			})
-		}
-
-		if !(*output.IsTruncated) {
-			break
-		}
+		ret = append(ret, output.Contents...)
 	}
 	return
 }
