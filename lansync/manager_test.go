@@ -24,6 +24,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -70,6 +71,49 @@ func TestPeerChunkTransfer(t *testing.T) {
 	}
 	if 1 != client.ConnectedPeerCount() {
 		t.Fatalf("unexpected connected peer count: %d", client.ConnectedPeerCount())
+	}
+}
+
+func TestPeerChunkQueryFailure(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	server := newTestManager(t, key, "main", nil)
+	client := newTestManager(t, key, "main", nil)
+	info := server.DiscoveryInfo()
+	server.Stop()
+	if !client.AddDiscoveredPeer(info.Instance, "127.0.0.1", info.Port, info.TXT) {
+		t.Fatal("expected native peer discovery to succeed")
+	}
+	if _, err := client.HasChunks([]string{"0123456789abcdef0123456789abcdef01234567"}); nil == err {
+		t.Fatal("expected peer chunk query failure")
+	}
+}
+
+func TestPeerChunkQueryPartialFailure(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	server := newTestManager(t, key, "main", nil)
+	unavailable := newTestManager(t, key, "main", nil)
+	client := newTestManager(t, key, "main", nil)
+	addTestPeer(client, server)
+	addTestPeer(client, unavailable)
+	unavailable.Stop()
+
+	data := []byte("encrypted and compressed chunk")
+	hash := sha1.Sum(data)
+	id := hex.EncodeToString(hash[:])
+	path := server.chunkPath(id)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); nil != err {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); nil != err {
+		t.Fatal(err)
+	}
+
+	found, err := client.HasChunks([]string{id})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if !found[id] {
+		t.Fatalf("unexpected peer chunks: %+v", found)
 	}
 }
 
@@ -259,7 +303,7 @@ func newTestManager(t *testing.T, key []byte, scope string, onCommitHint func(st
 func addTestPeer(client, server *Manager) *peer {
 	port := server.listener.Addr().(*net.TCPAddr).Port
 	current := &peer{
-		key:      net.JoinHostPort("127.0.0.1", "0"),
+		key:      net.JoinHostPort("127.0.0.1", strconv.Itoa(port)),
 		instance: server.identity.id,
 		address:  "127.0.0.1",
 		port:     port,

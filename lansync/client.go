@@ -57,6 +57,8 @@ func (manager *Manager) HasChunks(ids []string) (ret map[string]bool, err error)
 
 	routes := map[string][]*peer{}
 	routesMu := sync.Mutex{}
+	var queryErrors []error
+	successfulQueries := 0
 	semaphore := make(chan struct{}, manager.config.MaxConcurrentReqs)
 	waitGroup := sync.WaitGroup{}
 	for start := 0; start < len(ids); start += maxHasChunks {
@@ -77,9 +79,14 @@ func (manager *Manager) HasChunks(ids []string) (ret map[string]bool, err error)
 				}
 				found, queryErr := manager.queryPeerChunks(target, queryIDs)
 				if nil != queryErr {
+					routesMu.Lock()
+					queryErrors = append(queryErrors, fmt.Errorf("query LAN peer [%s] failed: %w",
+						net.JoinHostPort(target.address, fmt.Sprintf("%d", target.port)), queryErr))
+					routesMu.Unlock()
 					return
 				}
 				routesMu.Lock()
+				successfulQueries++
 				for _, id := range found {
 					ret[id] = true
 					routes[id] = append(routes[id], target)
@@ -92,6 +99,9 @@ func (manager *Manager) HasChunks(ids []string) (ret map[string]bool, err error)
 	manager.peerMu.Lock()
 	manager.routes = routes
 	manager.peerMu.Unlock()
+	if 0 == successfulQueries && 0 < len(queryErrors) {
+		err = fmt.Errorf("query LAN peers failed: %w", errors.Join(queryErrors...))
+	}
 	return
 }
 
