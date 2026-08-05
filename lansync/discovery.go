@@ -21,6 +21,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/mdns"
@@ -30,10 +31,10 @@ import (
 func (manager *Manager) refreshAdvertisement() (err error) {
 	manager.mdnsMu.Lock()
 	defer manager.mdnsMu.Unlock()
-	if nil != manager.mdnsServer {
-		_ = manager.mdnsServer.Shutdown()
-		manager.mdnsServer = nil
+	for _, server := range manager.mdnsServers {
+		_ = server.Shutdown()
 	}
+	manager.mdnsServers = nil
 	info := manager.DiscoveryInfo()
 	ips := manager.config.IPs
 	if nil != manager.config.IPsProvider {
@@ -47,18 +48,33 @@ func (manager *Manager) refreshAdvertisement() (err error) {
 		"f=" + info.TXT["f"],
 		"scope=" + info.TXT["scope"],
 	}
-	service, err := mdns.NewMDNSService(manager.instance, ServiceName, "", "", info.Port, ips, txt)
-	if nil != err {
-		return err
+	var lastErr error
+	for _, target := range discoveryTargets(ips) {
+		service, serviceErr := mdns.NewMDNSService(manager.instance, ServiceName, "", "", info.Port, target.ips, txt)
+		if nil != serviceErr {
+			lastErr = serviceErr
+			continue
+		}
+		server, serverErr := mdns.NewServer(&mdns.Config{Zone: service, Iface: target.iface})
+		if nil != serverErr {
+			lastErr = serverErr
+			continue
+		}
+		manager.mdnsServers = append(manager.mdnsServers, server)
 	}
-	manager.mdnsServer, err = mdns.NewServer(&mdns.Config{Zone: service})
-	return
+	if 0 < len(manager.mdnsServers) {
+		return nil
+	}
+	if nil != lastErr {
+		return lastErr
+	}
+	return errors.New("no multicast interface is available")
 }
 
 func (manager *Manager) advertisementLoop() {
 	delay := discoveryWindow
 	manager.mdnsMu.Lock()
-	if nil == manager.mdnsServer {
+	if 0 == len(manager.mdnsServers) {
 		delay = 30 * time.Second
 	}
 	manager.mdnsMu.Unlock()
@@ -95,6 +111,23 @@ func (manager *Manager) discoveryLoop() {
 }
 
 func (manager *Manager) browseOnce() {
+	ips := manager.config.IPs
+	if nil != manager.config.IPsProvider {
+		ips = manager.config.IPsProvider()
+	}
+	targets := discoveryTargets(ips)
+	waitGroup := sync.WaitGroup{}
+	for _, target := range targets {
+		waitGroup.Add(1)
+		go func(iface *net.Interface) {
+			defer waitGroup.Done()
+			manager.browseInterface(iface)
+		}(target.iface)
+	}
+	waitGroup.Wait()
+}
+
+func (manager *Manager) browseInterface(iface *net.Interface) {
 	entries := make(chan *mdns.ServiceEntry, 32)
 	done := make(chan struct{})
 	go func() {
@@ -104,16 +137,96 @@ func (manager *Manager) browseOnce() {
 		}
 	}()
 	err := mdns.Query(&mdns.QueryParam{
-		Service: ServiceName,
-		Domain:  "local",
-		Timeout: 2 * time.Second,
-		Entries: entries,
+		Service:             ServiceName,
+		Domain:              "local",
+		Timeout:             2 * time.Second,
+		Interface:           iface,
+		Entries:             entries,
+		WantUnicastResponse: true,
+		DisableIPv6:         true,
 	})
 	close(entries)
 	<-done
 	if nil != err && nil == manager.ctx.Err() {
 		logging.LogDebugf("browse LAN sync peers failed: %s", err)
 	}
+}
+
+type discoveryTarget struct {
+	iface *net.Interface
+	ips   []net.IP
+}
+
+type networkInterface struct {
+	iface net.Interface
+	addrs []net.Addr
+}
+
+func discoveryTargets(ips []net.IP) []discoveryTarget {
+	interfaces, err := net.Interfaces()
+	if nil != err {
+		return []discoveryTarget{{ips: ips}}
+	}
+	candidates := make([]networkInterface, 0, len(interfaces))
+	for _, current := range interfaces {
+		addresses, addressErr := current.Addrs()
+		if nil == addressErr {
+			candidates = append(candidates, networkInterface{iface: current, addrs: addresses})
+		}
+	}
+	return groupDiscoveryTargets(ips, candidates)
+}
+
+func groupDiscoveryTargets(ips []net.IP, interfaces []networkInterface) (ret []discoveryTarget) {
+	targetIndexes := map[int]int{}
+	for _, ip := range ips {
+		for i := range interfaces {
+			current := &interfaces[i]
+			if 0 == current.iface.Flags&net.FlagUp || 0 != current.iface.Flags&net.FlagLoopback {
+				continue
+			}
+			if !interfaceHasIP(current.addrs, ip) {
+				continue
+			}
+			targetIndex, exists := targetIndexes[current.iface.Index]
+			if !exists {
+				targetIndex = len(ret)
+				targetIndexes[current.iface.Index] = targetIndex
+				ret = append(ret, discoveryTarget{iface: &current.iface})
+			}
+			ret[targetIndex].ips = append(ret[targetIndex].ips, ip)
+			break
+		}
+	}
+	if 0 == len(ret) {
+		ret = append(ret, discoveryTarget{ips: ips})
+	}
+	return
+}
+
+func interfaceHasIP(addresses []net.Addr, target net.IP) bool {
+	for _, address := range addresses {
+		var current net.IP
+		switch value := address.(type) {
+		case *net.IPNet:
+			current = value.IP
+		case *net.IPAddr:
+			current = value.IP
+		}
+		if nil != current && current.Equal(target) {
+			return true
+		}
+	}
+	return false
+}
+
+func (manager *Manager) stopAdvertisements() {
+	manager.mdnsMu.Lock()
+	defer manager.mdnsMu.Unlock()
+	for _, server := range manager.mdnsServers {
+		_ = server.Shutdown()
+	}
+	manager.mdnsServers = nil
 }
 
 func (manager *Manager) addDiscoveredPeer(entry *mdns.ServiceEntry) {

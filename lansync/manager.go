@@ -68,10 +68,10 @@ type Manager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	listener   net.Listener
-	httpServer *http.Server
-	mdnsMu     sync.Mutex
-	mdnsServer *mdns.Server
+	listener    net.Listener
+	httpServer  *http.Server
+	mdnsMu      sync.Mutex
+	mdnsServers []*mdns.Server
 
 	peerMu sync.RWMutex
 	peers  map[string]*peer
@@ -187,12 +187,7 @@ func (manager *Manager) Stop() {
 		for _, current := range peers {
 			manager.clearPeerSession(current)
 		}
-		manager.mdnsMu.Lock()
-		if nil != manager.mdnsServer {
-			_ = manager.mdnsServer.Shutdown()
-			manager.mdnsServer = nil
-		}
-		manager.mdnsMu.Unlock()
+		manager.stopAdvertisements()
 		if nil != manager.httpServer {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			_ = manager.httpServer.Shutdown(ctx)

@@ -149,6 +149,30 @@ func TestNativeDiscoveryValidation(t *testing.T) {
 	}
 }
 
+func TestGroupDiscoveryTargets(t *testing.T) {
+	wlanIP := net.ParseIP("192.168.1.2")
+	ethernetIP := net.ParseIP("10.0.0.2")
+	targets := groupDiscoveryTargets([]net.IP{wlanIP, ethernetIP}, []networkInterface{
+		{
+			iface: net.Interface{Index: 1, Name: "wlan", Flags: net.FlagUp},
+			addrs: []net.Addr{&net.IPNet{IP: wlanIP, Mask: net.CIDRMask(24, 32)}},
+		},
+		{
+			iface: net.Interface{Index: 2, Name: "ethernet", Flags: net.FlagUp},
+			addrs: []net.Addr{&net.IPNet{IP: ethernetIP, Mask: net.CIDRMask(24, 32)}},
+		},
+	})
+	if 2 != len(targets) {
+		t.Fatalf("unexpected discovery target count: %d", len(targets))
+	}
+	if "wlan" != targets[0].iface.Name || 1 != len(targets[0].ips) || !targets[0].ips[0].Equal(wlanIP) {
+		t.Fatalf("unexpected WLAN discovery target: %+v", targets[0])
+	}
+	if "ethernet" != targets[1].iface.Name || 1 != len(targets[1].ips) || !targets[1].ips[0].Equal(ethernetIP) {
+		t.Fatalf("unexpected Ethernet discovery target: %+v", targets[1])
+	}
+}
+
 func newTestManager(t *testing.T, key []byte, scope string, onCommitHint func(string)) *Manager {
 	t.Helper()
 	tempDir := t.TempDir()
