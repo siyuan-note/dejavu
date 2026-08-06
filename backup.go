@@ -60,6 +60,7 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	}
 	downloadFileCount++
 	downloadBytes += length
+	cloudDownloadBytes := length
 	apiGet := 1
 
 	// 计算本地缺失的文件
@@ -69,15 +70,16 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 		return
 	}
 
-	// 从云端下载缺失文件并入库
-	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
+	// 下载缺失文件并入库
+	downloadStat, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
-	downloadBytes += length
-	downloadFileCount = len(fetchFileIDs)
-	apiGet += downloadFileCount
+	downloadBytes += downloadStat.CloudBytes + downloadStat.PeerBytes
+	cloudDownloadBytes += downloadStat.CloudBytes
+	downloadFileCount += len(fetchFileIDs)
+	apiGet += len(fetchFileIDs) - downloadStat.PeerCount
 
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(fetchedFiles)
@@ -89,12 +91,17 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 		return
 	}
 
-	// 从云端获取分块并入库
+	// 下载分块并入库
 	downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	err = downloadErr
-	downloadBytes += downloadStat.CloudBytes
+	if nil != err {
+		logging.LogErrorf("download chunks put failed: %s", err)
+		return
+	}
+	downloadBytes += downloadStat.CloudBytes + downloadStat.PeerBytes
+	cloudDownloadBytes += downloadStat.CloudBytes
 	downloadChunkCount = len(fetchChunkIDs)
-	apiGet += downloadChunkCount
+	apiGet += downloadChunkCount - downloadStat.PeerCount
 
 	// 更新本地索引
 	err = repo.store.PutIndex(index)
@@ -104,7 +111,7 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	}
 
 	// 统计流量
-	go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: downloadBytes, APIGet: apiGet})
+	go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: cloudDownloadBytes, APIGet: apiGet})
 	return
 }
 

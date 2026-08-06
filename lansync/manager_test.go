@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -114,6 +115,47 @@ func TestPeerChunkQueryPartialFailure(t *testing.T) {
 	}
 	if !found[id] {
 		t.Fatalf("unexpected peer chunks: %+v", found)
+	}
+}
+
+func TestPeerChunkValidationFallsBackToNextPeer(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	invalidServer := newTestManager(t, key, "main", nil)
+	validServer := newTestManager(t, key, "main", nil)
+	client := newTestManager(t, key, "main", nil)
+	invalidPeer := addTestPeer(client, invalidServer)
+	validPeer := addTestPeer(client, validServer)
+
+	validData := []byte("valid encrypted and compressed chunk")
+	hash := sha1.Sum(validData)
+	id := hex.EncodeToString(hash[:])
+	for server, data := range map[*Manager][]byte{
+		invalidServer: []byte("invalid encrypted and compressed chunk"),
+		validServer:   validData,
+	} {
+		objectPath := server.chunkPath(id)
+		if err := os.MkdirAll(filepath.Dir(objectPath), 0755); nil != err {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(objectPath, data, 0600); nil != err {
+			t.Fatal(err)
+		}
+	}
+	client.peerMu.Lock()
+	client.routes[id] = []*peer{invalidPeer, validPeer}
+	client.peerMu.Unlock()
+
+	downloaded, err := client.DownloadChunkValidated(id, func(data []byte) error {
+		if !bytes.Equal(data, validData) {
+			return errors.New("invalid chunk content")
+		}
+		return nil
+	})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(validData, downloaded) {
+		t.Fatalf("unexpected chunk data: %q", downloaded)
 	}
 }
 
@@ -239,6 +281,27 @@ func TestRemoveStalePeers(t *testing.T) {
 	}
 }
 
+func TestConnectedPeerCountIgnoresInactiveSessions(t *testing.T) {
+	manager := newTestManager(t, []byte("0123456789abcdef0123456789abcdef"), "main", nil)
+	now := time.Now()
+	manager.peerMu.Lock()
+	manager.peers["stale"] = &peer{
+		deviceID: "stale-device", token: "stale", tokenExpires: now.Add(time.Minute), lastSeen: now.Add(-2 * time.Minute),
+	}
+	manager.peers["fresh"] = &peer{
+		deviceID: "fresh-device", token: "fresh", tokenExpires: now.Add(time.Minute), lastSeen: now,
+	}
+	manager.peerMu.Unlock()
+	manager.sessionMu.Lock()
+	manager.sessions["stale"] = &serverSession{peerID: "stale-session", expires: now.Add(time.Minute), lastSeen: now.Add(-2 * time.Minute)}
+	manager.sessions["fresh"] = &serverSession{peerID: "fresh-session", expires: now.Add(time.Minute), lastSeen: now}
+	manager.sessionMu.Unlock()
+
+	if 2 != manager.ConnectedPeerCount() {
+		t.Fatalf("expected only active authenticated peers, got %d", manager.ConnectedPeerCount())
+	}
+}
+
 func TestGroupDiscoveryTargets(t *testing.T) {
 	wlanIP := net.ParseIP("192.168.1.2")
 	ethernetIP := net.ParseIP("10.0.0.2")
@@ -260,6 +323,17 @@ func TestGroupDiscoveryTargets(t *testing.T) {
 	}
 	if "ethernet" != targets[1].iface.Name || 1 != len(targets[1].ips) || !targets[1].ips[0].Equal(ethernetIP) {
 		t.Fatalf("unexpected Ethernet discovery target: %+v", targets[1])
+	}
+}
+
+func TestDiscoveryIPSignature(t *testing.T) {
+	first := discoveryIPSignature([]net.IP{net.ParseIP("192.168.1.2"), net.ParseIP("10.0.0.2")})
+	second := discoveryIPSignature([]net.IP{net.ParseIP("10.0.0.2"), net.ParseIP("192.168.1.2")})
+	if first != second {
+		t.Fatalf("expected stable signature, got [%s] and [%s]", first, second)
+	}
+	if first == discoveryIPSignature([]net.IP{net.ParseIP("192.168.1.3"), net.ParseIP("10.0.0.2")}) {
+		t.Fatal("expected changed network address to produce a different signature")
 	}
 }
 

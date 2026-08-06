@@ -73,15 +73,18 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		return
 	}
 
-	// 从云端下载缺失文件并入库
-	length, _, err = repo.downloadCloudFilesPut(fetchFileIDs, context)
+	// 下载缺失文件并入库
+	fileDownloadStat, _, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
 	trafficStat.DownloadFileCount += len(fetchFileIDs)
-	trafficStat.DownloadBytes += length
-	trafficStat.APIGet += trafficStat.DownloadFileCount
+	trafficStat.DownloadBytes += fileDownloadStat.CloudBytes
+	trafficStat.APIGet += len(fetchFileIDs) - fileDownloadStat.PeerCount
+	trafficStat.PeerDownloadBytes += fileDownloadStat.PeerBytes
+	trafficStat.PeerDownloadFileCount += fileDownloadStat.PeerCount
+	trafficStat.PeerFallbackCount += fileDownloadStat.PeerFallbackCount
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
@@ -100,9 +103,13 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		return
 	}
 
-	// 从云端下载缺失分块并入库
+	// 下载缺失分块并入库
 	downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
 	err = downloadErr
+	if nil != err {
+		logging.LogErrorf("download chunks put failed: %s", err)
+		return
+	}
 	trafficStat.DownloadBytes += downloadStat.CloudBytes
 	trafficStat.DownloadChunkCount += len(fetchChunkIDs)
 	trafficStat.APIGet += len(fetchChunkIDs) - downloadStat.PeerCount

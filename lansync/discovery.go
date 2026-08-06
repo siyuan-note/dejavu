@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,8 +46,10 @@ func (manager *Manager) refreshAdvertisement() (err error) {
 		ips = manager.config.IPsProvider()
 	}
 	if 1 > len(ips) {
+		manager.mdnsIPs = ""
 		return errors.New("no private network address is available")
 	}
+	manager.mdnsIPs = discoveryIPSignature(ips)
 	txt := []string{
 		"v=" + info.TXT["v"],
 		"f=" + info.TXT["f"],
@@ -76,27 +79,58 @@ func (manager *Manager) refreshAdvertisement() (err error) {
 }
 
 func (manager *Manager) advertisementLoop() {
-	delay := discoveryWindow
+	nextRefresh := time.Now().Add(discoveryWindow)
+	nextRetry := time.Time{}
 	manager.mdnsMu.Lock()
 	if 0 == len(manager.mdnsServers) {
-		delay = 30 * time.Second
+		nextRetry = time.Now().Add(30 * time.Second)
 	}
 	manager.mdnsMu.Unlock()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
 	for {
-		timer := time.NewTimer(delay)
 		select {
 		case <-manager.ctx.Done():
-			timer.Stop()
 			return
-		case <-timer.C:
-			if err := manager.refreshAdvertisement(); nil != err {
-				logging.LogWarnf("refresh LAN sync discovery advertisement failed: %s", err)
-				delay = 30 * time.Second
-			} else {
-				delay = discoveryWindow
-			}
+		case <-ticker.C:
+		}
+
+		ips := manager.config.IPs
+		if nil != manager.config.IPsProvider {
+			ips = manager.config.IPsProvider()
+		}
+		signature := discoveryIPSignature(ips)
+		manager.mdnsMu.Lock()
+		currentSignature := manager.mdnsIPs
+		hasServers := 0 < len(manager.mdnsServers)
+		manager.mdnsMu.Unlock()
+		now := time.Now()
+		networkChanged := signature != currentSignature
+		if !networkChanged && hasServers && now.Before(nextRefresh) {
+			continue
+		}
+		if !networkChanged && !hasServers && now.Before(nextRetry) {
+			continue
+		}
+		if err := manager.refreshAdvertisement(); nil != err {
+			logging.LogWarnf("refresh LAN sync discovery advertisement failed: %s", err)
+			nextRetry = now.Add(30 * time.Second)
+		} else {
+			nextRefresh = now.Add(discoveryWindow)
+			nextRetry = time.Time{}
 		}
 	}
+}
+
+func discoveryIPSignature(ips []net.IP) string {
+	values := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		if nil != ip {
+			values = append(values, ip.String())
+		}
+	}
+	sort.Strings(values)
+	return strings.Join(values, ",")
 }
 
 func (manager *Manager) discoveryLoop() {
@@ -244,6 +278,7 @@ func (manager *Manager) stopAdvertisements() {
 		_ = server.Shutdown()
 	}
 	manager.mdnsServers = nil
+	manager.mdnsIPs = ""
 }
 
 func (manager *Manager) addDiscoveredPeer(entry *mdns.ServiceEntry) {

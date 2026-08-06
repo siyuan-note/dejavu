@@ -32,6 +32,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/siyuan-note/logging"
 )
 
 func (manager *Manager) HasChunks(ids []string) (ret map[string]bool, err error) {
@@ -99,13 +101,22 @@ func (manager *Manager) HasChunks(ids []string) (ret map[string]bool, err error)
 	manager.peerMu.Lock()
 	manager.routes = routes
 	manager.peerMu.Unlock()
-	if 0 == successfulQueries && 0 < len(queryErrors) {
-		err = fmt.Errorf("query LAN peers failed: %w", errors.Join(queryErrors...))
+	if 0 < len(queryErrors) {
+		queryErr := fmt.Errorf("query LAN peers failed: %w", errors.Join(queryErrors...))
+		if 0 == successfulQueries {
+			err = queryErr
+		} else {
+			logging.LogWarnf("some LAN peers are unavailable: %s", queryErr)
+		}
 	}
 	return
 }
 
 func (manager *Manager) DownloadChunk(id string) (data []byte, err error) {
+	return manager.DownloadChunkValidated(id, nil)
+}
+
+func (manager *Manager) DownloadChunkValidated(id string, validate func(data []byte) error) (data []byte, err error) {
 	manager.peerMu.RLock()
 	routes := append([]*peer(nil), manager.routes[id]...)
 	manager.peerMu.RUnlock()
@@ -115,6 +126,9 @@ func (manager *Manager) DownloadChunk(id string) (data []byte, err error) {
 	var lastErr error
 	for _, current := range routes {
 		data, lastErr = manager.downloadPeerChunk(current, id)
+		if nil == lastErr && nil != validate {
+			lastErr = validate(data)
+		}
 		if nil == lastErr {
 			return data, nil
 		}
@@ -123,6 +137,14 @@ func (manager *Manager) DownloadChunk(id string) (data []byte, err error) {
 		lastErr = errors.New("LAN chunk source unavailable")
 	}
 	return nil, lastErr
+}
+
+func (manager *Manager) HasObjects(ids []string) (ret map[string]bool, err error) {
+	return manager.HasChunks(ids)
+}
+
+func (manager *Manager) DownloadObjectValidated(id string, validate func(data []byte) error) (data []byte, err error) {
+	return manager.DownloadChunkValidated(id, validate)
 }
 
 func (manager *Manager) NotifyCloudCommit(latestID string) {
@@ -320,9 +342,12 @@ func (manager *Manager) newPeerHTTPClient() *http.Client {
 			MinVersion:         tls.VersionTLS13,
 			NextProtos:         []string{"h2", "http/1.1"},
 		},
-		DialContext: (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 15 * time.Second}).DialContext,
+		DialContext:           (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 15 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
 	}
-	return &http.Client{Transport: transport, Timeout: 15 * time.Second}
+	return &http.Client{Transport: transport, Timeout: 5*time.Minute + 15*time.Second}
 }
 
 func (manager *Manager) clearPeerSession(current *peer) {

@@ -52,7 +52,9 @@ func (manager *Manager) startServer() (err error) {
 	mux.HandleFunc("POST /peer-sync/v1/commits/hint", manager.authorize(manager.handleCommitHint))
 	server := &http.Server{
 		Handler:           manager.privateNetworkOnly(mux),
+		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      5 * time.Minute,
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    16 * 1024,
 	}
@@ -156,6 +158,7 @@ func (manager *Manager) handleSessionOpen(writer http.ResponseWriter, request *h
 		peerID:   body.DeviceID,
 		certHash: hex.EncodeToString(clientCertHash[:]),
 		expires:  time.Now().Add(sessionLifetime),
+		lastSeen: time.Now(),
 	}
 	manager.sessionMu.Unlock()
 	responseProof := calculateProof(manager.authKey, "server", manager.scopeID, clientNonce, serverNonce, clientCertHash[:],
@@ -195,6 +198,7 @@ func (manager *Manager) authorize(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		session.expires = time.Now().Add(sessionLifetime)
+		session.lastSeen = time.Now()
 		manager.sessionMu.Unlock()
 		next(writer, request)
 	}

@@ -26,6 +26,19 @@ type ChunkSource interface {
 	GetConcurrentReqs() int
 }
 
+// ValidatingChunkSource 描述支持在多个来源之间按内容校验结果继续回退的分块来源。
+type ValidatingChunkSource interface {
+	ChunkSource
+	DownloadChunkValidated(id string, validate func(data []byte) error) (data []byte, err error)
+}
+
+// ObjectSource 描述同步时可选的只读对象来源，除分块外还可以提供文件元数据对象。
+type ObjectSource interface {
+	ValidatingChunkSource
+	HasObjects(ids []string) (ret map[string]bool, err error)
+	DownloadObjectValidated(id string, validate func(data []byte) error) (data []byte, err error)
+}
+
 type chunkDownloadStat struct {
 	CloudBytes        int64
 	PeerBytes         int64

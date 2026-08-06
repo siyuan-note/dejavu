@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	"encoding/json"
 	"errors"
 	"path"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/siyuan-note/dejavu/cloud"
+	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
 )
 
@@ -78,6 +80,22 @@ func (source *testChunkSource) GetConcurrentReqs() int {
 	return 4
 }
 
+func (source *testChunkSource) DownloadChunkValidated(id string, validate func(data []byte) error) (data []byte, err error) {
+	data, err = source.DownloadChunk(id)
+	if nil == err && nil != validate {
+		err = validate(data)
+	}
+	return
+}
+
+func (source *testChunkSource) HasObjects(ids []string) (ret map[string]bool, err error) {
+	return source.HasChunks(ids)
+}
+
+func (source *testChunkSource) DownloadObjectValidated(id string, validate func(data []byte) error) (data []byte, err error) {
+	return source.DownloadChunkValidated(id, validate)
+}
+
 func TestDownloadChunksFromSource(t *testing.T) {
 	repo, _ := newChunkSourceTestRepo(t)
 	data := []byte("peer chunk")
@@ -92,7 +110,7 @@ func TestDownloadChunksFromSource(t *testing.T) {
 	if nil != err {
 		t.Fatal(err)
 	}
-	if 1 != stat.PeerCount || int64(len(data)) != stat.PeerBytes || 0 != stat.CloudBytes || 0 != stat.PeerFallbackCount {
+	if 1 != stat.PeerCount || int64(len(encoded)) != stat.PeerBytes || 0 != stat.CloudBytes || 0 != stat.PeerFallbackCount {
 		t.Fatalf("unexpected download stat: %+v", stat)
 	}
 	chunk, err := repo.store.GetChunk(id)
@@ -101,6 +119,76 @@ func TestDownloadChunksFromSource(t *testing.T) {
 	}
 	if string(data) != string(chunk.Data) {
 		t.Fatalf("unexpected chunk data [%s]", chunk.Data)
+	}
+}
+
+func TestDownloadFilesFromSource(t *testing.T) {
+	repo, _ := newChunkSourceTestRepo(t)
+	file := entity.NewFile("data/test.sy", 42, time.Now().UnixMilli())
+	file.Chunks = []string{util.Hash([]byte("chunk"))}
+	data, err := json.Marshal(file)
+	if nil != err {
+		t.Fatal(err)
+	}
+	encoded, err := repo.store.encodeData(data)
+	if nil != err {
+		t.Fatal(err)
+	}
+	repo.SetChunkSource(&testChunkSource{chunks: map[string][]byte{file.ID: encoded}})
+
+	stat, files, err := repo.downloadCloudFilesPut([]string{file.ID}, map[string]interface{}{})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if 1 != stat.PeerCount || int64(len(encoded)) != stat.PeerBytes || 0 != stat.CloudBytes || 0 != stat.PeerFallbackCount {
+		t.Fatalf("unexpected download stat: %+v", stat)
+	}
+	if 1 != len(files) || file.ID != files[0].ID || file.Path != files[0].Path {
+		t.Fatalf("unexpected downloaded files: %+v", files)
+	}
+	stored, err := repo.store.GetFile(file.ID)
+	if nil != err {
+		t.Fatal(err)
+	}
+	if stored.ID != file.ID || stored.Path != file.Path {
+		t.Fatalf("unexpected stored file: %+v", stored)
+	}
+}
+
+func TestDownloadFilesFallsBackToCloud(t *testing.T) {
+	repo, localCloud := newChunkSourceTestRepo(t)
+	file := entity.NewFile("data/cloud.sy", 42, time.Now().UnixMilli())
+	data, err := json.Marshal(file)
+	if nil != err {
+		t.Fatal(err)
+	}
+	encoded, err := repo.store.encodeData(data)
+	if nil != err {
+		t.Fatal(err)
+	}
+	if _, err = localCloud.UploadBytes(path.Join("objects", file.ID[:2], file.ID[2:]), encoded, false); nil != err {
+		t.Fatal(err)
+	}
+	invalidFile := entity.NewFile("data/invalid.sy", 42, file.Updated)
+	invalidData, err := json.Marshal(invalidFile)
+	if nil != err {
+		t.Fatal(err)
+	}
+	invalidEncoded, err := repo.store.encodeData(invalidData)
+	if nil != err {
+		t.Fatal(err)
+	}
+	repo.SetChunkSource(&testChunkSource{chunks: map[string][]byte{file.ID: invalidEncoded}})
+
+	stat, files, err := repo.downloadCloudFilesPut([]string{file.ID}, map[string]interface{}{})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if 0 != stat.PeerCount || 0 != stat.PeerBytes || int64(len(data)) != stat.CloudBytes || 1 != stat.PeerFallbackCount {
+		t.Fatalf("unexpected download stat: %+v", stat)
+	}
+	if 1 != len(files) || file.ID != files[0].ID {
+		t.Fatalf("unexpected downloaded files: %+v", files)
 	}
 }
 

@@ -67,6 +67,7 @@ type DownloadTrafficStat struct {
 	DownloadFileCount      int
 	DownloadChunkCount     int
 	DownloadBytes          int64
+	PeerDownloadFileCount  int
 	PeerDownloadChunkCount int
 	PeerDownloadBytes      int64
 	PeerFallbackCount      int
@@ -95,7 +96,15 @@ func (repo *Repo) GetSyncCloudFiles(cloudLatest *entity.Index, context map[strin
 	lock.Lock()
 	defer lock.Unlock()
 
-	fetchedFiles, err = repo.getSyncCloudFiles(cloudLatest, context)
+	fetchedFiles, _, err = repo.getSyncCloudFiles(cloudLatest, context)
+	return
+}
+
+func (repo *Repo) GetSyncCloudFilesWithTraffic(cloudLatest *entity.Index, context map[string]interface{}) (fetchedFiles []*entity.File, trafficStat *DownloadTrafficStat, err error) {
+	lock.Lock()
+	defer lock.Unlock()
+
+	fetchedFiles, trafficStat, err = repo.getSyncCloudFiles(cloudLatest, context)
 	return
 }
 
@@ -197,15 +206,18 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 		return
 	}
 
-	// 从云端下载缺失文件并入库
-	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
+	// 下载缺失文件并入库
+	downloadStat, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
-	trafficStat.DownloadBytes += length
+	trafficStat.DownloadBytes += downloadStat.CloudBytes
 	trafficStat.DownloadFileCount += len(fetchFileIDs)
-	trafficStat.APIGet += trafficStat.DownloadFileCount
+	trafficStat.APIGet += len(fetchFileIDs) - downloadStat.PeerCount
+	trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
+	trafficStat.PeerDownloadFileCount += downloadStat.PeerCount
+	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
 	// 执行数据同步
 	err = repo.sync0(context, fetchedFiles, cloudLatest, latest, mergeResult, trafficStat)
@@ -235,7 +247,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 	waitGroup.Add(1)
 	var errs []error
 	errsLock := sync.Mutex{}
-	go func() { // 从云端下载缺失分块并入库
+	go func() { // 下载缺失分块并入库
 		defer waitGroup.Done()
 
 		fetchChunkIDs, downloadErr := repo.localNotFoundChunks(cloudChunkIDs)
@@ -924,7 +936,8 @@ func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) 
 	return
 }
 
-func (repo *Repo) getSyncCloudFiles(cloudLatest *entity.Index, context map[string]interface{}) (fetchedFiles []*entity.File, err error) {
+func (repo *Repo) getSyncCloudFiles(cloudLatest *entity.Index, context map[string]interface{}) (fetchedFiles []*entity.File, trafficStat *DownloadTrafficStat, err error) {
+	trafficStat = &DownloadTrafficStat{}
 	latest, err := repo.Latest()
 	if nil != err {
 		logging.LogErrorf("get latest failed: %s", err)
@@ -949,22 +962,22 @@ func (repo *Repo) getSyncCloudFiles(cloudLatest *entity.Index, context map[strin
 		return
 	}
 
-	// 从云端下载缺失文件并入库
-	length, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
+	// 下载缺失文件并入库
+	downloadStat, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
 	}
-	trafficStat := &TrafficStat{m: &sync.Mutex{}}
-	trafficStat.DownloadBytes += length
+	trafficStat.DownloadBytes += downloadStat.CloudBytes
 	trafficStat.DownloadFileCount += len(fetchFileIDs)
-	trafficStat.APIGet += len(fetchFileIDs)
+	trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
+	trafficStat.PeerDownloadFileCount += downloadStat.PeerCount
+	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
 	// 统计流量
 	go repo.cloud.AddTraffic(&cloud.Traffic{
-		UploadBytes:   trafficStat.UploadBytes,
 		DownloadBytes: trafficStat.DownloadBytes,
-		APIGet:        trafficStat.APIGet,
+		APIGet:        len(fetchFileIDs) - downloadStat.PeerCount,
 	})
 	return
 }
@@ -1093,43 +1106,104 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 	return
 }
 
-func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]interface{}) (downloadBytes int64, ret []*entity.File, err error) {
+func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]interface{}) (stat *chunkDownloadStat, ret []*entity.File, err error) {
+	stat = &chunkDownloadStat{}
 	if 1 > len(fileIDs) {
 		return
 	}
 
-	lock := &sync.Mutex{}
+	peerFiles := map[string]bool{}
+	objectSource, hasObjectSource := repo.chunkSource.(ObjectSource)
+	if hasObjectSource {
+		if found, hasErr := objectSource.HasObjects(fileIDs); nil == hasErr {
+			peerFiles = found
+		} else {
+			logging.LogWarnf("query object source [%s] failed: %s", objectSource.Name(), hasErr)
+		}
+	}
+
+	retLock := &sync.Mutex{}
 	waitGroup := &sync.WaitGroup{}
 	var downloadErr error
-	poolSize := repo.cloud.GetConcurrentReqs()
+	downloadErrLock := sync.Mutex{}
+	cloudConcurrentReqs := repo.cloud.GetConcurrentReqs()
+	if cloudConcurrentReqs < 1 {
+		cloudConcurrentReqs = 1
+	}
+	peerConcurrentReqs := 0
+	if hasObjectSource {
+		peerConcurrentReqs = objectSource.GetConcurrentReqs()
+		if peerConcurrentReqs < 1 {
+			peerConcurrentReqs = 1
+		}
+	}
+	poolSize := cloudConcurrentReqs + peerConcurrentReqs
 	if poolSize > len(fileIDs) {
 		poolSize = len(fileIDs)
 	}
+	cloudSemaphore := make(chan struct{}, cloudConcurrentReqs)
+	peerSemaphore := make(chan struct{}, peerConcurrentReqs)
 	count := atomic.Int32{}
-	dBytes := atomic.Int64{}
+	cloudBytes := atomic.Int64{}
+	peerBytes := atomic.Int64{}
+	peerCount := atomic.Int32{}
+	peerFallbackCount := atomic.Int32{}
 	total := len(fileIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
+		downloadErrLock.Lock()
 		if nil != downloadErr {
+			downloadErrLock.Unlock()
 			return // 快速失败
 		}
+		downloadErrLock.Unlock()
 
 		fileID := arg.(string)
 		count.Add(1)
-		length, file, dcfErr := repo.downloadCloudFile(fileID, int(count.Load()), total, context)
+		var length int64
+		var file *entity.File
+		var dcfErr error
+		if peerFiles[fileID] {
+			peerSemaphore <- struct{}{}
+			length, file, dcfErr = repo.downloadSourceFile(fileID)
+			<-peerSemaphore
+			if nil == dcfErr {
+				peerBytes.Add(length)
+				peerCount.Add(1)
+			} else {
+				peerFallbackCount.Add(1)
+				logging.LogWarnf("download file [%s] from source [%s] failed, falling back to cloud: %s",
+					fileID, objectSource.Name(), dcfErr)
+			}
+		}
+		if nil == file {
+			cloudSemaphore <- struct{}{}
+			length, file, dcfErr = repo.downloadCloudFile(fileID, int(count.Load()), total, context)
+			<-cloudSemaphore
+			if nil == dcfErr {
+				cloudBytes.Add(length)
+			}
+		}
 		if nil != dcfErr {
-			downloadErr = dcfErr
+			downloadErrLock.Lock()
+			if nil == downloadErr {
+				downloadErr = dcfErr
+			}
+			downloadErrLock.Unlock()
 			return
 		}
 		if pfErr := repo.store.PutFile(file); nil != pfErr {
-			downloadErr = pfErr
+			downloadErrLock.Lock()
+			if nil == downloadErr {
+				downloadErr = pfErr
+			}
+			downloadErrLock.Unlock()
 			return
 		}
-		dBytes.Add(length)
 
-		lock.Lock()
+		retLock.Lock()
 		ret = append(ret, file)
-		lock.Unlock()
+		retLock.Unlock()
 	})
 	if nil != err {
 		return
@@ -1139,17 +1213,22 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	for _, fileID := range fileIDs {
 		waitGroup.Add(1)
 		if err = p.Invoke(fileID); nil != err {
+			waitGroup.Done()
 			logging.LogErrorf("invoke failed: %s", err)
-			return
-		}
-		if nil != downloadErr {
-			err = downloadErr
-			return
+			break
 		}
 	}
 	waitGroup.Wait()
 	p.Release()
-	downloadBytes = dBytes.Load()
+	if nil != err {
+		return
+	}
+	stat.CloudBytes = cloudBytes.Load()
+	stat.PeerBytes = peerBytes.Load()
+	stat.PeerCount = int(peerCount.Load())
+	stat.PeerFallbackCount = int(peerFallbackCount.Load())
+	downloadErrLock.Lock()
+	defer downloadErrLock.Unlock()
 	if nil != downloadErr {
 		err = downloadErr
 		return
@@ -1780,21 +1859,66 @@ func (repo *Repo) downloadCloudChunk(id string, count, total int, context map[st
 }
 
 func (repo *Repo) downloadSourceChunk(id string) (length int64, ret *entity.Chunk, err error) {
-	data, err := repo.chunkSource.DownloadChunk(id)
-	if nil != err {
-		return
-	}
 	key := path.Join("objects", id[:2], id[2:])
-	data, err = repo.decodeDownloadedData(key, data)
-	if nil != err {
+	var decoded []byte
+	validate := func(data []byte) (validateErr error) {
+		decoded, validateErr = repo.decodeDownloadedData(key, data)
+		if nil != validateErr {
+			return
+		}
+		if util.Hash(decoded) != id {
+			validateErr = fmt.Errorf("%w: source chunk [%s] hash mismatch", ErrRepoFatal, id)
+		}
 		return
 	}
-	if util.Hash(data) != id {
-		err = fmt.Errorf("%w: source chunk [%s] hash mismatch", ErrRepoFatal, id)
+	data, err := repo.downloadSourceObject(id, validate)
+	if nil != err {
 		return
 	}
 	length = int64(len(data))
-	ret = &entity.Chunk{ID: id, Data: data}
+	ret = &entity.Chunk{ID: id, Data: decoded}
+	return
+}
+
+func (repo *Repo) downloadSourceFile(id string) (length int64, ret *entity.File, err error) {
+	source, ok := repo.chunkSource.(ObjectSource)
+	if !ok {
+		err = errors.New("object source unavailable")
+		return
+	}
+	key := path.Join("objects", id[:2], id[2:])
+	validate := func(data []byte) (validateErr error) {
+		data, validateErr = repo.decodeDownloadedData(key, data)
+		if nil != validateErr {
+			return
+		}
+		file := &entity.File{}
+		if validateErr = gulu.JSON.UnmarshalJSON(data, file); nil != validateErr {
+			return
+		}
+		if file.ID != id || entity.NewFile(file.Path, file.Size, file.Updated).ID != id {
+			validateErr = fmt.Errorf("%w: source file [%s] ID mismatch", ErrRepoFatal, id)
+			return
+		}
+		ret = file
+		return
+	}
+	data, err := source.DownloadObjectValidated(id, validate)
+	if nil != err {
+		return
+	}
+	length = int64(len(data))
+	return
+}
+
+func (repo *Repo) downloadSourceObject(id string, validate func(data []byte) error) (data []byte, err error) {
+	if source, ok := repo.chunkSource.(ValidatingChunkSource); ok {
+		return source.DownloadChunkValidated(id, validate)
+	}
+	data, err = repo.chunkSource.DownloadChunk(id)
+	if nil == err {
+		err = validate(data)
+	}
 	return
 }
 

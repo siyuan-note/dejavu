@@ -34,6 +34,8 @@ import (
 )
 
 var _ dejavu.ChunkSource = (*Manager)(nil)
+var _ dejavu.ValidatingChunkSource = (*Manager)(nil)
+var _ dejavu.ObjectSource = (*Manager)(nil)
 
 type Config struct {
 	RepoPath          string
@@ -72,6 +74,7 @@ type Manager struct {
 	httpServer  *http.Server
 	mdnsMu      sync.Mutex
 	mdnsServers []*mdns.Server
+	mdnsIPs     string
 
 	peerMu sync.RWMutex
 	peers  map[string]*peer
@@ -105,6 +108,7 @@ type serverSession struct {
 	peerID   string
 	certHash string
 	expires  time.Time
+	lastSeen time.Time
 }
 
 func Start(config Config) (ret *Manager, err error) {
@@ -201,7 +205,9 @@ func (manager *Manager) Stop() {
 		manager.stopAdvertisements()
 		if nil != manager.httpServer {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_ = manager.httpServer.Shutdown(ctx)
+			if err := manager.httpServer.Shutdown(ctx); nil != err {
+				_ = manager.httpServer.Close()
+			}
 			cancel()
 		}
 		if nil != manager.listener {
@@ -238,19 +244,23 @@ func (manager *Manager) DiscoveredPeerCount() int {
 
 func (manager *Manager) ConnectedPeerCount() int {
 	deviceIDs := map[string]bool{}
+	now := time.Now()
+	cutoff := now.Add(-time.Minute)
 	manager.peerMu.RLock()
 	for _, current := range manager.peers {
 		current.mu.Lock()
-		if "" != current.deviceID && "" != current.token && time.Now().Before(current.tokenExpires) {
+		if "" != current.deviceID && "" != current.token && now.Before(current.tokenExpires) && current.lastSeen.After(cutoff) {
 			deviceIDs[current.deviceID] = true
 		}
 		current.mu.Unlock()
 	}
 	manager.peerMu.RUnlock()
 	manager.sessionMu.Lock()
-	manager.cleanupExpiredSessionsLocked(time.Now())
+	manager.cleanupExpiredSessionsLocked(now)
 	for _, session := range manager.sessions {
-		deviceIDs[session.peerID] = true
+		if session.lastSeen.After(cutoff) {
+			deviceIDs[session.peerID] = true
+		}
 	}
 	manager.sessionMu.Unlock()
 	return len(deviceIDs)
