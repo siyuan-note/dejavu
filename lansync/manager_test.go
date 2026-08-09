@@ -41,9 +41,7 @@ func TestPeerChunkTransfer(t *testing.T) {
 	if 1 != client.DiscoveredPeerCount() {
 		t.Fatalf("unexpected discovered peer count: %d", client.DiscoveredPeerCount())
 	}
-	if 0 != client.ConnectedPeerCount() {
-		t.Fatalf("unexpected connected peer count before authentication: %d", client.ConnectedPeerCount())
-	}
+	waitForPeerCount(t, client, 1)
 
 	data := []byte("encrypted and compressed chunk")
 	hash := sha1.Sum(data)
@@ -239,29 +237,24 @@ func TestRemoveDiscoveredPeer(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")
 	server := newTestManager(t, key, "main", nil)
 	client := newTestManager(t, key, "main", nil)
-	info := server.DiscoveryInfo()
-	if !client.AddDiscoveredPeer(info.Instance, "127.0.0.1", info.Port, info.TXT) {
-		t.Fatal("expected native peer discovery to succeed")
-	}
+	current := addTestPeer(client, server)
+	current.mu.Lock()
+	current.deviceID = "device"
+	current.mu.Unlock()
 	client.peerMu.Lock()
-	var current *peer
-	for _, current = range client.peers {
-		current.deviceID = "device"
-		client.routes["chunk"] = []*peer{current}
-		break
-	}
+	client.routes["chunk"] = []*peer{current}
 	client.peerMu.Unlock()
 	client.sessionMu.Lock()
 	client.sessions["token"] = &serverSession{peerID: "device", expires: time.Now().Add(time.Minute)}
 	client.sessionMu.Unlock()
 
-	if !client.RemoveDiscoveredPeer(info.Instance) {
+	if !client.RemoveDiscoveredPeer(current.instance) {
 		t.Fatal("expected discovered peer to be removed")
 	}
 	if 0 != client.DiscoveredPeerCount() || 0 != len(client.peers) || 0 != len(client.routes) || 0 != len(client.sessions) {
 		t.Fatal("expected peer state to be cleared")
 	}
-	if client.RemoveDiscoveredPeer(info.Instance) {
+	if client.RemoveDiscoveredPeer(current.instance) {
 		t.Fatal("expected removing an unknown peer to report false")
 	}
 }
@@ -387,4 +380,16 @@ func addTestPeer(client, server *Manager) *peer {
 	client.peers[current.key] = current
 	client.peerMu.Unlock()
 	return current
+}
+
+func waitForPeerCount(t *testing.T, manager *Manager, expected int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if expected == manager.ConnectedPeerCount() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("expected connected peer count %d, got %d", expected, manager.ConnectedPeerCount())
 }

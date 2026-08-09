@@ -30,6 +30,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -185,6 +186,9 @@ func (manager *Manager) downloadPeerChunk(current *peer, id string) (data []byte
 	current.mu.Lock()
 	client, token, address, port := current.client, current.token, current.address, current.port
 	current.mu.Unlock()
+	if nil == client || "" == token {
+		return nil, errors.New("LAN peer session unavailable")
+	}
 	request, err := http.NewRequestWithContext(manager.ctx, http.MethodGet,
 		peerURL(address, port)+"/peer-sync/v1/chunks/"+id, nil)
 	if nil != err {
@@ -217,6 +221,9 @@ func (manager *Manager) postPeerJSON(current *peer, path string, requestBody, re
 	current.mu.Lock()
 	client, token, address, port := current.client, current.token, current.address, current.port
 	current.mu.Unlock()
+	if nil == client || "" == token {
+		return errors.New("LAN peer session unavailable")
+	}
 	request, err := http.NewRequestWithContext(manager.ctx, http.MethodPost, peerURL(address, port)+path, bytes.NewReader(data))
 	if nil != err {
 		return err
@@ -242,13 +249,23 @@ func (manager *Manager) postPeerJSON(current *peer, path string, requestBody, re
 }
 
 func (manager *Manager) ensureSession(current *peer) (err error) {
+	current.sessionMu.Lock()
+	defer current.sessionMu.Unlock()
+
 	current.mu.Lock()
-	defer current.mu.Unlock()
+	if current.removed {
+		current.mu.Unlock()
+		return errors.New("LAN peer was removed")
+	}
 	if "" != current.token && time.Now().Before(current.tokenExpires) && nil != current.client {
+		current.mu.Unlock()
 		return nil
 	}
+	address, port := current.address, current.port
+	current.mu.Unlock()
+
 	client := manager.newPeerHTTPClient()
-	baseURL := peerURL(current.address, current.port)
+	baseURL := peerURL(address, port)
 	identityRequest, err := http.NewRequestWithContext(manager.ctx, http.MethodGet, baseURL+"/peer-sync/v1/identity", nil)
 	if nil != err {
 		return err
@@ -323,6 +340,12 @@ func (manager *Manager) ensureSession(current *peer) (err error) {
 	if nil != err || !hmac.Equal(providedProof, expectedProofBytes) {
 		return errors.New("invalid LAN peer session proof")
 	}
+	current.mu.Lock()
+	defer current.mu.Unlock()
+	if current.removed || current.address != address || current.port != port {
+		client.CloseIdleConnections()
+		return errors.New("LAN peer changed during authentication")
+	}
 	current.deviceID = opened.DeviceID
 	current.deviceName = opened.DeviceName
 	current.deviceOS = opened.DeviceOS
@@ -331,6 +354,44 @@ func (manager *Manager) ensureSession(current *peer) (err error) {
 	current.tokenExpires = time.Now().Add(sessionLifetime)
 	current.client = client
 	return nil
+}
+
+func (manager *Manager) authenticatePeerAsync(current *peer) {
+	if nil != manager.ctx.Err() {
+		return
+	}
+	current.mu.Lock()
+	if current.removed || current.authenticating ||
+		("" != current.token && time.Now().Before(current.tokenExpires) && nil != current.client) {
+		current.mu.Unlock()
+		return
+	}
+	current.authenticating = true
+	firstAuthentication := "" == current.deviceID
+	peerAddress := net.JoinHostPort(current.address, strconv.Itoa(current.port))
+	current.mu.Unlock()
+
+	go func() {
+		err := manager.ensureSession(current)
+		current.mu.Lock()
+		current.authenticating = false
+		logFailure := nil != err && !current.authFailureLogged
+		if nil == err {
+			current.authFailureLogged = false
+		} else if logFailure {
+			current.authFailureLogged = true
+		}
+		deviceID := current.deviceID
+		current.mu.Unlock()
+
+		if nil == err {
+			if firstAuthentication {
+				logging.LogInfof("authenticated LAN sync peer [device=%s, address=%s]", deviceID, peerAddress)
+			}
+		} else if logFailure && nil == manager.ctx.Err() {
+			logging.LogWarnf("authenticate LAN sync peer [address=%s] failed: %s", peerAddress, err)
+		}
+	}()
 }
 
 func (manager *Manager) newPeerHTTPClient() *http.Client {

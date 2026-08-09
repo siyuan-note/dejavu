@@ -87,13 +87,17 @@ type Manager struct {
 }
 
 type peer struct {
-	mu sync.Mutex
+	mu        sync.Mutex
+	sessionMu sync.Mutex
 
-	key      string
-	instance string
-	address  string
-	port     int
-	lastSeen time.Time
+	key               string
+	instance          string
+	address           string
+	port              int
+	lastSeen          time.Time
+	removed           bool
+	authenticating    bool
+	authFailureLogged bool
 
 	deviceID     string
 	deviceName   string
@@ -196,6 +200,9 @@ func (manager *Manager) Stop() {
 		manager.peerMu.RLock()
 		peers := make([]*peer, 0, len(manager.peers))
 		for _, current := range manager.peers {
+			current.mu.Lock()
+			current.removed = true
+			current.mu.Unlock()
 			peers = append(peers, current)
 		}
 		manager.peerMu.RUnlock()

@@ -328,6 +328,7 @@ func (manager *Manager) addDiscoveredPeerInfo(instance, address string, port int
 	current.lastSeen = time.Now()
 	current.mu.Unlock()
 	manager.peerMu.Unlock()
+	manager.authenticatePeerAsync(current)
 	return true
 }
 
@@ -353,6 +354,9 @@ func (manager *Manager) removePeers(matches func(current *peer) bool) (ret []*pe
 	for key, current := range manager.peers {
 		current.mu.Lock()
 		remove := matches(current)
+		if remove {
+			current.removed = true
+		}
 		current.mu.Unlock()
 		if remove {
 			delete(manager.peers, key)
