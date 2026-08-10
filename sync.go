@@ -113,6 +113,12 @@ func (repo *Repo) GetCloudLatest(context map[string]interface{}) (cloudLatest *e
 	return
 }
 
+// GetCloudLatestFast 获取云端最新索引，云端引用与本地最新索引一致时复用本地索引。
+func (repo *Repo) GetCloudLatestFast(context map[string]interface{}) (cloudLatest *entity.Index, err error) {
+	_, cloudLatest, err = repo.downloadCloudLatestFast(context)
+	return
+}
+
 func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -1995,16 +2001,45 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 var downloadCloudLatestLock = sync.Mutex{}
 
 func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
+	return repo.downloadCloudLatest0(context, false)
+}
+
+func (repo *Repo) downloadCloudLatestFast(context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
+	return repo.downloadCloudLatest0(context, true)
+}
+
+func (repo *Repo) downloadCloudLatest0(context map[string]interface{}, reuseLocalIndex bool) (downloadBytes int64, index *entity.Index, err error) {
 	downloadCloudLatestLock.Lock()
 	defer downloadCloudLatestLock.Unlock()
 
 	start := time.Now()
 	index = &entity.Index{}
+	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
+	var localLatest *entity.Index
+	if reuseLocalIndex {
+		localLatest, _ = repo.Latest()
+	}
+
+	var seqNumLatestIDCh chan string
+	startGetSeqNumLatest := func() {
+		seqNumLatestIDCh = make(chan string, 1)
+		go func() {
+			// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
+			seqNumLatestID, _, _ := repo.getSeqNumLatest()
+			seqNumLatestIDCh <- seqNumLatestID
+		}()
+	}
+	if isS3OrSiYuan && nil != localLatest {
+		startGetSeqNumLatest()
+	}
 
 	key := path.Join("refs", "latest")
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
+		if nil != seqNumLatestIDCh {
+			<-seqNumLatestIDCh
+		}
 		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			logging.LogWarnf("not found cloud latest")
 			err = nil
@@ -2017,36 +2052,29 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 
 	latestID := strings.TrimSpace(string(data))
 	if 40 != len(latestID) {
+		if nil != seqNumLatestIDCh {
+			<-seqNumLatestIDCh
+		}
 		err = cloud.ErrCloudObjectNotFound
 		logging.LogWarnf("got empty cloud latest")
 		return
 	}
 
-	isS3OrSiYuan := repo.isCloudS3() || repo.isCloudSiYuan()
-	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-
-		downloadBytes, index, err = repo.downloadCloudIndex(latestID, context)
-	}()
+	if isS3OrSiYuan && nil == seqNumLatestIDCh {
+		startGetSeqNumLatest()
+	}
+	downloadBytes, index, err = repo.downloadCloudIndexOrReuseLocal(latestID, localLatest, context)
 
 	var seqNumLatestID string
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-
-		if isS3OrSiYuan {
-			// 确认下载到的是最新索引 https://github.com/siyuan-note/siyuan/issues/12991
-			seqNumLatestID, _, _ = repo.getSeqNumLatest()
-		}
-	}()
-	waitGroup.Wait()
+	if isS3OrSiYuan {
+		seqNumLatestID = <-seqNumLatestIDCh
+	}
 
 	if isS3OrSiYuan && ("" != seqNumLatestID && "" != index.ID && latestID != seqNumLatestID) {
 		logging.LogWarnf("cloud latest [%s] not match seq num latest [%s]", latestID, seqNumLatestID)
 		// 以时间较新的为准
-		_, seqNumLatest, downloadErr := repo.downloadCloudIndex(seqNumLatestID, context)
+		length, seqNumLatest, downloadErr := repo.downloadCloudIndexOrReuseLocal(seqNumLatestID, localLatest, context)
+		downloadBytes += length
 		if nil != downloadErr {
 			logging.LogWarnf("download seq num latest [%s] failed: %s", seqNumLatestID, downloadErr)
 		} else {
@@ -2067,6 +2095,14 @@ func (repo *Repo) downloadCloudLatest(context map[string]interface{}) (downloadB
 
 	logging.LogInfof("got cloud latest [%s], cost [%s]", index.String(), time.Since(start))
 	return
+}
+
+func (repo *Repo) downloadCloudIndexOrReuseLocal(id string, localLatest *entity.Index, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
+	if nil != localLatest && id == localLatest.ID {
+		index = localLatest
+		return
+	}
+	return repo.downloadCloudIndex(id, context)
 }
 
 func (repo *Repo) getSeqNumLatest() (id string, maxSeqNum int, seqNumLatests []string) {
