@@ -2037,9 +2037,6 @@ func (repo *Repo) downloadCloudLatest0(context map[string]interface{}, reuseLoca
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadRef, context, "refs/latest")
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
-		if nil != seqNumLatestIDCh {
-			<-seqNumLatestIDCh
-		}
 		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			logging.LogWarnf("not found cloud latest")
 			err = nil
@@ -2052,9 +2049,6 @@ func (repo *Repo) downloadCloudLatest0(context map[string]interface{}, reuseLoca
 
 	latestID := strings.TrimSpace(string(data))
 	if 40 != len(latestID) {
-		if nil != seqNumLatestIDCh {
-			<-seqNumLatestIDCh
-		}
 		err = cloud.ErrCloudObjectNotFound
 		logging.LogWarnf("got empty cloud latest")
 		return

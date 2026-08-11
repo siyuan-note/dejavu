@@ -274,3 +274,82 @@ func TestGetCloudLatestFastPathReadsSiYuanRefsConcurrently(t *testing.T) {
 		t.Fatalf("unchanged fast path downloaded cloud index [%d] times", indexDownloads.Load())
 	}
 }
+
+func TestGetCloudLatestFastPathDoesNotWaitForSequenceRefsOnInvalidLatest(t *testing.T) {
+	tempDir := t.TempDir()
+	dataPath := filepath.Join(tempDir, "data")
+	repoPath := filepath.Join(tempDir, "repo")
+	historyPath := filepath.Join(tempDir, "history")
+	tempPath := filepath.Join(tempDir, "temp")
+	if err := os.MkdirAll(dataPath, 0755); nil != err {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataPath, "doc.txt"), []byte("data"), 0644); nil != err {
+		t.Fatal(err)
+	}
+
+	listStarted := make(chan struct{})
+	releaseList := make(chan struct{})
+	listFinished := make(chan struct{})
+	var listOnce, releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() { close(releaseList) })
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case strings.HasSuffix(request.URL.Path, "/refs/latest"):
+			select {
+			case <-listStarted:
+			case <-time.After(2 * time.Second):
+			}
+			_, _ = writer.Write([]byte("invalid"))
+		case strings.HasSuffix(request.URL.Path, "/listRepoObjects"):
+			listOnce.Do(func() { close(listStarted) })
+			<-releaseList
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"code":0,"msg":"","data":{"objects":[]}}`))
+			close(listFinished)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	defer release()
+
+	siyuanCloud := cloud.NewSiYuan(&cloud.BaseCloud{Conf: &cloud.Conf{
+		Dir:           "main",
+		UserID:        "0",
+		AvailableSize: 1024 * 1024 * 1024,
+		Endpoint:      server.URL + "/",
+		Server:        server.URL,
+	}})
+	repo, err := NewRepo(dataPath, repoPath, historyPath, tempPath, "device", "Device", "windows",
+		[]byte("0123456789abcdef0123456789abcdef"), nil, siyuanCloud)
+	if nil != err {
+		t.Fatal(err)
+	}
+	if _, err = repo.Index("Initial index", false, map[string]interface{}{}); nil != err {
+		t.Fatal(err)
+	}
+
+	result := make(chan error, 1)
+	go func() {
+		_, latestErr := repo.GetCloudLatestFast(map[string]interface{}{})
+		result <- latestErr
+	}()
+	select {
+	case latestErr := <-result:
+		if cloud.ErrCloudObjectNotFound != latestErr {
+			t.Fatalf("unexpected cloud latest error [%v]", latestErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("invalid refs/latest waited for sequence refs")
+	}
+
+	release()
+	select {
+	case <-listFinished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sequence refs request did not finish")
+	}
+}
