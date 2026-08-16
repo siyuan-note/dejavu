@@ -259,3 +259,46 @@ func initIndex(t *testing.T) (repo *Repo, index *entity.Index) {
 func ignoreLines() []string {
 	return []string{"bar"}
 }
+
+// TestBuiltInIgnorePublishAccess 验证发布模式访问配置（含明文访问密码）不进入数据快照与同步，
+// 且 .siyuan 下其他普通文件不受影响。
+// https://github.com/siyuan-note/siyuan/security/advisories/GHSA-3cm4-ccvw-6xr6
+func TestBuiltInIgnorePublishAccess(t *testing.T) {
+	dataPath := t.TempDir()
+	repo := &Repo{DataPath: dataPath}
+
+	write := func(rel string, content string) string {
+		p := filepath.Join(dataPath, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	cases := []struct {
+		rel     string
+		content string
+		ignored bool
+	}{
+		{filepath.Join(".siyuan", "publishAccess.json"), `{"password":"secret"}`, true},
+		{filepath.Join(".siyuan", "syncignore"), "20210808180117-6v0mkxr/**/*", false},
+		{filepath.Join(".siyuan", "conf.json"), `{"syncEnabled":true}`, false},
+	}
+	for _, c := range cases {
+		p := write(c.rel, c.content)
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ignored, err := repo.builtInIgnore(info, p)
+		if err != nil {
+			t.Fatalf("builtInIgnore(%q) err: %v", c.rel, err)
+		}
+		if ignored != c.ignored {
+			t.Fatalf("builtInIgnore(%q) = %v, want %v", c.rel, ignored, c.ignored)
+		}
+	}
+}
