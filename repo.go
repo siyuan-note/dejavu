@@ -1170,10 +1170,6 @@ func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool,
 		}
 
 		slashAbsPath := filepath.ToSlash(absPath)
-		if strings.HasSuffix(slashAbsPath, "/.siyuan/publishAccess.json") {
-			// 忽略发布模式访问配置（含明文访问密码） https://github.com/siyuan-note/siyuan/security/advisories/GHSA-3cm4-ccvw-6xr6
-			return true, nil
-		}
 		if strings.HasSuffix(slashAbsPath, "data/storage/local.json") {
 			// localStorage 不再支持同步 https://github.com/siyuan-note/siyuan/issues/6964
 			return true, nil
