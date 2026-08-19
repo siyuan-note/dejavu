@@ -183,6 +183,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 				err = ErrCloudGenerateConflictHistory
 				return
 			}
+			mergeResult.HistoryPaths = append(mergeResult.HistoryPaths, file.Path)
 		}
 	}
 

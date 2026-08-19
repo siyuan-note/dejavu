@@ -66,9 +66,14 @@ type syncScenarioStep struct {
 }
 
 type syncScenarioExpectation struct {
-	Upserts   int `json:"upserts"`
-	Removes   int `json:"removes"`
-	Conflicts int `json:"conflicts"`
+	Upserts        int                   `json:"upserts"`
+	Removes        int                   `json:"removes"`
+	Conflicts      int                   `json:"conflicts"`
+	ConflictTypes  []dejavu.ConflictType `json:"conflictTypes"`
+	Winners        []dejavu.ConflictSide `json:"winners"`
+	ConflictCopies *int                  `json:"conflictCopies"`
+	ConflictPaths  []string              `json:"conflictPaths"`
+	HistoryPaths   []string              `json:"historyPaths"`
 }
 
 type syncScenarioFinal map[string]syncScenarioClientState
@@ -214,6 +219,10 @@ func runSyncScenarioStep(t *testing.T, client *syncScenarioClient, stepNum int, 
 		syncScenarioTouchDir(client.env.t, client.dataPath, syncScenarioBaseTime().Add(time.Duration(step.Minutes)*time.Minute))
 	case "remove":
 		client.removeFile(step.Path)
+	case "remove_cloud_latest":
+		client.removeCloudLatest()
+	case "assert_cloud_latest":
+		client.assertCloudLatest()
 	case "index":
 		memo := step.Memo
 		if memo == "" {
@@ -225,6 +234,19 @@ func runSyncScenarioStep(t *testing.T, client *syncScenarioClient, stepNum int, 
 		if step.Want != nil {
 			client.assertMergeResult(result, *step.Want)
 		}
+	case "prefetch":
+		if fetched := client.prefetch(); fetched < 1 {
+			t.Fatalf("[%s] prefetch step [%d] did not fetch any cloud files", client.name, stepNum)
+		}
+	case "assert_cached":
+		if fetched := client.prefetch(); fetched != 0 {
+			t.Fatalf("[%s] assert_cached step [%d] fetched %d cloud files", client.name, stepNum, fetched)
+		}
+	case "sync_prepared":
+		result := client.syncPrepared()
+		if step.Want != nil {
+			client.assertMergeResult(result, *step.Want)
+		}
 	case "sync_download":
 		result := client.syncDownload()
 		if step.Want != nil {
@@ -232,6 +254,8 @@ func runSyncScenarioStep(t *testing.T, client *syncScenarioClient, stepNum int, 
 		}
 	case "assert":
 		client.assertFile(step.Path, step.Content)
+	case "assert_history":
+		client.assertHistoryFile(step.Path, step.Content)
 	case "assert_missing":
 		client.assertMissing(step.Path)
 	default:
@@ -376,6 +400,25 @@ func (client *syncScenarioClient) removeFile(relPath string) {
 	}
 }
 
+func (client *syncScenarioClient) removeCloudLatest() {
+	client.env.t.Helper()
+
+	latestPath := filepath.Join(client.env.cloudEndpoint, syncScenarioCloudDir, "refs", "latest")
+	err := os.Remove(latestPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		client.env.t.Fatalf("[%s] remove cloud latest failed: %s", client.name, err)
+	}
+}
+
+func (client *syncScenarioClient) assertCloudLatest() {
+	client.env.t.Helper()
+
+	latestPath := filepath.Join(client.env.cloudEndpoint, syncScenarioCloudDir, "refs", "latest")
+	if _, err := os.Stat(latestPath); err != nil {
+		client.env.t.Fatalf("[%s] stat cloud latest failed: %s", client.name, err)
+	}
+}
+
 func (client *syncScenarioClient) index(memo string) {
 	client.env.t.Helper()
 
@@ -392,6 +435,31 @@ func (client *syncScenarioClient) sync() *dejavu.MergeResult {
 		client.env.t.Fatalf("[%s] sync failed: %s", client.name, err)
 	}
 	return mergeResult
+}
+
+func (client *syncScenarioClient) syncPrepared() *dejavu.MergeResult {
+	client.env.t.Helper()
+
+	mergeResult, _, err := client.repo.Sync(map[string]interface{}{"skipCloudPreflight": true})
+	if err != nil {
+		client.env.t.Fatalf("[%s] prepared sync failed: %s", client.name, err)
+	}
+	return mergeResult
+}
+
+func (client *syncScenarioClient) prefetch() int {
+	client.env.t.Helper()
+
+	context := map[string]interface{}{}
+	cloudLatest, err := client.repo.GetCloudLatestFast(context)
+	if err != nil {
+		client.env.t.Fatalf("[%s] get cloud latest before prepared sync failed: %s", client.name, err)
+	}
+	fetchedFiles, _, err := client.repo.GetSyncCloudFilesWithTraffic(cloudLatest, context)
+	if err != nil {
+		client.env.t.Fatalf("[%s] prefetch cloud files failed: %s", client.name, err)
+	}
+	return len(fetchedFiles)
 }
 
 func (client *syncScenarioClient) syncDownload() *dejavu.MergeResult {
@@ -415,10 +483,56 @@ func (client *syncScenarioClient) syncNoConflict(wantUpserts, wantRemoves int) *
 func (client *syncScenarioClient) assertMergeResult(mergeResult *dejavu.MergeResult, want syncScenarioExpectation) {
 	client.env.t.Helper()
 
-	if len(mergeResult.Upserts) != want.Upserts || len(mergeResult.Removes) != want.Removes || len(mergeResult.Conflicts) != want.Conflicts {
+	if len(mergeResult.Upserts) != want.Upserts || len(mergeResult.Removes) != want.Removes || mergeResult.ConflictCount() != want.Conflicts {
 		client.env.t.Fatalf("[%s] expected upserts=%d removes=%d conflicts=%d, got upserts=%d removes=%d conflicts=%d",
 			client.name, want.Upserts, want.Removes, want.Conflicts,
-			len(mergeResult.Upserts), len(mergeResult.Removes), len(mergeResult.Conflicts))
+			len(mergeResult.Upserts), len(mergeResult.Removes), mergeResult.ConflictCount())
+	}
+	if want.ConflictCopies != nil && len(mergeResult.ConflictCopyFiles()) != *want.ConflictCopies {
+		client.env.t.Fatalf("[%s] expected conflict copies=%d, got %d", client.name, *want.ConflictCopies,
+			len(mergeResult.ConflictCopyFiles()))
+	}
+	if len(want.ConflictTypes) > 0 {
+		if len(mergeResult.ConflictDetails) != len(want.ConflictTypes) {
+			client.env.t.Fatalf("[%s] expected %d conflict types, got %d conflict details", client.name,
+				len(want.ConflictTypes), len(mergeResult.ConflictDetails))
+		}
+		for i, detail := range mergeResult.ConflictDetails {
+			if detail.Type != want.ConflictTypes[i] {
+				client.env.t.Fatalf("[%s] conflict [%d] expected type=%s, got type=%s", client.name, i,
+					want.ConflictTypes[i], detail.Type)
+			}
+		}
+	}
+	if len(want.Winners) > 0 {
+		if len(mergeResult.ConflictDetails) != len(want.Winners) {
+			client.env.t.Fatalf("[%s] expected %d conflict winners, got %d conflict details", client.name,
+				len(want.Winners), len(mergeResult.ConflictDetails))
+		}
+		for i, detail := range mergeResult.ConflictDetails {
+			if detail.Winner != want.Winners[i] {
+				client.env.t.Fatalf("[%s] conflict [%d] expected winner=%s, got winner=%s", client.name, i,
+					want.Winners[i], detail.Winner)
+			}
+		}
+	}
+	client.assertPaths("conflict", mergeResult.ConflictPaths(), want.ConflictPaths)
+	client.assertPaths("history", mergeResult.HistoryPaths, want.HistoryPaths)
+}
+
+func (client *syncScenarioClient) assertPaths(kind string, got, want []string) {
+	client.env.t.Helper()
+
+	if 0 == len(want) {
+		return
+	}
+	if len(got) != len(want) {
+		client.env.t.Fatalf("[%s] expected %s paths=%v, got %v", client.name, kind, want, got)
+	}
+	for i, path := range got {
+		if path != want[i] {
+			client.env.t.Fatalf("[%s] expected %s paths=%v, got %v", client.name, kind, want, got)
+		}
 	}
 }
 
@@ -443,6 +557,26 @@ func (client *syncScenarioClient) assertMissing(relPath string) {
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		client.env.t.Fatalf("[%s] stat [%s] failed: %s", client.name, relPath, err)
+	}
+}
+
+func (client *syncScenarioClient) assertHistoryFile(relPath, want string) {
+	client.env.t.Helper()
+
+	pattern := filepath.Join(client.historyPath, "*-sync", filepath.FromSlash(relPath))
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		client.env.t.Fatalf("[%s] glob history file failed: %s", client.name, err)
+	}
+	if len(matches) != 1 {
+		client.env.t.Fatalf("[%s] expected one history file for [%s], got %d", client.name, relPath, len(matches))
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		client.env.t.Fatalf("[%s] read history file failed: %s", client.name, err)
+	}
+	if string(data) != want {
+		client.env.t.Fatalf("[%s] history file [%s] mismatch: got %q, want %q", client.name, relPath, data, want)
 	}
 }
 

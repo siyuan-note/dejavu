@@ -60,17 +60,25 @@ last sync point.
 - `write`: writes `content` to `path`. If `source` is set, reads content from a fixture file relative to the case directory. `minutes` sets the file mtime relative to the fixed scenario base time.
 - `apply_dir`: copies `sourceDir` from the case directory into the client data directory and updates copied file mtimes.
 - `remove`: removes `path`.
+- `remove_cloud_latest`: removes the cloud `refs/latest` object to simulate an uninitialized cloud repository.
+- `assert_cloud_latest`: verifies that the cloud `refs/latest` object exists.
 - `index`: creates a local snapshot. `memo` is optional.
 - `sync`: runs cloud sync. Optional `want` asserts merge result counts.
+- `prefetch`: downloads cloud file objects without merging them.
+- `assert_cached`: verifies that a repeated prefetch does not download any cloud file objects.
+- `sync_prepared`: runs cloud sync with the cloud preflight already completed. Optional `want` asserts merge result counts.
 - `sync_download`: runs download-only cloud sync. Optional `want` asserts merge result counts.
 - `assert`: checks that `path` has exact `content`.
+- `assert_history`: checks that exactly one sync history file at `path` has exact `content`.
 - `assert_missing`: checks that `path` does not exist.
 
 `want` supports:
 
 ```json
-{"upserts": 0, "removes": 0, "conflicts": 0}
+{"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1, "conflictPaths": ["/doc.txt"], "historyPaths": ["/doc.txt"]}
 ```
+
+`conflictTypes`, `winners`, `conflictCopies`, `conflictPaths`, and `historyPaths` are optional structured assertions.
 
 `final` supports:
 

@@ -58,17 +58,25 @@ test/sync/testdata/cases/one-off.json
 - `write`：写入 `content` 到 `path`。如果设置了 `source`，则从当前 case 目录下的 fixture 文件读取内容。`minutes` 用于设置相对固定基准时间的文件 mtime。
 - `apply_dir`：把当前 case 目录下的 `sourceDir` 复制到客户端 data 目录，并更新复制文件的 mtime。
 - `remove`：删除 `path`。
+- `remove_cloud_latest`：删除云端 `refs/latest` 对象，用于模拟尚未初始化的云端仓库。
+- `assert_cloud_latest`：断言云端 `refs/latest` 对象存在。
 - `index`：创建本地快照。`memo` 可选。
 - `sync`：执行云端同步。可用 `want` 断言 merge result 数量。
+- `prefetch`：下载云端文件对象，但不进行合并。
+- `assert_cached`：断言再次预取时不下载任何云端文件对象。
+- `sync_prepared`：在云端预检已经完成的情况下执行同步。可用 `want` 断言 merge result 数量。
 - `sync_download`：执行仅下载同步。可用 `want` 断言 merge result 数量。
 - `assert`：断言 `path` 的内容等于 `content`。
+- `assert_history`：断言 `path` 仅有一个同步历史文件，且内容等于 `content`。
 - `assert_missing`：断言 `path` 不存在。
 
 `want` 支持：
 
 ```json
-{"upserts": 0, "removes": 0, "conflicts": 0}
+{"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1, "conflictPaths": ["/doc.txt"], "historyPaths": ["/doc.txt"]}
 ```
+
+`conflictTypes`、`winners`、`conflictCopies`、`conflictPaths` 和 `historyPaths` 是可选的结构化断言。
 
 `final` 支持：
 

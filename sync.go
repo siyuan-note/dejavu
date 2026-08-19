@@ -17,7 +17,6 @@
 package dejavu
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -54,13 +53,58 @@ var (
 type MergeResult struct {
 	Time                        time.Time
 	Upserts, Removes, Conflicts []*entity.File
+	ConflictDetails             []*ConflictDetail
+	HistoryPaths                []string // 已生成同步历史的文件路径
 
 	UpsertPetals []string // storage/petal/petals.json 中变更的插件，在思源中计算并填充
 	RemovePetals []string // storage/petal/petals.json 中删除的插件，在思源中计算并填充
 }
 
+// ConflictCount 返回逻辑冲突数量，并兼容尚未填充结构化详情的同步方式。
+func (mr *MergeResult) ConflictCount() int {
+	if 0 < len(mr.ConflictDetails) {
+		return len(mr.ConflictDetails)
+	}
+	return len(mr.Conflicts)
+}
+
+// ConflictCopyFiles 返回需要生成冲突副本的文件，并兼容旧的冲突结果。
+func (mr *MergeResult) ConflictCopyFiles() []*entity.File {
+	if 1 > len(mr.ConflictDetails) {
+		return mr.Conflicts
+	}
+	ret := make([]*entity.File, 0, len(mr.ConflictDetails))
+	for _, detail := range mr.ConflictDetails {
+		if file := detail.CopyFile(); nil != file {
+			ret = append(ret, file)
+		}
+	}
+	return ret
+}
+
+// ConflictPaths 返回发生逻辑冲突的文件路径，并兼容旧的冲突结果。
+func (mr *MergeResult) ConflictPaths() []string {
+	if 1 > len(mr.ConflictDetails) {
+		ret := make([]string, 0, len(mr.Conflicts))
+		for _, file := range mr.Conflicts {
+			ret = append(ret, file.Path)
+		}
+		return ret
+	}
+	ret := make([]string, 0, len(mr.ConflictDetails))
+	for _, detail := range mr.ConflictDetails {
+		ret = append(ret, detail.Path)
+	}
+	return ret
+}
+
+// HasHistory 判断本次同步是否生成了数据历史，并兼容旧的冲突结果。
+func (mr *MergeResult) HasHistory() bool {
+	return 0 < len(mr.HistoryPaths) || 0 < len(mr.Conflicts)
+}
+
 func (mr *MergeResult) DataChanged() bool {
-	return len(mr.Upserts) > 0 || len(mr.Removes) > 0 || len(mr.Conflicts) > 0
+	return len(mr.Upserts) > 0 || len(mr.Removes) > 0 || 0 < mr.ConflictCount()
 }
 
 type DownloadTrafficStat struct {
@@ -213,7 +257,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	}
 
 	// 下载缺失文件并入库
-	downloadStat, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
+	downloadStat, _, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
@@ -226,19 +270,18 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
 	// 执行数据同步
-	err = repo.sync0(context, fetchedFiles, cloudLatest, latest, mergeResult, trafficStat)
+	err = repo.sync0(context, cloudLatest, latest, mergeResult, trafficStat)
 	return
 }
 
 // sync0 实现了数据同步的核心逻辑。
 //
-// fetchedFiles 已从云端下载的文件
 // cloudLatest 云端最新索引
 // latest 本地最新索引
 // mergeResult 待返回的同步合并结果
 // trafficStat 待返回的流量统计
-func (repo *Repo) sync0(context map[string]interface{},
-	fetchedFiles []*entity.File, cloudLatest *entity.Index, latest *entity.Index, mergeResult *MergeResult, trafficStat *TrafficStat) (err error) {
+func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Index, latest *entity.Index, mergeResult *MergeResult,
+	trafficStat *TrafficStat) (err error) {
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
 	if nil != err {
@@ -320,11 +363,6 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
-	latestFileMap := map[string]*entity.File{}
-	for _, file := range latestFiles {
-		latestFileMap[file.Path] = file
-	}
-
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	var cloudUpserts, cloudRemoves []*entity.File
 	if "" != cloudLatest.ID {
@@ -345,125 +383,86 @@ func (repo *Repo) sync0(context map[string]interface{},
 		logging.LogInfof("local remove [%s, %s, %s]", r.ID, r.Path, time.UnixMilli(r.Updated).Format("2006-01-02 15:04:05"))
 	}
 
-	// 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
-	localUpserts = repo.filterLocalUpserts(localUpserts, cloudUpserts)
-	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
-	localUpsertsByID := map[string]*entity.File{}
-	localUpsertsByPath := map[string]*entity.File{}
-	for _, localUpsert := range localUpserts {
-		localUpsertsByID[localUpsert.ID] = localUpsert
-		localUpsertsByPath[localUpsert.Path] = localUpsert
-	}
-	localRemovesByID := map[string]*entity.File{}
-	localRemovesByPath := map[string]*entity.File{}
-	for _, localRemove := range localRemoves {
-		localRemovesByID[localRemove.ID] = localRemove
-		localRemovesByPath[localRemove.Path] = localRemove
-	}
-	latestSyncFilesByID := map[string]*entity.File{}
-	latestSyncFilesByPath := map[string]*entity.File{}
-	for _, latestSyncFile := range latestSyncFiles {
-		latestSyncFilesByID[latestSyncFile.ID] = latestSyncFile
-		latestSyncFilesByPath[latestSyncFile.Path] = latestSyncFile
-	}
-
-	// 记录本地 syncignore 变更
-	var localUpsertIgnore *entity.File
-	for _, upsert := range localUpserts {
-		if "/.siyuan/syncignore" == upsert.Path {
-			localUpsertIgnore = upsert
-			break
-		}
-	}
-
-	fetchedFileIDs := map[string]bool{}
-	for _, fetchedFile := range fetchedFiles {
-		fetchedFileIDs[fetchedFile.ID] = true
-	}
-
 	nowStr := mergeResult.Time.Format("2006-01-02-150405")
-
-	// 计算冲突的 upsert 和无冲突能够合并的 upsert
-	// 冲突的文件尽量以本地 upsert 和 remove 为准
-	var tmpMergeConflicts []*entity.File
+	cloudMergeFiles := cloudLatestFiles
+	if "" == cloudLatest.ID {
+		// 云端仓库尚未初始化时使用当前本地版本，避免将缺失的云端 latest 误判为云端删除。
+		cloudMergeFiles = latestFiles
+	}
+	versionsList := classifySyncFileVersions(latestSyncFiles, latestFiles, cloudMergeFiles)
+	localChanged := false
+	var historyFiles []*entity.File
 	var cloudUpsertIgnore *entity.File
-	for _, cloudUpsert := range cloudUpserts {
-		if "/.siyuan/syncignore" == cloudUpsert.Path {
-			cloudUpsertIgnore = cloudUpsert
+	for _, versions := range versionsList {
+		if syncFileUnchanged != versions.LocalDelta {
+			localChanged = true
+		}
+		if "/.siyuan/syncignore" == versions.Path && nil != versions.Cloud &&
+			!equalSyncFileVersion(versions.Local, versions.Cloud) {
+			cloudUpsertIgnore = versions.Cloud
 		}
 
-		localUpsert := localUpsertsByPath[cloudUpsert.Path]
-		if nil == localUpsert {
-			localUpsert = localUpsertsByID[cloudUpsert.ID]
+		decision := decideSyncFile(versions)
+		if ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType &&
+			repo.ignoreLocalUpsert(versions.Local, versions.Base, nowStr, context) {
+			// 本地仅变更了折叠属性，使用云端内容进行合并
+			decision = syncFileDecision{Winner: syncFileWinnerCloud, HistoryFile: versions.Local}
 		}
-		if nil != localUpsert { // 相同的文件本地发生了变更
-			// 无论是否发生实际下载文件，都需要生成本地历史，以确保任何情况下都能够通过数据历史恢复文件
-			tmpMergeConflicts = append(tmpMergeConflicts, cloudUpsert)
+		resolvedDecision := resolveTmpSyncFile(versions, decision)
+		if decision.Winner != resolvedDecision.Winner {
+			logging.LogWarnf("ignored tmp file [%s]", versions.Path)
+		}
+		decision = resolvedDecision
+		if "" == decision.ConflictType && decision.HistoryFile == versions.Local &&
+			syncFileWinnerCloud == decision.Winner &&
+			syncFileVersionTooOld(versions.Local, versions.Cloud) {
+			logging.LogWarnf("ignored local upsert [%s, %s, %s] because cloud file is newer", versions.Local.ID,
+				versions.Local.Path, time.UnixMilli(versions.Local.Updated).Format("2006-01-02 15:04:05"))
+		} else if "" == decision.ConflictType && decision.HistoryFile == versions.Cloud &&
+			syncFileWinnerLocal == decision.Winner &&
+			syncFileVersionTooOld(versions.Cloud, versions.Local) {
+			logging.LogWarnf("ignored cloud upsert [%s, %s, %s] because local file is newer", versions.Cloud.ID,
+				versions.Cloud.Path, time.UnixMilli(versions.Cloud.Updated).Format("2006-01-02 15:04:05"))
+		}
+		if nil != decision.HistoryFile {
+			historyFiles = appendUniqueSyncFile(historyFiles, decision.HistoryFile)
+		}
+		if "" != decision.ConflictType {
+			detail := &ConflictDetail{
+				Path:   versions.Path,
+				Type:   decision.ConflictType,
+				Base:   versions.Base,
+				Local:  versions.Local,
+				Cloud:  versions.Cloud,
+				Winner: conflictSide(decision.Winner),
+			}
+			mergeResult.ConflictDetails = append(mergeResult.ConflictDetails, detail)
+			if copyFile := detail.CopyFile(); nil != copyFile {
+				mergeResult.Conflicts = append(mergeResult.Conflicts, copyFile)
+			}
+			logging.LogInfof("sync merge conflict [path=%s, type=%s, winner=%s]", detail.Path, detail.Type, detail.Winner)
+		}
 
-			if fetchedFileIDs[cloudUpsert.ID] {
-				// 发生实际下载文件的情况，尝试解决冲突
-
-				latestSyncFile := latestSyncFilesByPath[localUpsert.Path]
-				if nil == latestSyncFile {
-					latestSyncFile = latestSyncFilesByID[localUpsert.ID]
-				}
-				if repo.ignoreLocalUpsert(localUpsert, latestSyncFile, nowStr, context) {
-					// 如果能忽略本地变更的话则不算做冲突，进行正常合并
-					mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-					logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
-					continue
-				}
-
-				// 云端有更新的 upsert 从而导致了冲突，在外部单独处理生成副本
-				mergeResult.Conflicts = append(mergeResult.Conflicts, cloudUpsert)
-				logging.LogInfof("sync merge conflict [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
+		if decision.PublishLocal {
+			localChanged = true
+		}
+		if syncFileWinnerCloud != decision.Winner || equalSyncFileVersion(versions.Local, versions.Cloud) {
+			continue
+		}
+		if nil == versions.Cloud {
+			if nil != versions.Local {
+				mergeResult.Removes = append(mergeResult.Removes, versions.Local)
+				logging.LogInfof("sync merge remove [%s, %s, %s]", versions.Local.ID, versions.Local.Path, time.UnixMilli(versions.Local.Updated).Format("2006-01-02 15:04:05"))
 			}
 			continue
 		}
-
-		localRemove := localRemovesByPath[cloudUpsert.Path]
-		if nil == localRemove {
-			localRemove = localRemovesByID[cloudUpsert.ID]
-		}
-		if nil == localRemove {
-			if strings.HasSuffix(cloudUpsert.Path, ".tmp") {
-				// 数据仓库不迁出 `.tmp` 临时文件 https://github.com/siyuan-note/siyuan/issues/7087
-				logging.LogWarnf("ignored tmp file [%s]", cloudUpsert.Path)
-				continue
-			}
-
-			// 如果云端 upsert 早于本地已经存在的文件 7 分钟，则以本地文件为准
-			cloudUpsertTooOld := false
-			if localFile := latestFileMap[cloudUpsert.Path]; nil != localFile && localFile.Updated > cloudUpsert.Updated+7*60*1000 {
-				logging.LogWarnf("ignored cloud upsert [%s, %s, %s] because local file is newer", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
-				cloudUpsertTooOld = true
-			}
-			if !cloudUpsertTooOld {
-				mergeResult.Upserts = append(mergeResult.Upserts, cloudUpsert)
-				logging.LogInfof("sync merge upsert [%s, %s, %s]", cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
-			}
-		}
+		mergeResult.Upserts = append(mergeResult.Upserts, versions.Cloud)
+		logging.LogInfof("sync merge upsert [%s, %s, %s]", versions.Cloud.ID, versions.Cloud.Path, time.UnixMilli(versions.Cloud.Updated).Format("2006-01-02 15:04:05"))
 	}
-
-	// 计算能够无冲突合并的 remove，冲突的文件以本地 upsert 为准
-	for _, cloudRemove := range cloudRemoves {
-		localUpsert := localUpsertsByPath[cloudRemove.Path]
-		if nil == localUpsert {
-			localUpsert = localUpsertsByID[cloudRemove.ID]
-		}
-		if nil == localUpsert {
-			mergeResult.Removes = append(mergeResult.Removes, cloudRemove)
-		}
-	}
-
 	// 云端如果更新了忽略文件则使用其规则过滤 remove，避免后面误删本地文件 https://github.com/siyuan-note/siyuan/issues/5497
 	var ignoreLines []string
 	if nil != cloudUpsertIgnore {
-		coDir := filepath.Join(repo.DataPath)
-		if nil != localUpsertIgnore {
-			// 本地 syncignore 存在变更，则临时迁出
-			coDir = filepath.Join(repo.TempPath, "repo", "sync", "ignore")
-		}
+		coDir := filepath.Join(repo.TempPath, "repo", "sync", "ignore")
 		if err = repo.checkoutFile(cloudUpsertIgnore, coDir, 1, 1, context); nil != err {
 			logging.LogErrorf("checkout ignore file failed: %s", err)
 			return
@@ -491,10 +490,10 @@ func (repo *Repo) sync0(context map[string]interface{},
 	}
 	mergeResult.Removes = mergeResultRemovesTmp
 
-	// 冲突文件复制到数据历史文件夹
-	if 0 < len(tmpMergeConflicts) {
+	// 被合并策略舍弃的文件复制到数据历史文件夹
+	if 0 < len(historyFiles) {
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", nowStr)
-		for i, file := range tmpMergeConflicts {
+		for i, file := range historyFiles {
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
@@ -502,7 +501,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				return
 			}
 
-			err = repo.checkoutFile(checkoutTmp, temp, i+1, len(tmpMergeConflicts), context)
+			err = repo.checkoutFile(checkoutTmp, temp, i+1, len(historyFiles), context)
 			if nil != err {
 				logging.LogErrorf("checkout file failed: %s", err)
 				return
@@ -515,6 +514,7 @@ func (repo *Repo) sync0(context map[string]interface{},
 				err = ErrCloudGenerateConflictHistory
 				return
 			}
+			mergeResult.HistoryPaths = append(mergeResult.HistoryPaths, file.Path)
 		}
 	}
 
@@ -895,49 +895,6 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 
 	if 0 < len(errs) {
 		err = errs[0]
-	}
-	return
-}
-
-// filterLocalUpserts 避免旧的本地数据覆盖云端数据 https://github.com/siyuan-note/siyuan/issues/7403
-func (repo *Repo) filterLocalUpserts(localUpserts, cloudUpserts []*entity.File) (ret []*entity.File) {
-	cloudUpsertsMap := map[string]*entity.File{}
-	for _, cloudUpsert := range cloudUpserts {
-		cloudUpsertsMap[cloudUpsert.Path] = cloudUpsert
-	}
-
-	toRemoveLocalUpsertPaths := map[string]bool{}
-	for _, localUpsert := range localUpserts {
-		if cloudUpsert := cloudUpsertsMap[localUpsert.Path]; nil != cloudUpsert {
-			if localUpsert.Updated < cloudUpsert.Updated-1000*60*7 { // 本地早于云端 7 分钟
-				toRemoveLocalUpsertPaths[localUpsert.Path] = true // 使用云端数据覆盖本地数据
-				logging.LogWarnf("ignored local upsert [%s, %s, %s] because it is older than cloud upsert [%s, %s, %s]",
-					localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"),
-					cloudUpsert.ID, cloudUpsert.Path, time.UnixMilli(cloudUpsert.Updated).Format("2006-01-02 15:04:05"))
-			}
-		}
-	}
-
-	for _, localUpsert := range localUpserts {
-		if !toRemoveLocalUpsertPaths[localUpsert.Path] {
-			ret = append(ret, localUpsert)
-		}
-	}
-
-	if len(localUpserts) != len(ret) {
-		buf := bytes.Buffer{}
-		buf.WriteString("filtered local upserts from:\n")
-		for _, localUpsert := range localUpserts {
-			buf.WriteString(fmt.Sprintf("  [%s, %s, %s]\n", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05")))
-		}
-		buf.WriteString("to:\n")
-		for _, localUpsert := range ret {
-			buf.WriteString(fmt.Sprintf("  [%s, %s, %s]\n", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05")))
-		}
-		if 1 > len(ret) {
-			buf.WriteString("  []")
-		}
-		logging.LogWarn(buf.String())
 	}
 	return
 }

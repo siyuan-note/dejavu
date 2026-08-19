@@ -4,13 +4,11 @@
 
 ## 必须修复
 
-- [ ] 相同内容、不同 mtime 不应该产生冲突。
+- [ ] `sync_download` 中相同内容、不同 mtime 不应该产生冲突。
   - 当前测试：`test/sync/testdata/cases/known-conflicts/config.json`
-  - Case：`same file same content but different timestamp reports conflict`
-  - Case：`same path create same content but different timestamp reports conflict`
   - Case：`sync download same content but different timestamp reports conflict`
-  - 当前期望：普通 `sync` 场景 `conflicts: 1`；`sync_download` 场景 `upserts: 1, conflicts: 1`
-  - 修复目标：内容 hash 相同、路径相同、仅元数据时间不同的文件应视为已收敛，期望改为 `conflicts: 0`，然后移动到 `basic` 或 `edge`。
+  - 当前期望：`upserts: 1, conflicts: 1`
+  - 修复目标：内容 hash 相同、路径相同、仅元数据时间不同的文件应视为已收敛，期望改为 `conflicts: 0`，然后移动到 `sync-download`。
 
 - [ ] 结构化内容可合并的两端修改不应该在 `sync_download` 中直接文件级冲突。
   - 当前测试：`test/sync/testdata/cases/known-conflicts/config.json`

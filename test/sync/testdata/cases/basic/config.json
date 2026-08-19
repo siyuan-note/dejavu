@@ -46,8 +46,47 @@
       {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
       {"client": "b", "op": "write", "path": "doc.txt", "content": "from b\n", "minutes": 11},
       {"client": "b", "op": "index", "memo": "b update"},
-      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1}},
-      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from b\n"}
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1, "conflictPaths": ["/doc.txt"], "historyPaths": ["/doc.txt"]}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from b\n"},
+      {"client": "b", "op": "assert_history", "path": "doc.txt", "content": "from a\n"}
+    ]
+  },
+  {
+    "name": "prefetched same file divergence reports conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "from b\n", "minutes": 11},
+      {"client": "b", "op": "prefetch"},
+      {"client": "b", "op": "index", "memo": "b startup index"},
+      {"client": "b", "op": "assert_cached"},
+      {"client": "b", "op": "sync_prepared", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from b\n"},
+      {"client": "b", "op": "assert_history", "path": "doc.txt", "content": "from a\n"}
+    ]
+  },
+  {
+    "name": "cached same file divergence reports conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "from a\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a update"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "from b\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b update"},
+      {"client": "b", "op": "prefetch"},
+      {"client": "b", "op": "assert_cached"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1}},
+      {"client": "b", "op": "assert", "path": "doc.txt", "content": "from b\n"},
+      {"client": "b", "op": "assert_history", "path": "doc.txt", "content": "from a\n"}
     ]
   },
   {
@@ -62,9 +101,46 @@
       {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
       {"client": "b", "op": "write", "path": "new.txt", "content": "from b\n", "minutes": 11},
       {"client": "b", "op": "index", "memo": "b create"},
-      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1}},
-      {"client": "b", "op": "assert", "path": "new.txt", "content": "from b\n"}
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1}},
+      {"client": "b", "op": "assert", "path": "new.txt", "content": "from b\n"},
+      {"client": "b", "op": "assert_history", "path": "new.txt", "content": "from a\n"}
     ]
+  },
+  {
+    "name": "same file same content but different timestamp merges without conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b same content different timestamp"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}}
+    ],
+    "final": {
+      "b": {"files": {"doc.txt": "same\n"}}
+    }
+  },
+  {
+    "name": "same path create same content but different timestamp merges without conflict",
+    "seed": {
+      "anchor.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "new.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a create same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "new.txt", "content": "same\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b create same content different timestamp"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}}
+    ],
+    "final": {
+      "b": {"files": {"anchor.txt": "base\n", "new.txt": "same\n"}}
+    }
   },
   {
     "name": "remote delete applies without conflict",
@@ -83,7 +159,7 @@
     ]
   },
   {
-    "name": "delete vs local edit keeps local change",
+    "name": "remote delete vs local edit reports conflict and keeps local change",
     "seed": {
       "shared.txt": "base\n",
       "anchor.txt": "anchor\n"
@@ -95,8 +171,9 @@
       {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
       {"client": "b", "op": "write", "path": "shared.txt", "content": "from b\n", "minutes": 10},
       {"client": "b", "op": "index", "memo": "b edit"},
-      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-remove"], "winners": ["local"], "conflictCopies": 0, "conflictPaths": ["/shared.txt"], "historyPaths": ["/shared.txt"]}},
       {"client": "b", "op": "assert", "path": "shared.txt", "content": "from b\n"},
+      {"client": "b", "op": "assert_history", "path": "shared.txt", "content": "from b\n"},
       {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
       {"client": "a", "op": "assert", "path": "shared.txt", "content": "from b\n"}
     ]

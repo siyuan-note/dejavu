@@ -148,3 +148,22 @@ func equalFile(left, right *entity.File) bool {
 	}
 	return true
 }
+
+// equalFileContent 判断两个文件版本的内容是否相同，不比较路径和更新时间。
+func equalFileContent(left, right *entity.File) bool {
+	if nil == left || nil == right {
+		return left == right
+	}
+	if left == right {
+		return true
+	}
+	if left.Size != right.Size || len(left.Chunks) != len(right.Chunks) {
+		return false
+	}
+	for i, chunk := range left.Chunks {
+		if chunk != right.Chunks[i] {
+			return false
+		}
+	}
+	return true
+}
