@@ -27,21 +27,21 @@ import (
 	as3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-type listObjectsV2Stub struct {
-	pages   []*as3.ListObjectsV2Output
+type listObjectsStub struct {
+	pages   []*as3.ListObjectsOutput
 	errAt   int
 	pageErr error
-	tokens  []string
+	markers []string
 	calls   int
 }
 
-func (stub *listObjectsV2Stub) ListObjectsV2(_ context.Context, input *as3.ListObjectsV2Input,
-	_ ...func(*as3.Options)) (*as3.ListObjectsV2Output, error) {
-	token := ""
-	if nil != input.ContinuationToken {
-		token = *input.ContinuationToken
+func (stub *listObjectsStub) ListObjects(_ context.Context, input *as3.ListObjectsInput,
+	_ ...func(*as3.Options)) (*as3.ListObjectsOutput, error) {
+	marker := ""
+	if nil != input.Marker {
+		marker = *input.Marker
 	}
-	stub.tokens = append(stub.tokens, token)
+	stub.markers = append(stub.markers, marker)
 	call := stub.calls
 	stub.calls++
 	if call == stub.errAt {
@@ -55,13 +55,13 @@ func TestListS3ObjectsPagination(t *testing.T) {
 	for i := range firstPage {
 		firstPage[i].Key = aws.String(fmt.Sprintf("repo/refs/tags/%02d", i))
 	}
-	stub := &listObjectsV2Stub{
+	stub := &listObjectsStub{
 		errAt: -1,
-		pages: []*as3.ListObjectsV2Output{
+		pages: []*as3.ListObjectsOutput{
 			{
-				Contents:              firstPage,
-				IsTruncated:           aws.Bool(true),
-				NextContinuationToken: aws.String("page-2"),
+				Contents:    firstPage,
+				IsTruncated: aws.Bool(true),
+				NextMarker:  aws.String("repo/refs/tags/31"),
 			},
 			{
 				Contents:    []as3Types.Object{{Key: aws.String("repo/refs/tags/32")}},
@@ -70,7 +70,7 @@ func TestListS3ObjectsPagination(t *testing.T) {
 		},
 	}
 	limit := int32(32)
-	objects, err := listS3Objects(context.Background(), stub, &as3.ListObjectsV2Input{
+	objects, err := listS3Objects(context.Background(), stub, &as3.ListObjectsInput{
 		Bucket:  aws.String("bucket"),
 		Prefix:  aws.String("repo/refs/tags/"),
 		MaxKeys: &limit,
@@ -81,29 +81,93 @@ func TestListS3ObjectsPagination(t *testing.T) {
 	if 33 != len(objects) {
 		t.Fatalf("unexpected object count [%d]", len(objects))
 	}
-	if 2 != stub.calls || 2 != len(stub.tokens) || "" != stub.tokens[0] || "page-2" != stub.tokens[1] {
-		t.Fatalf("unexpected pagination calls [%d] and tokens [%v]", stub.calls, stub.tokens)
+	if 2 != stub.calls || 2 != len(stub.markers) || "" != stub.markers[0] || "repo/refs/tags/31" != stub.markers[1] {
+		t.Fatalf("unexpected pagination calls [%d] and markers [%v]", stub.calls, stub.markers)
 	}
 }
 
 func TestListS3ObjectsReturnsPaginationError(t *testing.T) {
 	wantErr := errors.New("list page failed")
-	stub := &listObjectsV2Stub{
+	stub := &listObjectsStub{
 		errAt:   1,
 		pageErr: wantErr,
-		pages: []*as3.ListObjectsV2Output{
+		pages: []*as3.ListObjectsOutput{
 			{
-				Contents:              []as3Types.Object{{Key: aws.String("repo/refs/tags/00")}},
-				IsTruncated:           aws.Bool(true),
-				NextContinuationToken: aws.String("page-2"),
+				Contents:    []as3Types.Object{{Key: aws.String("repo/refs/tags/00")}},
+				IsTruncated: aws.Bool(true),
+				NextMarker:  aws.String("repo/refs/tags/00"),
 			},
 		},
 	}
-	_, err := listS3Objects(context.Background(), stub, &as3.ListObjectsV2Input{
+	_, err := listS3Objects(context.Background(), stub, &as3.ListObjectsInput{
 		Bucket: aws.String("bucket"),
 		Prefix: aws.String("repo/refs/tags/"),
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("unexpected pagination error [%v]", err)
+	}
+}
+
+func TestListS3ObjectsUsesLastKeyAsMarker(t *testing.T) {
+	stub := &listObjectsStub{
+		errAt: -1,
+		pages: []*as3.ListObjectsOutput{
+			{
+				Contents:    []as3Types.Object{{Key: aws.String("repo/refs/tags/00")}},
+				IsTruncated: aws.Bool(true),
+			},
+			{
+				Contents:    []as3Types.Object{{Key: aws.String("repo/refs/tags/01")}},
+				IsTruncated: aws.Bool(false),
+			},
+		},
+	}
+	objects, err := listS3Objects(context.Background(), stub, &as3.ListObjectsInput{
+		Bucket: aws.String("bucket"),
+		Prefix: aws.String("repo/refs/tags/"),
+	})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if 2 != len(objects) || 2 != stub.calls || "repo/refs/tags/00" != stub.markers[1] {
+		t.Fatalf("unexpected objects [%d], calls [%d], and markers [%v]", len(objects), stub.calls, stub.markers)
+	}
+}
+
+func TestListS3ObjectsRejectsUnchangedMarker(t *testing.T) {
+	stub := &listObjectsStub{
+		errAt: -1,
+		pages: []*as3.ListObjectsOutput{
+			{
+				IsTruncated: aws.Bool(true),
+				NextMarker:  aws.String("marker"),
+			},
+		},
+	}
+	_, err := listS3Objects(context.Background(), stub, &as3.ListObjectsInput{
+		Bucket: aws.String("bucket"),
+		Marker: aws.String("marker"),
+	})
+	if nil == err || "list objects marker did not advance" != err.Error() {
+		t.Fatalf("unexpected marker error [%v]", err)
+	}
+}
+
+func TestListS3ObjectsReturnsEmptyList(t *testing.T) {
+	stub := &listObjectsStub{
+		errAt: -1,
+		pages: []*as3.ListObjectsOutput{
+			{IsTruncated: aws.Bool(false)},
+		},
+	}
+	objects, err := listS3Objects(context.Background(), stub, &as3.ListObjectsInput{
+		Bucket: aws.String("bucket"),
+		Prefix: aws.String("repo/refs/tags/"),
+	})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if nil == objects || 0 != len(objects) {
+		t.Fatalf("unexpected objects [%v]", objects)
 	}
 }

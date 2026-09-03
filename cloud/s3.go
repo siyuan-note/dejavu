@@ -320,30 +320,34 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
-	paginator := as3.NewListObjectsV2Paginator(svc, &as3.ListObjectsV2Input{
+	entries, err := listS3Objects(ctx, svc, &as3.ListObjectsInput{
 		Bucket:  &s3.Conf.S3.Bucket,
 		Prefix:  &pathPrefix,
 		MaxKeys: &limit,
 	})
+	if nil != err {
+		logging.LogErrorf("list objects failed: %s", err)
+		return nil, err
+	}
 
-	for paginator.HasMorePages() {
-		output, pErr := paginator.NextPage(ctx)
-		if nil != pErr {
-			logging.LogErrorf("list objects failed: %s", pErr)
-			return nil, pErr
+	for _, entry := range entries {
+		if nil == entry.Key {
+			logging.LogWarnf("skip object with nil key")
+			continue
+		}
+		filePath := strings.TrimPrefix(*entry.Key, pathPrefix)
+		if "" == filePath {
+			logging.LogWarnf("skip empty file path for key [%s]", *entry.Key)
+			continue
 		}
 
-		for _, entry := range output.Contents {
-			filePath := strings.TrimPrefix(*entry.Key, pathPrefix)
-			if "" == filePath {
-				logging.LogWarnf("skip empty file path for key [%s]", *entry.Key)
-				continue
-			}
-
-			ret[filePath] = &entity.ObjectInfo{
-				Path: filePath,
-				Size: *entry.Size,
-			}
+		size := int64(0)
+		if nil != entry.Size {
+			size = *entry.Size
+		}
+		ret[filePath] = &entity.ObjectInfo{
+			Path: filePath,
+			Size: size,
 		}
 	}
 	return
@@ -384,7 +388,7 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 
 	prefix := path.Join("repo", "refs", refPrefix) + "/"
 	limit := int32(32)
-	entries, err := listS3Objects(ctx, svc, &as3.ListObjectsV2Input{
+	entries, err := listS3Objects(ctx, svc, &as3.ListObjectsInput{
 		Bucket:  &s3.Conf.S3.Bucket,
 		Prefix:  &prefix,
 		MaxKeys: &limit,
@@ -429,10 +433,17 @@ func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	return
 }
 
-func listS3Objects(ctx context.Context, svc as3.ListObjectsV2APIClient, input *as3.ListObjectsV2Input) (ret []as3Types.Object, err error) {
-	paginator := as3.NewListObjectsV2Paginator(svc, input)
-	for paginator.HasMorePages() {
-		output, listErr := paginator.NextPage(ctx)
+type listObjectsAPIClient interface {
+	ListObjects(context.Context, *as3.ListObjectsInput, ...func(*as3.Options)) (*as3.ListObjectsOutput, error)
+}
+
+func listS3Objects(ctx context.Context, svc listObjectsAPIClient, input *as3.ListObjectsInput) (ret []as3Types.Object, err error) {
+	ret = []as3Types.Object{}
+	marker := input.Marker
+	for {
+		pageInput := *input
+		pageInput.Marker = marker
+		output, listErr := svc.ListObjects(ctx, &pageInput)
 		if nil != listErr {
 			err = listErr
 			return
@@ -443,8 +454,25 @@ func listS3Objects(ctx context.Context, svc as3.ListObjectsV2APIClient, input *a
 		}
 
 		ret = append(ret, output.Contents...)
+		if !aws.ToBool(output.IsTruncated) {
+			return
+		}
+
+		nextMarker := aws.ToString(output.NextMarker)
+		if "" == nextMarker {
+			for i := len(output.Contents) - 1; 0 <= i; i-- {
+				if nil != output.Contents[i].Key && "" != *output.Contents[i].Key {
+					nextMarker = *output.Contents[i].Key
+					break
+				}
+			}
+		}
+		if "" == nextMarker || nextMarker == aws.ToString(marker) {
+			err = errors.New("list objects marker did not advance")
+			return
+		}
+		marker = aws.String(nextMarker)
 	}
-	return
 }
 
 func (s3 *S3) listRepos() (ret []*Repo, err error) {
