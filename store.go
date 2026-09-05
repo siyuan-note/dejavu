@@ -161,7 +161,7 @@ func (store *Store) Purge(ctx context.Context, retentionIndexIDs ...string) (ret
 		index, getErr := store.GetIndex(refID)
 		if nil != getErr {
 			logging.LogWarnf("get index [%s] failed: %s", refID, getErr)
-			continue
+			return nil, getErr
 		}
 
 		for _, fileID := range index.Files {
@@ -169,7 +169,7 @@ func (store *Store) Purge(ctx context.Context, retentionIndexIDs ...string) (ret
 			file, getFileErr := store.GetFile(fileID)
 			if nil != getFileErr {
 				logging.LogWarnf("get file [%s] failed: %s", fileID, getFileErr)
-				continue
+				return nil, getFileErr
 			}
 
 			for _, chunkID := range file.Chunks {
@@ -502,6 +502,9 @@ func (store *Store) encodeData(data []byte) ([]byte, error) {
 }
 
 func (store *Store) decodeData(data []byte) (ret []byte, err error) {
+	if len(data) < 28 {
+		return nil, errors.New("invalid encrypted object")
+	}
 	ret, err = encryption.AesDecrypt(data, store.AesKey)
 	if nil != err {
 		return

@@ -166,6 +166,9 @@ func (repo *Repo) GetCloudLatestFast(context map[string]interface{}) (cloudLates
 func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
 
 	skipCloudPreflight, _ := context["skipCloudPreflight"].(bool)
 	if !skipCloudPreflight {
@@ -190,6 +193,12 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 		trafficStat.APIGet++
 		if cloudLatest.ID == latest.ID {
 			// 数据一致时不获取云端锁，减少无变更同步的远程请求。
+			if repo.assetDownloads != nil {
+				err = repo.UpdateLatestSync(latest)
+				if err == nil && !repo.assetDownloads.onDemand {
+					err = repo.ensureAllAssets(context)
+				}
+			}
 			return
 		}
 	}
@@ -240,6 +249,12 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
+		if repo.assetDownloads != nil {
+			err = repo.UpdateLatestSync(latest)
+			if err == nil && !repo.assetDownloads.onDemand {
+				err = repo.ensureAllAssets(context)
+			}
+		}
 		return
 	}
 
@@ -299,7 +314,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	go func() { // 下载缺失分块并入库
 		defer waitGroup.Done()
 
-		fetchChunkIDs, downloadErr := repo.localNotFoundChunks(cloudChunkIDs)
+		fetchChunkIDs, downloadErr := repo.localNotFoundChunks(repo.getChunks(repo.downloadedCloudFiles(cloudLatestFiles)))
 		if nil != downloadErr {
 			logging.LogErrorf("get local not found chunks failed: %s", downloadErr)
 			errsLock.Lock()
@@ -329,6 +344,9 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	waitGroup.Add(1)
 	go func() { // 上传差异数据
 		defer waitGroup.Done()
+		if repo.usesAssetDownloads() {
+			return
+		}
 
 		uploadErr := repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
 		if nil != uploadErr {
@@ -480,6 +498,15 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	ignoreMatcher := ignore.CompileIgnoreLines(ignoreLines...)
+	ignoredAssets, err := repo.materializeIgnoredAssets(ignoreMatcher, context)
+	if err != nil {
+		return
+	}
+	for _, file := range latestFiles {
+		if ignoreMatcher.MatchesPath(file.Path) {
+			ignoredAssets[file.Path] = true
+		}
+	}
 	var mergeResultRemovesTmp []*entity.File
 	for _, remove := range mergeResult.Removes {
 		if !ignoreMatcher.MatchesPath(remove.Path) {
@@ -494,6 +521,11 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	if 0 < len(historyFiles) {
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", nowStr)
 		for i, file := range historyFiles {
+			if repo.assetDownloads != nil {
+				if err = repo.ensureFileChunks(file, context); err != nil {
+					return
+				}
+			}
 			var checkoutTmp *entity.File
 			checkoutTmp, err = repo.store.GetFile(file.ID)
 			if nil != err {
@@ -519,6 +551,15 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	// 数据变更后还原文件
+	if repo.usesAssetDownloads() {
+		err = repo.finishAssetSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
+		if err == nil {
+			go repo.cloud.AddTraffic(&cloud.Traffic{UploadBytes: trafficStat.UploadBytes, DownloadBytes: trafficStat.DownloadBytes,
+				APIGet: trafficStat.APIGet, APIPut: trafficStat.APIPut})
+			gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
+		}
+		return
+	}
 	err = repo.restoreFiles(mergeResult, context)
 	if nil != err {
 		logging.LogErrorf("restore files failed: %s", err)
@@ -1737,6 +1778,13 @@ func (repo *Repo) uploadCloud(context map[string]interface{},
 	if 1 > len(upsertFiles) {
 		return
 	}
+	if repo.assetDownloads != nil {
+		for _, file := range upsertFiles {
+			if err = repo.ensureFileChunks(file, context); err != nil {
+				return
+			}
+		}
+	}
 
 	// 计算待上传云端的分块
 	upsertChunkIDs, err := repo.localUpsertChunkIDs(upsertFiles, cloudChunkIDs)
@@ -2105,7 +2153,12 @@ func (repo *Repo) getHistoryDirNow(now, suffix string) (ret string, err error) {
 }
 
 func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, context map[string]interface{}) (stat *DownloadTrafficStat, err error) {
+	lock.Lock()
+	defer lock.Unlock()
 	stat = &DownloadTrafficStat{}
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
 
 	chunkIDs := repo.getChunks(files)
 	chunkIDs, err = repo.localNotFoundChunks(chunkIDs)

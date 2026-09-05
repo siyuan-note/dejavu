@@ -62,7 +62,8 @@ type Repo struct {
 	chunkPol chunker.Pol // 文件分块多项式值
 	cloud    cloud.Cloud // 云端存储服务
 
-	chunkSource ChunkSource // 同步时可选的只读分块来源
+	chunkSource    ChunkSource     // 同步时可选的只读分块来源
+	assetDownloads *assetDownloads // 当前设备的资源下载状态。
 }
 
 // SetChunkSource 设置同步时可选的只读分块来源。
@@ -136,6 +137,12 @@ func (repo *Repo) CountIndexes() (ret int, err error) {
 func (repo *Repo) Reset() (err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
+	if repo.assetDownloads != nil && len(repo.assetDownloads.state.Deferred) != 0 {
+		return ErrAssetNotDownloaded
+	}
 
 	if err = os.RemoveAll(repo.Path); nil != err {
 		return
@@ -150,6 +157,9 @@ func (repo *Repo) Reset() (err error) {
 func (repo *Repo) Purge(ctx context.Context, retentionIndexIDs ...string) (ret *entity.PurgeStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
 	return repo.store.Purge(ctx, retentionIndexIDs...)
 }
 
@@ -234,7 +244,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 		index, getErr := repo.cloud.GetIndex(refID)
 		if nil != getErr {
 			logging.LogWarnf("get index [%s] failed: %s", refID, getErr)
-			continue
+			return nil, getErr
 		}
 
 		for _, fileID := range index.Files {
@@ -415,10 +425,27 @@ var removeEmptyDirExcludes = append(workspaceDataDirs, ".git")
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
+	if err = repo.ensureAllAssets(context); err != nil {
+		return
+	}
 
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		return
+	}
+	if repo.assetDownloads != nil {
+		var targetFiles []*entity.File
+		if targetFiles, err = repo.getFiles(index.Files); err != nil {
+			return
+		}
+		for _, f := range targetFiles {
+			if err = repo.ensureFileChunks(f, context); err != nil {
+				return
+			}
+		}
 	}
 
 	if err = os.MkdirAll(repo.DataPath, 0755); nil != err {
@@ -898,8 +925,14 @@ func (repo *Repo) index(memo string, checkChunks bool, context map[string]interf
 }
 
 func (repo *Repo) index0(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
+	if _, err = repo.materializeIgnoredAssets(ignoreMatcher, context); err != nil {
+		return
+	}
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	start := time.Now()
 	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
@@ -936,6 +969,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 		return
 	}
 	logging.LogInfof("walk data [files=%d] cost [%s]", len(files), time.Since(start))
+	if files, err = repo.appendDeferredAssets(files); err != nil {
+		return
+	}
 	//sort.Slice(files, func(i, j int) bool { return files[i].Updated > files[j].Updated })
 	//for _, f := range files {
 	//	logging.LogInfof("walked data [file=%s]", f.Path)
@@ -1002,7 +1038,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 				latestFiles = append(latestFiles, file)
 				lock.Unlock()
 
-				if checkChunks { // 仅在非移动端校验，因为移动端私有数据空间不会存在外部操作导致分块损坏的情况 https://github.com/siyuan-note/siyuan/issues/13216
+				if checkChunks && !repo.deferredVersion(file) { // 尚未下载的资源仅允许缺少其自身版本的分块。
 					// Check local data chunk integrity before data synchronization https://github.com/siyuan-note/siyuan/issues/8853
 					for _, chunk := range file.Chunks {
 						info, statErr := repo.store.Stat(chunk)
@@ -1061,6 +1097,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false)
 	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
+		err = repo.promoteIndexedAssets()
 		return
 	}
 
@@ -1107,6 +1144,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	})
 
 	for _, file := range upserts {
+		if repo.deferredVersion(file) {
+			continue
+		}
 		waitGroup.Add(1)
 		err = p.Invoke(file)
 		if nil != err {
@@ -1147,6 +1187,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
+	err = repo.promoteIndexedAssets()
 	return
 }
 
@@ -1435,7 +1476,7 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	return
 }
 
-func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, total int, context map[string]interface{}) (err error) {
+func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, total int, context map[string]interface{}, before ...*entity.File) (err error) {
 	absPath := filepath.Join(checkoutDir, file.Path)
 	dir, name := filepath.Split(absPath)
 	if err = os.MkdirAll(dir, 0755); nil != err {
@@ -1447,6 +1488,10 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 	if nil != err {
 		return
 	}
+	defer func() {
+		f.Close()
+		os.Remove(tmp)
+	}()
 
 	for _, c := range file.Chunks {
 		var chunk *entity.Chunk
@@ -1472,6 +1517,16 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 
 	filelock.Lock(absPath)
 	defer filelock.Unlock(absPath)
+	if len(before) != 0 {
+		if matches, matchErr := repo.matchesAssetFile(file); matchErr != nil {
+			return matchErr
+		} else if matches {
+			return nil
+		}
+		if err = repo.checkAssetBefore(file.Path, before[0]); err != nil {
+			return
+		}
+	}
 
 	for i := 0; i < 3; i++ {
 		err = os.Rename(f.Name(), absPath) // Windows 上重命名是非原子的

@@ -40,6 +40,9 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	defer lock.Unlock()
 
 	downloadFileCount, downloadChunkCount, downloadBytes, err = repo.downloadIndex(id, context)
+	if err != nil {
+		return
+	}
 
 	// 更新本地标签
 	err = repo.AddTag(id, tag)
@@ -71,7 +74,7 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	}
 
 	// 下载缺失文件并入库
-	downloadStat, fetchedFiles, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
+	downloadStat, _, err := repo.downloadCloudFilesPut(fetchFileIDs, context)
 	if nil != err {
 		logging.LogErrorf("download cloud files put failed: %s", err)
 		return
@@ -82,7 +85,11 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	apiGet += len(fetchFileIDs) - downloadStat.PeerCount
 
 	// 从文件列表中得到去重后的分块列表
-	cloudChunkIDs := repo.getChunks(fetchedFiles)
+	files, err := repo.getFiles(index.Files)
+	if err != nil {
+		return
+	}
+	cloudChunkIDs := repo.getChunks(files)
 
 	// 计算本地缺失的分块
 	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
@@ -102,6 +109,11 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	cloudDownloadBytes += downloadStat.CloudBytes
 	downloadChunkCount = len(fetchChunkIDs)
 	apiGet += downloadChunkCount - downloadStat.PeerCount
+	for _, file := range files {
+		if err = repo.ensureFileChunks(file, context); err != nil {
+			return
+		}
+	}
 
 	// 更新本地索引
 	err = repo.store.PutIndex(index)
@@ -138,6 +150,17 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 	if nil != err {
 		logging.LogErrorf("get index failed: %s", err)
 		return
+	}
+	if repo.assetDownloads != nil {
+		var files []*entity.File
+		if files, err = repo.getFiles(index.Files); err != nil {
+			return
+		}
+		for _, file := range files {
+			if err = repo.ensureFileChunks(file, context); err != nil {
+				return
+			}
+		}
 	}
 
 	availableSize := repo.cloud.GetAvailableSize()

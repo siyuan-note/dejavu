@@ -31,6 +31,9 @@ import (
 func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
 
 	// 锁定云端，防止其他设备并发上传数据
 	err = repo.tryLockCloud(repo.DeviceID, context)
@@ -63,6 +66,12 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 
 	if cloudLatest.ID == latest.ID || "" == cloudLatest.ID {
 		// 数据一致或者云端为空，直接返回
+		if repo.assetDownloads != nil && cloudLatest.ID == latest.ID {
+			err = repo.UpdateLatestSync(latest)
+			if err == nil && !repo.assetDownloads.onDemand {
+				err = repo.ensureAllAssets(context)
+			}
+		}
 		return
 	}
 
@@ -97,7 +106,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
 
 	// 计算本地缺失的分块
-	fetchChunkIDs, err := repo.localNotFoundChunks(cloudChunkIDs)
+	fetchChunkIDs, err := repo.localNotFoundChunks(repo.getChunks(repo.downloadedCloudFiles(cloudLatestFiles)))
 	if nil != err {
 		logging.LogErrorf("get local not found chunks failed: %s", err)
 		return
@@ -135,6 +144,28 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	// 在单向同步的情况下该结果可直接作为合并结果
 	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
+	var ignoredAssets map[string]bool
+	if repo.usesAssetDownloads() {
+		matcher, matcherErr := repo.cloudAssetIgnoreMatcher(cloudLatestFiles, context)
+		if matcherErr != nil {
+			return mergeResult, trafficStat, matcherErr
+		}
+		if ignoredAssets, err = repo.materializeIgnoredAssets(matcher, context); err != nil {
+			return
+		}
+		for _, file := range latestFiles {
+			if matcher.MatchesPath(file.Path) {
+				ignoredAssets[file.Path] = true
+			}
+		}
+		var removes []*entity.File
+		for _, file := range mergeResult.Removes {
+			if !ignoredAssets[file.Path] {
+				removes = append(removes, file)
+			}
+		}
+		mergeResult.Removes = removes
+	}
 
 	// 计算冲突的 upsert
 	// 冲突的文件以云端 upsert 和 remove 为准
@@ -188,6 +219,14 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 数据变更后还原文件
+	if repo.usesAssetDownloads() {
+		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
+		if err == nil {
+			go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: trafficStat.DownloadBytes, APIGet: trafficStat.APIGet})
+			gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
+		}
+		return
+	}
 	err = repo.restoreFiles(mergeResult, context)
 	if nil != err {
 		logging.LogErrorf("restore files failed: %s", err)
@@ -215,6 +254,9 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkAssetState(); err != nil {
+		return
+	}
 
 	// 锁定云端，防止其他设备并发上传数据
 	err = repo.tryLockCloud(repo.DeviceID, context)
@@ -270,6 +312,13 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 
 	// 从文件列表中得到去重后的分块列表
 	uploadChunkIDs := repo.getChunks(uploadFiles)
+	if repo.assetDownloads != nil {
+		for _, file := range uploadFiles {
+			if err = repo.ensureFileChunks(file, context); err != nil {
+				return
+			}
+		}
+	}
 
 	// 这里暂时不计算云端缺失的分块了，因为目前计数云端缺失分块的代价太大
 	//uploadChunkIDs, err = repo.cloud.GetChunks(uploadChunkIDs)
