@@ -63,7 +63,7 @@ type Repo struct {
 	cloud    cloud.Cloud // 云端存储服务
 
 	chunkSource    ChunkSource     // 同步时可选的只读分块来源
-	assetDownloads *assetDownloads // 当前设备的资源下载状态。
+	assetDownloads *assetDownloads // 当前设备的资源下载状态
 }
 
 // SetChunkSource 设置同步时可选的只读分块来源。
