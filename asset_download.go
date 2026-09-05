@@ -18,6 +18,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/restic/chunker"
 	ignore "github.com/sabhiram/go-gitignore"
+	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/filelock"
@@ -25,6 +26,7 @@ import (
 
 var ErrAssetDownloadState = errors.New("invalid asset download state")
 var ErrAssetNotDownloaded = errors.New("asset not downloaded")
+var ErrAssetApplyPending = errors.New("asset sync recovery required")
 
 // CtxAssetDownloadsAllowed 可由调用方显式禁止本次操作访问远端资源分块。
 const CtxAssetDownloadsAllowed = "assetDownloadsAllowed"
@@ -67,6 +69,7 @@ type assetDownloadState struct {
 	Scope    string                  `json:"scope"`
 	Deferred map[string]*entity.File `json:"deferred"`
 	Pending  *assetApply             `json:"pending,omitempty"`
+	Recovery *assetRecovery          `json:"recovery,omitempty"`
 }
 
 // assetApply 在修改工作空间前保存目标和前置版本，恢复时保留额外的本地修改。
@@ -137,7 +140,7 @@ func (repo *Repo) ConfigureAssetDownloads(onDemand bool, statePath, scope string
 			return ErrAssetDownloadState
 		}
 		if state.Scope != scope {
-			if len(state.Deferred) != 0 || state.Pending != nil {
+			if len(state.Deferred) != 0 || state.Pending != nil || state.Recovery != nil {
 				return fmt.Errorf("%w: repository changed", ErrAssetDownloadState)
 			}
 			files, filesErr := repo.snapshotFiles()
@@ -180,7 +183,7 @@ func (repo *Repo) ConfigureAssetDownloads(onDemand bool, statePath, scope string
 	if err = gulu.File.WriteFileSafer(repo.assetStateMarker(), []byte("1"), 0600); err != nil {
 		return err
 	}
-	return repo.recoverAssetApply(nil)
+	return nil
 }
 
 // ReadAssetDownloadScope 只读认证后的来源身份，供离线本地操作保持原仓库绑定。
@@ -259,6 +262,12 @@ func ReadDeferredAssets(statePath string, aesKey []byte) ([]*entity.File, error)
 func (repo *Repo) HasIncompleteSnapshots() (bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err := repo.checkAssetState(); err != nil {
+		return false, err
+	}
+	if repo.assetDownloads != nil && repo.assetDownloads.state.Recovery != nil {
+		return false, ErrAssetApplyPending
+	}
 	files, err := repo.snapshotFiles()
 	if err != nil {
 		return false, err
@@ -271,6 +280,8 @@ func (repo *Repo) HasIncompleteSnapshots() (bool, error) {
 func (repo *Repo) EnsureAllSnapshotChunks(context map[string]interface{}) error {
 	lock.Lock()
 	defer lock.Unlock()
+	context, report := repo.assetTrafficContext(context)
+	defer report()
 	if err := repo.checkAssetState(); err != nil {
 		return err
 	}
@@ -298,6 +309,9 @@ func (repo *Repo) ClearAssetDownloadState() error {
 	}
 	if len(repo.assetDownloads.state.Deferred) != 0 {
 		return ErrAssetNotDownloaded
+	}
+	if repo.assetDownloads.state.Recovery != nil {
+		return ErrAssetApplyPending
 	}
 	files, err := repo.snapshotFiles()
 	if err != nil {
@@ -372,6 +386,16 @@ func (repo *Repo) saveAssetState() error {
 }
 
 func (repo *Repo) checkAssetState() error {
+	if err := repo.reloadAssetState(); err != nil {
+		return err
+	}
+	if repo.assetDownloads != nil && repo.assetDownloads.state.Pending != nil {
+		return ErrAssetApplyPending
+	}
+	return nil
+}
+
+func (repo *Repo) reloadAssetState() error {
 	if repo.assetDownloads != nil {
 		data, err := readAssetStateFile(repo.assetDownloads.path)
 		if err != nil || len(data) < 28 {
@@ -387,9 +411,6 @@ func (repo *Repo) checkAssetState() error {
 			return ErrAssetDownloadState
 		}
 		repo.assetDownloads.state = state
-		if repo.assetDownloads.state.Pending != nil {
-			return repo.recoverAssetApply(nil)
-		}
 		return nil
 	}
 	if _, err := os.Stat(repo.assetStateMarker()); errors.Is(err, os.ErrNotExist) {
@@ -439,7 +460,15 @@ func (repo *Repo) ensureFileChunks(file *entity.File, context map[string]interfa
 		if repo.cloud == nil {
 			return ErrAssetNotDownloaded
 		}
-		if _, err = repo.downloadCloudChunksPut(missing, context); err != nil {
+		stat, downloadErr := repo.downloadCloudChunksPut(missing, context)
+		traffic := &cloud.Traffic{DownloadBytes: stat.CloudBytes, APIGet: stat.CloudCount}
+		if total, ok := context[assetTrafficContextKey].(*cloud.Traffic); ok {
+			total.DownloadBytes += traffic.DownloadBytes
+			total.APIGet += traffic.APIGet
+		} else if traffic.APIGet != 0 {
+			go repo.cloud.AddTraffic(traffic)
+		}
+		if err = downloadErr; err != nil {
 			return err
 		}
 	}
@@ -504,10 +533,29 @@ func (repo *Repo) ensureAsset(p string, context map[string]interface{}) (bool, e
 func (repo *Repo) EnsureAllAssets(context map[string]interface{}) error {
 	lock.Lock()
 	defer lock.Unlock()
+	context, report := repo.assetTrafficContext(context)
+	defer report()
 	if err := repo.checkAssetState(); err != nil {
 		return err
 	}
 	return repo.ensureAllAssets(context)
+}
+
+const assetTrafficContextKey = "assetDownloadTraffic"
+
+// assetTrafficContext 合并批量补齐的云端流量，局域网和本地缓存不计入云端流量
+func (repo *Repo) assetTrafficContext(context map[string]interface{}) (map[string]interface{}, func()) {
+	ret := make(map[string]interface{}, len(context)+1)
+	for key, value := range context {
+		ret[key] = value
+	}
+	traffic := &cloud.Traffic{}
+	ret[assetTrafficContextKey] = traffic
+	return ret, func() {
+		if traffic.APIGet != 0 {
+			go repo.cloud.AddTraffic(traffic)
+		}
+	}
 }
 
 // NeedsAssetDownloadsForIndex 检查新忽略规则是否需要从远端补齐资源，不发起网络请求。
@@ -802,6 +850,9 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		if !validAssetFile(f) || (pending.Before[f.Path] != nil && !validAssetFile(pending.Before[f.Path])) {
 			return ErrAssetDownloadState
 		}
+	}
+	if err := repo.recordAssetRecovery(pending); err != nil {
+		return err
 	}
 	var localChangeErr error
 	for _, f := range pending.Upserts {

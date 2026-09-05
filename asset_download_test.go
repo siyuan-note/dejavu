@@ -57,6 +57,13 @@ func syncAssetTestRepo(t *testing.T, repo *Repo) {
 	if _, _, err := repo.Sync(nil); err != nil {
 		t.Fatal(err)
 	}
+	id, _, err := repo.AssetDownloadChanges()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.AcknowledgeAssetDownloadChanges(id); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assetTestFile(t *testing.T, repo *Repo, p string) *entity.File {
@@ -326,7 +333,10 @@ func TestAssetDownloadsRecoverApply(t *testing.T) {
 			if stage == "local-edited" {
 				writeAssetTestFile(t, partial, "/document.txt", "additional local edit", 42)
 			}
-			err = partial.ConfigureAssetDownloads(true, partial.assetDownloads.path, "test-scope")
+			if err = partial.ConfigureAssetDownloads(true, partial.assetDownloads.path, "test-scope"); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = partial.RecoverAssetDownloads(nil)
 			if stage == "local-edited" {
 				if !errors.Is(err, ErrIndexFileChanged) {
 					t.Fatalf("local edit lost during recovery: %v", err)

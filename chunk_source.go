@@ -40,6 +40,7 @@ type ObjectSource interface {
 }
 
 type chunkDownloadStat struct {
+	CloudCount        int
 	CloudBytes        int64
 	PeerBytes         int64
 	PeerCount         int

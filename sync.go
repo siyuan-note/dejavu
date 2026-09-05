@@ -1023,6 +1023,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 	peerSemaphore := make(chan struct{}, peerConcurrentReqs)
 	count := atomic.Int32{}
 	cloudBytes := atomic.Int64{}
+	cloudCount := atomic.Int32{}
 	peerBytes := atomic.Int64{}
 	peerCount := atomic.Int32{}
 	peerFallbackCount := atomic.Int32{}
@@ -1056,6 +1057,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 		}
 		if nil == chunk {
 			cloudSemaphore <- struct{}{}
+			cloudCount.Add(1)
 			length, chunk, dccErr = repo.downloadCloudChunk(chunkID, int(count.Load()), total, context)
 			<-cloudSemaphore
 			if nil == dccErr {
@@ -1098,6 +1100,7 @@ func (repo *Repo) downloadCloudChunksPut(chunkIDs []string, context map[string]i
 		return
 	}
 	stat.CloudBytes = cloudBytes.Load()
+	stat.CloudCount = int(cloudCount.Load())
 	stat.PeerBytes = peerBytes.Load()
 	stat.PeerCount = int(peerCount.Load())
 	stat.PeerFallbackCount = int(peerFallbackCount.Load())
