@@ -1518,7 +1518,7 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 	filelock.Lock(absPath)
 	defer filelock.Unlock(absPath)
 	if len(before) != 0 {
-		if matches, matchErr := repo.matchesAssetFile(file); matchErr != nil {
+		if matches, matchErr := repo.alignMatchingFileTime(file); matchErr != nil {
 			return matchErr
 		} else if matches {
 			return nil

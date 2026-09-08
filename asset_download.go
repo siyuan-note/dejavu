@@ -512,8 +512,16 @@ func (repo *Repo) ensureAsset(p string, context map[string]interface{}) (bool, e
 		return false, err
 	}
 	if _, err := os.Stat(repo.absPath(p)); err == nil {
-		matches, matchErr := repo.matchesAssetFile(f)
-		if matchErr != nil || !matches {
+		matches, matchErr := func() (bool, error) {
+			abs := repo.absPath(p)
+			filelock.Lock(abs)
+			defer filelock.Unlock(abs)
+			return repo.alignMatchingFileTime(f)
+		}()
+		if matchErr != nil {
+			return false, matchErr
+		}
+		if !matches {
 			return false, fmt.Errorf("%w: local resource changed: %s", ErrIndexFileChanged, p)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -856,7 +864,12 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 	}
 	var localChangeErr error
 	for _, f := range pending.Upserts {
-		matches, err := repo.matchesAssetFile(f)
+		matches, err := func() (bool, error) {
+			abs := repo.absPath(f.Path)
+			filelock.Lock(abs)
+			defer filelock.Unlock(abs)
+			return repo.alignMatchingFileTime(f)
+		}()
 		if err != nil {
 			return err
 		}
@@ -915,6 +928,16 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		return err
 	}
 	return localChangeErr
+}
+
+// alignMatchingFileTime 在持有文件锁时对齐相同内容的修改时间，使磁盘文件与目标索引版本一致。
+func (repo *Repo) alignMatchingFileTime(expected *entity.File) (bool, error) {
+	matches, err := repo.matchesAssetFile(expected)
+	if err != nil || !matches {
+		return matches, err
+	}
+	updated := time.UnixMilli(expected.Updated)
+	return true, os.Chtimes(repo.absPath(expected.Path), updated, updated)
 }
 
 func (repo *Repo) checkAssetBefore(p string, expected *entity.File) error {
