@@ -1457,28 +1457,30 @@ func (repo *Repo) updateCloudCheckIndex(checkIndex *entity.CheckIndex, context m
 func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]interface{}) (downloadBytes, uploadBytes int64, err error) {
 	eventbus.Publish(eventbus.EvtCloudBeforeUploadIndexes, context)
 
-	data, err := repo.cloud.DownloadObject("indexes-v2.json")
+	indexes := &cloud.Indexes{}
+	downloadBytes, err = repo.downloadCloudIndexData("indexes-v2.json", func(data []byte) error {
+		var parsed *cloud.Indexes
+		if parseErr := gulu.JSON.UnmarshalJSON(data, &parsed); nil != parseErr {
+			return parseErr
+		}
+		if nil == parsed {
+			return errors.New("invalid cloud indexes list")
+		}
+		for _, index := range parsed.Indexes {
+			if nil == index {
+				return errors.New("invalid cloud indexes entry")
+			}
+		}
+		indexes = parsed
+		return nil
+	})
 	if nil != err {
 		if !errors.Is(err, cloud.ErrCloudObjectNotFound) {
 			return
 		}
 		err = nil
 	}
-	downloadBytes = int64(len(data))
-
-	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
-	if nil != err {
-		logging.LogErrorf("decompress cloud indexes-v2.json failed: %s", err)
-		return
-	}
-
-	indexes := &cloud.Indexes{}
-	if 0 < len(data) {
-		if err = gulu.JSON.UnmarshalJSON(data, &indexes); nil != err {
-			logging.LogWarnf("unmarshal cloud indexes-v2.json failed: %s", err)
-			return
-		}
-
+	if 0 < len(indexes.Indexes) {
 		// Deduplication when uploading cloud snapshot indexes https://github.com/siyuan-note/siyuan/issues/8424
 		found := false
 		tmp := &cloud.Indexes{}
@@ -1507,7 +1509,8 @@ func (repo *Repo) updateCloudIndexesV2(latest *entity.Index, context map[string]
 			SystemOS:   latest.SystemOS,
 		},
 	}, indexes.Indexes...)
-	if data, err = gulu.JSON.MarshalIndentJSON(indexes, "", "\t"); nil != err {
+	data, err := gulu.JSON.MarshalIndentJSON(indexes, "", "\t")
+	if nil != err {
 		logging.LogErrorf("marshal cloud indexes-v2.json failed: %s", err)
 		return
 	}
@@ -1988,15 +1991,20 @@ func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) 
 	index = &entity.Index{}
 
 	key := path.Join("indexes", id)
-	data, err := repo.downloadCloudObject(key)
+	downloadBytes, err = repo.downloadCloudIndexData(key, func(data []byte) error {
+		parsed := &entity.Index{}
+		if parseErr := gulu.JSON.UnmarshalJSON(data, parsed); nil != parseErr {
+			return parseErr
+		}
+		if parsed.ID != id {
+			return errors.New("cloud index ID mismatch")
+		}
+		index = parsed
+		return nil
+	})
 	if nil != err {
 		return
 	}
-	err = gulu.JSON.UnmarshalJSON(data, index)
-	if nil != err {
-		return
-	}
-	downloadBytes += int64(len(data))
 
 	if !index.VerifyAESKey(repo.store.AesKey) {
 		err = cloud.ErrDecryptFailed

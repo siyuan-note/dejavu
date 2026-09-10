@@ -100,26 +100,26 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 		err = repo.lockCloud0(currentDeviceID)
 		return
 	}
-
-	content := map[string]interface{}{}
-	err = gulu.JSON.UnmarshalJSON(data, &content)
 	if nil != err {
-		logging.LogErrorf("unmarshal lock sync failed: %s", err)
-		err = repo.cloud.RemoveObject(lockSyncKey)
-		if nil != err {
-			logging.LogErrorf("remove unmarshalled lock sync failed: %s", err)
-		} else {
-			err = repo.lockCloud0(currentDeviceID)
-		}
-
-		if ok, retErr := parseErr(err); ok {
-			return retErr
-		}
 		return
 	}
 
-	deviceID := content["deviceID"].(string)
-	t := int64(content["time"].(float64))
+	content := struct {
+		DeviceID string `json:"deviceID"`
+		Time     *int64 `json:"time"`
+	}{}
+	err = gulu.JSON.UnmarshalJSON(data, &content)
+	if nil != err {
+		logging.LogErrorf("unmarshal lock sync failed: %s", err)
+		return
+	}
+	// 无法确认锁的持有者和时间时保留云端原件，避免覆盖其他设备的锁。
+	if "" == content.DeviceID || nil == content.Time || 0 >= *content.Time {
+		return errors.New("invalid cloud sync lock")
+	}
+
+	deviceID := content.DeviceID
+	t := *content.Time
 	now := time.Now()
 	lockTime := time.UnixMilli(t)
 	if now.After(lockTime.Add(65*time.Second)) || deviceID == currentDeviceID {
@@ -128,7 +128,7 @@ func (repo *Repo) lockCloud(currentDeviceID string, context map[string]interface
 		return
 	}
 
-	logging.LogWarnf("cloud repo is locked by device [%s] at [%s], will retry after 30s", content["deviceID"].(string), lockTime.Format("2006-01-02 15:04:05"))
+	logging.LogWarnf("cloud repo is locked by device [%s] at [%s], will retry after 30s", deviceID, lockTime.Format("2006-01-02 15:04:05"))
 	err = ErrCloudLocked
 	return
 }
