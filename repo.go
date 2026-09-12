@@ -1176,12 +1176,6 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	}
 	ret.Count = len(ret.Files)
 
-	err = repo.store.PutIndex(ret)
-	if nil != err {
-		logging.LogErrorf("put index failed: %s", err)
-		return
-	}
-
 	err = repo.UpdateLatest(ret)
 	if nil != err {
 		logging.LogErrorf("update latest failed: %s", err)

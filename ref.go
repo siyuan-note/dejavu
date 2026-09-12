@@ -17,13 +17,16 @@
 package dejavu
 
 import (
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/88250/go-humanize"
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
@@ -45,7 +48,27 @@ func (repo *Repo) Latest() (ret *entity.Index, err error) {
 		return
 	}
 	hash := string(data)
+	// 引用必须包含完整的十六进制索引 ID，校验通过后才读取索引或尝试云端恢复。
+	if len(hash) != 40 {
+		return nil, fmt.Errorf("%w: invalid latest index ID length [%d] in [%s]", ErrRepoFatal, len(hash), latest)
+	}
+	if _, err = hex.DecodeString(hash); err != nil {
+		return nil, fmt.Errorf("%w: invalid latest index ID in [%s]: %v", ErrRepoFatal, latest, err)
+	}
 	ret, err = repo.store.GetIndex(hash)
+	if errors.Is(err, os.ErrNotExist) {
+		// 引用存在时只恢复其指向的索引，避免将已有仓库当作首次创建。
+		if repo.cloud == nil {
+			return nil, fmt.Errorf("%w: missing latest index [%s]: %v", ErrRepoFatal, hash, err)
+		}
+		_, ret, err = repo.downloadCloudIndex(hash, nil)
+		if errors.Is(err, cloud.ErrCloudObjectNotFound) {
+			return nil, fmt.Errorf("%w: missing latest index [%s]: %v", ErrRepoFatal, hash, err)
+		}
+		if err == nil {
+			err = repo.store.PutIndex(ret)
+		}
+	}
 	if nil != err {
 		logging.LogErrorf("get latest index [%s] failed: %s", hash, err)
 		return
@@ -63,6 +86,11 @@ type FullIndex struct {
 
 func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
 	start := time.Now()
+
+	// 先保存索引，再发布引用，避免中断后引用指向尚未落盘的索引。
+	if err = repo.store.PutIndex(index); err != nil {
+		return
+	}
 
 	refs := filepath.Join(repo.Path, "refs")
 	err = os.MkdirAll(refs, 0755)

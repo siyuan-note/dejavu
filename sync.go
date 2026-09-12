@@ -213,11 +213,11 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 	mergeResult, trafficStat, err = repo.sync(context)
 	if e, ok := err.(*os.PathError); ok && isNoSuchFileOrDirErr(err) {
 		p := e.Path
-		if !strings.Contains(p, "objects") {
+		if !strings.Contains(p, "objects") && !strings.Contains(p, "indexes") {
 			return
 		}
 
-		// 索引时正常，但是上传时可能因为外部变更导致对象（文件或者分块）不存在，此时需要告知用户数据仓库已经损坏，需要重置数据仓库
+		// 同步时索引或对象（文件、分块）缺失，需要告知用户数据仓库已经损坏。
 		logging.LogErrorf("sync failed: %s", err)
 		err = ErrRepoFatal
 	}
@@ -772,11 +772,6 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 		logging.LogErrorf("update latest failed: %s", err)
 		return
 	}
-	if err = repo.store.PutIndex(latest); nil != err {
-		logging.LogErrorf("put index failed: %s", err)
-		return
-	}
-
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest)
 	if nil != err {
