@@ -933,42 +933,10 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	if _, err = repo.materializeIgnoredAssets(ignoreMatcher, context); err != nil {
 		return
 	}
-	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
-	start := time.Now()
-	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
-		if nil != err {
-			if isNoSuchFileOrDirErr(err) {
-				// An error `Failed to create data snapshot` is occasionally reported during automatic data sync https://github.com/siyuan-note/siyuan/issues/8998
-				logging.LogInfof("ignore not exist err [%s]", err)
-				return nil
-			}
-			logging.LogErrorf("walk data failed: %s", err)
-			return err
-		}
-
-		info, err := d.Info()
-		if nil != err {
-			logging.LogErrorf("walk data failed: %s", err)
-			return err
-		}
-		if ignored, ignoreErr := repo.builtInIgnore(info, path); ignored || nil != ignoreErr {
-			return ignoreErr
-		}
-
-		p := repo.relPath(path)
-		if ignoreMatcher.MatchesPath(p) {
-			return nil
-		}
-
-		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
-		eventbus.Publish(eventbus.EvtIndexWalkData, context, p)
-		return nil
-	})
-	if nil != err {
-		logging.LogErrorf("walk data failed: %s", err)
+	files, err = repo.walkSnapshotFiles(context)
+	if err != nil {
 		return
 	}
-	logging.LogInfof("walk data [files=%d] cost [%s]", len(files), time.Since(start))
 	if files, err = repo.appendDeferredAssets(files); err != nil {
 		return
 	}
@@ -1012,7 +980,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 		var workerErrs []error
 		workerErrLock := sync.Mutex{}
 		if !init {
-			start = time.Now()
+			start := time.Now()
 			count := atomic.Int32{}
 			total := len(files)
 			eventbus.Publish(eventbus.EvtIndexBeforeGetLatestFiles, context, total)
@@ -1592,4 +1560,45 @@ func (repo *Repo) isCloudSiYuan() bool {
 	default:
 		return false
 	}
+}
+
+func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*entity.File, err error) {
+	ignoreMatcher := repo.ignoreMatcher()
+	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
+	start := time.Now()
+	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
+		if nil != err {
+			if isNoSuchFileOrDirErr(err) {
+				// 扫描期间消失的文件由下一次索引处理。
+				logging.LogInfof("ignore not exist err [%s]", err)
+				return nil
+			}
+			logging.LogErrorf("walk data failed: %s", err)
+			return err
+		}
+
+		info, err := d.Info()
+		if nil != err {
+			logging.LogErrorf("walk data failed: %s", err)
+			return err
+		}
+		if ignored, ignoreErr := repo.builtInIgnore(info, path); ignored || nil != ignoreErr {
+			return ignoreErr
+		}
+
+		p := repo.relPath(path)
+		if ignoreMatcher.MatchesPath(p) {
+			return nil
+		}
+
+		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
+		eventbus.Publish(eventbus.EvtIndexWalkData, context, p)
+		return nil
+	})
+	if nil != err {
+		logging.LogErrorf("walk data failed: %s", err)
+		return
+	}
+	logging.LogInfof("walk data [files=%d] cost [%s]", len(files), time.Since(start))
+	return
 }
