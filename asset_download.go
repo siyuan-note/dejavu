@@ -700,7 +700,7 @@ func (repo *Repo) materializeIgnoredAssets(matcher *ignore.GitIgnore, context ma
 
 func (repo *Repo) cloudAssetIgnoreMatcher(files []*entity.File, context map[string]interface{}) (*ignore.GitIgnore, error) {
 	for _, file := range files {
-		if file.Path != "/.siyuan/syncignore" {
+		if file.Path != repo.ignoreRulePath {
 			continue
 		}
 		if err := repo.ensureFileChunks(file, context); err != nil {

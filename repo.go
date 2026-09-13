@@ -49,14 +49,16 @@ import (
 
 // Repo 描述了逮虾户数据仓库。
 type Repo struct {
-	DataPath    string   // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
-	Path        string   // 仓库的绝对路径，如：F:\\SiYuan\\repo\\
-	HistoryPath string   // 数据历史文件夹的绝对路径，如：F:\\SiYuan\\history\\
-	TempPath    string   // 临时文件夹的绝对路径，如：F:\\SiYuan\\temp\\
-	DeviceID    string   // 设备 ID
-	DeviceName  string   // 设备名称
-	DeviceOS    string   // 操作系统
-	IgnoreLines []string // 忽略配置文件内容行，是用 .gitignore 语法
+	DataPath       string   // 数据文件夹的绝对路径，如：F:\\SiYuan\\data\\
+	Path           string   // 仓库的绝对路径，如：F:\\SiYuan\\repo\\
+	HistoryPath    string   // 数据历史文件夹的绝对路径，如：F:\\SiYuan\\history\\
+	TempPath       string   // 临时文件夹的绝对路径，如：F:\\SiYuan\\temp\\
+	DeviceID       string   // 设备 ID
+	DeviceName     string   // 设备名称
+	DeviceOS       string   // 操作系统
+	IgnoreLines    []string // 忽略配置文件内容行，是用 .gitignore 语法
+	ignoreRulePath string
+	pathFilter     func(os.FileInfo, string) (bool, error)
 
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
@@ -98,6 +100,7 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName, de
 	}
 	ignoreLines = gulu.Str.RemoveDuplicatedElem(ignoreLines)
 	ret.IgnoreLines = ignoreLines
+	ret.ignoreRulePath = "/.siyuan/syncignore"
 	ret.store, err = NewStore(ret.Path, aesKey)
 	return
 }
@@ -1154,6 +1157,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 }
 
 func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool, err error) {
+	if repo.pathFilter != nil {
+		return repo.pathFilter(info, absPath)
+	}
 	name := info.Name()
 	if info.IsDir() {
 		if strings.HasPrefix(name, ".") {

@@ -19,8 +19,11 @@ func newAssetTestRepo(t *testing.T, base, remote, device string, onDemand bool) 
 	repoPath := filepath.Join(dir, "repo")
 	backend := cloud.NewLocal(&cloud.BaseCloud{Conf: &cloud.Conf{Dir: "main", RepoPath: repoPath,
 		AvailableSize: 1024 * 1024 * 1024, Local: &cloud.ConfLocal{Endpoint: remote}}})
-	repo, err := NewRepo(filepath.Join(dir, "data"), repoPath, filepath.Join(dir, "history"), filepath.Join(dir, "temp"),
-		device, device, "windows", []byte("0123456789abcdef0123456789abcdef"), nil, backend)
+	repo, err := NewRepoWithOptions(Options{
+		DataPath: filepath.Join(dir, "data"), RepoPath: repoPath, HistoryPath: filepath.Join(dir, "history"), TempPath: filepath.Join(dir, "temp"),
+		DeviceID: device, DeviceName: device, DeviceOS: "windows", AESKey: []byte("0123456789abcdef0123456789abcdef"), Cloud: backend,
+		IgnoreRulePath: ".siyuan/syncignore",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
