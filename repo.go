@@ -1510,7 +1510,8 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 		break
 	}
 	if nil != err {
-		logging.LogFatalf(logging.ExitCodeFileSysErr, "write file [%s] failed: %s", absPath, err)
+		logging.LogErrorf("write file [%s] failed: %s", absPath, err)
+		return
 	}
 
 	updated := time.UnixMilli(file.Updated)
