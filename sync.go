@@ -55,6 +55,7 @@ type MergeResult struct {
 	Upserts, Removes, Conflicts []*entity.File
 	ConflictDetails             []*ConflictDetail
 	HistoryPaths                []string // 已生成同步历史的文件路径
+	MergedPaths                 []string // 已完成结构化三方合并的文件路径
 
 	UpsertPetals []string // storage/petal/petals.json 中变更的插件，在思源中计算并填充
 	RemovePetals []string // storage/petal/petals.json 中删除的插件，在思源中计算并填充
@@ -104,7 +105,7 @@ func (mr *MergeResult) HasHistory() bool {
 }
 
 func (mr *MergeResult) DataChanged() bool {
-	return len(mr.Upserts) > 0 || len(mr.Removes) > 0 || 0 < mr.ConflictCount()
+	return len(mr.Upserts) > 0 || len(mr.Removes) > 0 || 0 < mr.ConflictCount() || 0 < len(mr.MergedPaths)
 }
 
 type DownloadTrafficStat struct {
@@ -425,6 +426,13 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 			repo.ignoreLocalUpsert(versions.Local, versions.Base, nowStr, context) {
 			// 本地仅变更了折叠属性，使用云端内容进行合并
 			decision = syncFileDecision{Winner: syncFileWinnerCloud, HistoryFile: versions.Local}
+		}
+		if ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType &&
+			repo.mergeStructuredSyncFile(versions.Base, versions.Local, versions.Cloud, nowStr, context) {
+			// 两端修改了同一 .sy 文档的不同块，已按块完成三方合并并写入数据目录：
+			// 本地作为胜出方发布合并结果，云端版本照旧进入同步历史兜底
+			decision = syncFileDecision{Winner: syncFileWinnerLocal, HistoryFile: versions.Cloud, PublishLocal: true}
+			mergeResult.MergedPaths = append(mergeResult.MergedPaths, versions.Path)
 		}
 		resolvedDecision := resolveTmpSyncFile(versions, decision)
 		if decision.Winner != resolvedDecision.Winner {

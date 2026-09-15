@@ -176,5 +176,23 @@
       {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 1}},
       {"client": "b", "op": "assert", "path": "new.txt", "content": "from a\n"}
     ]
+  },
+  {
+    "name": "sync download same content but different timestamp merges without conflict",
+    "seed": {
+      "doc.txt": "base\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a same content"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "same\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b same content different timestamp"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 0, "conflictCopies": 0}}
+    ],
+    "final": {
+      "b": {"files": {"doc.txt": "same\n"}}
+    }
   }
 ]
