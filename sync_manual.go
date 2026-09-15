@@ -141,9 +141,51 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
 
-	// 计算云端最新相比本地最新的 upsert 和 remove 差异
-	// 在单向同步的情况下该结果可直接作为合并结果
-	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
+	// 按 git pull 的语义合并：以上次同步点为基准，云端有的变更拉下来，本地独有的变更保留，两端都改的才算冲突（冲突以云端为准）。
+	// 只有内容相同、仅元数据不同的文件按云端元数据还原，保证两端索引收敛。
+	now := mergeResult.Time.Format("2006-01-02-150405")
+	versionsList := classifySyncFileVersions(latestSyncFiles, latestFiles, cloudLatestFiles)
+	for _, versions := range versionsList {
+		base, local, cloudFile := versions.Base, versions.Local, versions.Cloud
+		localContentChanged := versions.LocalDelta.contentChanged()
+		cloudContentChanged := versions.CloudDelta.contentChanged()
+		switch {
+		case nil == cloudFile:
+			if nil == local || nil == base {
+				continue // 两端都没有，或者是本地新建的文件：保留
+			}
+			// 云端删除了上次同步点存在的文件
+			mergeResult.Removes = append(mergeResult.Removes, local)
+			if localContentChanged {
+				mergeResult.Conflicts = append(mergeResult.Conflicts, local)
+				logging.LogInfof("sync download conflict [%s, %s, %s]", local.ID, local.Path, time.UnixMilli(local.Updated).Format("2006-01-02 15:04:05"))
+			}
+		case nil == local:
+			if nil == base || cloudContentChanged {
+				mergeResult.Upserts = append(mergeResult.Upserts, cloudFile) // 云端新建，或者云端更新了本地已删除的文件：还原云端版本
+			}
+			// 本地删除且云端未变：保留本地删除
+		case equalFileContent(local, cloudFile):
+			if !equalFile(local, cloudFile) {
+				mergeResult.Upserts = append(mergeResult.Upserts, cloudFile) // 内容相同仅时间戳不同：按云端元数据还原，不算冲突
+			}
+		case localContentChanged && !cloudContentChanged:
+			// 本地修改了云端没动过的文件：保留本地修改
+		case !localContentChanged:
+			mergeResult.Upserts = append(mergeResult.Upserts, cloudFile)
+		default:
+			// 两端都修改了同一个文件
+			if merged := repo.mergeStructuredSyncFile(base, local, cloudFile, now, context); nil != merged {
+				mergeResult.Upserts = append(mergeResult.Upserts, merged)
+				mergeResult.MergedPaths = append(mergeResult.MergedPaths, local.Path)
+				logging.LogInfof("sync download structured merge [%s, %s]", merged.ID, merged.Path)
+				continue
+			}
+			mergeResult.Upserts = append(mergeResult.Upserts, cloudFile)
+			mergeResult.Conflicts = append(mergeResult.Conflicts, local)
+			logging.LogInfof("sync download conflict [%s, %s, %s]", local.ID, local.Path, time.UnixMilli(local.Updated).Format("2006-01-02 15:04:05"))
+		}
+	}
 	var ignoredAssets map[string]bool
 	if repo.usesAssetDownloads() {
 		matcher, matcherErr := repo.cloudAssetIgnoreMatcher(cloudLatestFiles, context)
@@ -165,55 +207,6 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 			}
 		}
 		mergeResult.Removes = removes
-	}
-
-	// 计算冲突的 upsert
-	// 冲突的文件以云端 upsert 和 remove 为准
-	mergeUpsertsByID := map[string]bool{}
-	mergeUpsertsByPath := map[string]bool{}
-	for _, upsert := range mergeResult.Upserts {
-		mergeUpsertsByID[upsert.ID] = true
-		mergeUpsertsByPath[upsert.Path] = true
-	}
-	mergeRemovesByID := map[string]bool{}
-	mergeRemovesByPath := map[string]bool{}
-	for _, remove := range mergeResult.Removes {
-		mergeRemovesByID[remove.ID] = true
-		mergeRemovesByPath[remove.Path] = true
-	}
-	cloudLatestByPath := filesByPath(cloudLatestFiles)
-	latestSyncByPath := filesByPath(latestSyncFiles)
-	now := mergeResult.Time.Format("2006-01-02-150405")
-	mergedUpsertPaths := map[string]bool{}
-	for _, localUpsert := range localUpserts {
-		if !mergeUpsertsByID[localUpsert.ID] && !mergeUpsertsByPath[localUpsert.Path] &&
-			!mergeRemovesByID[localUpsert.ID] && !mergeRemovesByPath[localUpsert.Path] {
-			continue
-		}
-
-		cloudFile := cloudLatestByPath[localUpsert.Path]
-		if nil != cloudFile && equalFileContent(localUpsert, cloudFile) {
-			// 内容相同仅时间戳不同，视为已收敛，按云端元数据还原即可，不算冲突
-			continue
-		}
-		if nil != cloudFile && repo.mergeStructuredSyncFile(latestSyncByPath[localUpsert.Path], localUpsert, cloudFile, now, context) {
-			// 两端修改了同一 .sy 文档的不同块，已按块合并并写入数据目录，不再用云端版本覆盖
-			mergedUpsertPaths[localUpsert.Path] = true
-			mergeResult.MergedPaths = append(mergeResult.MergedPaths, localUpsert.Path)
-			continue
-		}
-
-		mergeResult.Conflicts = append(mergeResult.Conflicts, localUpsert)
-		logging.LogInfof("sync download conflict [%s, %s, %s]", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"))
-	}
-	if 0 < len(mergedUpsertPaths) {
-		var upserts []*entity.File
-		for _, upsert := range mergeResult.Upserts {
-			if !mergedUpsertPaths[upsert.Path] {
-				upserts = append(upserts, upsert)
-			}
-		}
-		mergeResult.Upserts = upserts
 	}
 
 	// 冲突文件复制到数据历史文件夹
@@ -248,7 +241,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	if repo.usesAssetDownloads() {
 		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
 		if err == nil {
-			err = repo.keepCloudSyncPointAfterMerge(mergeResult, cloudLatest)
+			err = repo.keepCloudSyncPoint(mergeResult, cloudLatest)
 		}
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: trafficStat.DownloadBytes, APIGet: trafficStat.APIGet})
@@ -268,7 +261,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		logging.LogErrorf("merge sync failed: %s", err)
 		return
 	}
-	if err = repo.keepCloudSyncPointAfterMerge(mergeResult, cloudLatest); nil != err {
+	if err = repo.keepCloudSyncPoint(mergeResult, cloudLatest); nil != err {
 		return
 	}
 
@@ -283,10 +276,10 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	return
 }
 
-// keepCloudSyncPointAfterMerge 在仅下载同步中发生结构化合并后，把同步点保持在云端索引上：
-// 合并结果尚未上传，下次同步必须把它作为本地变更上传，而不是当作已同步内容被云端版本覆盖。
-func (repo *Repo) keepCloudSyncPointAfterMerge(mergeResult *MergeResult, cloudLatest *entity.Index) (err error) {
-	if 1 > len(mergeResult.MergedPaths) || nil == cloudLatest || "" == cloudLatest.ID {
+// keepCloudSyncPoint 在仅下载同步后把同步点保持在云端索引上：
+// 保留下来的本地变更和结构化合并结果都还没有上传，下次同步必须把它们作为本地变更上传，而不是当作已同步内容被云端版本覆盖。
+func (repo *Repo) keepCloudSyncPoint(mergeResult *MergeResult, cloudLatest *entity.Index) (err error) {
+	if nil == cloudLatest || "" == cloudLatest.ID {
 		return
 	}
 	if err = repo.store.PutIndex(cloudLatest); nil != err {

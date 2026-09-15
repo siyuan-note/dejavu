@@ -427,12 +427,15 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 			// 本地仅变更了折叠属性，使用云端内容进行合并
 			decision = syncFileDecision{Winner: syncFileWinnerCloud, HistoryFile: versions.Local}
 		}
-		if ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType &&
-			repo.mergeStructuredSyncFile(versions.Base, versions.Local, versions.Cloud, nowStr, context) {
-			// 两端修改了同一 .sy 文档的不同块，已按块完成三方合并并写入数据目录：
-			// 本地作为胜出方发布合并结果，云端版本照旧进入同步历史兜底
-			decision = syncFileDecision{Winner: syncFileWinnerLocal, HistoryFile: versions.Cloud, PublishLocal: true}
-			mergeResult.MergedPaths = append(mergeResult.MergedPaths, versions.Path)
+		if ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType {
+			if merged := repo.mergeStructuredSyncFile(versions.Base, versions.Local, versions.Cloud, nowStr, context); nil != merged {
+				// 两端修改了同一 .sy 文档的不同块，已按块完成三方合并并写入数据目录：
+				// 合并结果作为 upsert 对外暴露（内核据此重新加载文档），本地作为胜出方把它发布到云端，云端版本照旧进入同步历史兜底
+				decision = syncFileDecision{Winner: syncFileWinnerLocal, HistoryFile: versions.Cloud, PublishLocal: true}
+				mergeResult.Upserts = append(mergeResult.Upserts, merged)
+				mergeResult.MergedPaths = append(mergeResult.MergedPaths, versions.Path)
+				logging.LogInfof("sync merge structured [%s, %s]", merged.ID, merged.Path)
+			}
 		}
 		resolvedDecision := resolveTmpSyncFile(versions, decision)
 		if decision.Winner != resolvedDecision.Winner {
