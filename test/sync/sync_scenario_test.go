@@ -74,6 +74,8 @@ type syncScenarioExpectation struct {
 	ConflictCopies *int                  `json:"conflictCopies"`
 	ConflictPaths  []string              `json:"conflictPaths"`
 	HistoryPaths   []string              `json:"historyPaths"`
+	Merged         int                   `json:"merged"`
+	MergedPaths    []string              `json:"mergedPaths"`
 }
 
 type syncScenarioFinal map[string]syncScenarioClientState
@@ -253,7 +255,15 @@ func runSyncScenarioStep(t *testing.T, client *syncScenarioClient, stepNum int, 
 			client.assertMergeResult(result, *step.Want)
 		}
 	case "assert":
-		client.assertFile(step.Path, step.Content)
+		content := step.Content
+		if step.Source != "" {
+			data, err := os.ReadFile(syncScenarioFixturePath(client.env.t, client.env.caseBaseDir, step.Source))
+			if err != nil {
+				client.env.t.Fatalf("[%s] read assert source [%s] failed: %s", client.name, step.Source, err)
+			}
+			content = string(data)
+		}
+		client.assertFile(step.Path, content)
 	case "assert_history":
 		client.assertHistoryFile(step.Path, step.Content)
 	case "assert_missing":
@@ -517,6 +527,11 @@ func (client *syncScenarioClient) assertMergeResult(mergeResult *dejavu.MergeRes
 		}
 	}
 	client.assertPaths("conflict", mergeResult.ConflictPaths(), want.ConflictPaths)
+	if len(mergeResult.MergedPaths) != want.Merged {
+		client.env.t.Fatalf("[%s] expected merged=%d, got %d (%v)", client.name, want.Merged,
+			len(mergeResult.MergedPaths), mergeResult.MergedPaths)
+	}
+	client.assertPaths("merged", mergeResult.MergedPaths, want.MergedPaths)
 	client.assertPaths("history", mergeResult.HistoryPaths, want.HistoryPaths)
 }
 

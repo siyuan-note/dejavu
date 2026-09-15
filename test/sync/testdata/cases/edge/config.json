@@ -153,5 +153,23 @@
       {"client": "a", "op": "assert_cloud_latest"},
       {"client": "a", "op": "assert", "path": "doc.txt", "content": "base\n"}
     ]
+  },
+  {
+    "name": "sync download keeps file conflict for plain text files with mergeable edits",
+    "seed": {
+      "doc.txt": "first\nsecond\n"
+    },
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.txt", "content": "first\n\nsecond\n", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a changes document structure"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.txt", "content": "first\nsecond changed\n", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits document content"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 1, "merged": 0}}
+    ],
+    "final": {
+      "b": {"files": {"doc.txt": "first\n\nsecond\n"}}
+    }
   }
 ]
