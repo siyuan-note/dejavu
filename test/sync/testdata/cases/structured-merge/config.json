@@ -1,0 +1,105 @@
+[
+  {
+    "name": "sync merges independent block edits of the same document",
+    "seedDir": "seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "cloud.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a inserts a block and edits the third block"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the second block"},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0, "merged": 1, "mergedPaths": ["/doc.sy"], "historyPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "merged.sy"},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "doc.sy", "source": "merged.sy"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}}
+    ],
+    "final": {
+      "a": {"sources": {"doc.sy": "merged.sy"}},
+      "b": {"sources": {"doc.sy": "merged.sy"}}
+    }
+  },
+  {
+    "name": "sync download merges independent block edits and uploads the merge on next sync",
+    "seedDir": "seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "cloud.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a inserts a block and edits the third block"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the second block"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 0, "merged": 1, "mergedPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "merged.sy"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "doc.sy", "source": "merged.sy"}
+    ],
+    "final": {
+      "a": {"sources": {"doc.sy": "merged.sy"}},
+      "b": {"sources": {"doc.sy": "merged.sy"}}
+    }
+  },
+  {
+    "name": "sync keeps file conflict when both sides edit the same block",
+    "seedDir": "seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "cloud-same-block.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edits the second block"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the second block differently"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "merged": 0, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "local.sy"}
+    ]
+  },
+  {
+    "name": "sync download keeps file conflict when both sides edit the same block",
+    "seedDir": "seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "cloud-same-block.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edits the second block"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the second block differently"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 1, "merged": 0}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "cloud-same-block.sy"}
+    ]
+  },
+  {
+    "name": "sync merges tabs and table cell edits of a spec 3 document",
+    "seedDir": "rich/seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "rich/cloud.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edits table cells and the trailing paragraph"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "rich/local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the first tab and switches the active tab"},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0, "merged": 1, "mergedPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "rich/merged.sy"},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "doc.sy", "source": "rich/merged.sy"}
+    ]
+  },
+  {
+    "name": "sync download merges tabs and table cell edits of a spec 3 document",
+    "seedDir": "rich/seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "rich/cloud.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edits table cells and the trailing paragraph"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "rich/local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the first tab and switches the active tab"},
+      {"client": "b", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 0, "merged": 1, "mergedPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "rich/merged.sy"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "doc.sy", "source": "rich/merged.sy"}
+    ]
+  }
+]

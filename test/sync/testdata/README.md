@@ -12,8 +12,8 @@ Current grading:
 
 - `basic`: core sync behavior that should remain stable.
 - `edge`: current edge behavior and multi-client convergence scenarios.
-- `known-conflicts`: current conflict-producing behavior that is expected today. When a fix changes the behavior, update the expectation and move the case to `basic` or `edge`.
-- `sync-download`: manual download-only sync behavior, which uses a different code path from `sync`.
+- `structured-merge`: block-level three-way merge of `.sy` documents. Fixtures live next to the case file and are referenced through `seedDir` and `source`.
+- `sync-download`: manual download-only sync behavior, which uses a different code path from `sync`. It follows `git pull` semantics: remote changes are applied, local-only changes are kept for the next sync, and only files changed on both sides are merged or reported as conflicts (remote wins).
 
 Each `config.json` or top-level `*.json` file can contain one case object or an
 array of case objects.
@@ -68,17 +68,17 @@ last sync point.
 - `assert_cached`: verifies that a repeated prefetch does not download any cloud file objects.
 - `sync_prepared`: runs cloud sync with the cloud preflight already completed. Optional `want` asserts merge result counts.
 - `sync_download`: runs download-only cloud sync. Optional `want` asserts merge result counts.
-- `assert`: checks that `path` has exact `content`.
+- `assert`: checks that `path` has exact `content`. If `source` is set, the expected content is read from a fixture file relative to the case directory.
 - `assert_history`: checks that exactly one sync history file at `path` has exact `content`.
 - `assert_missing`: checks that `path` does not exist.
 
 `want` supports:
 
 ```json
-{"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1, "conflictPaths": ["/doc.txt"], "historyPaths": ["/doc.txt"]}
+{"upserts": 0, "removes": 0, "conflicts": 1, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictCopies": 1, "conflictPaths": ["/doc.txt"], "historyPaths": ["/doc.txt"], "merged": 0, "mergedPaths": []}
 ```
 
-`conflictTypes`, `winners`, `conflictCopies`, `conflictPaths`, and `historyPaths` are optional structured assertions.
+`conflictTypes`, `winners`, `conflictCopies`, `conflictPaths`, `historyPaths`, and `mergedPaths` are optional structured assertions. `merged` counts files that were merged block by block instead of being reported as conflicts.
 
 `final` supports:
 
