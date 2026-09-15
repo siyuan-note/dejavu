@@ -13,7 +13,7 @@ Current grading:
 - `basic`: core sync behavior that should remain stable.
 - `edge`: current edge behavior and multi-client convergence scenarios.
 - `structured-merge`: block-level three-way merge of `.sy` documents. Fixtures live next to the case file and are referenced through `seedDir` and `source`.
-- `sync-download`: manual download-only sync behavior, which uses a different code path from `sync`.
+- `sync-download`: manual download-only sync behavior, which uses a different code path from `sync`. It follows `git pull` semantics: remote changes are applied, local-only changes are kept for the next sync, and only files changed on both sides are merged or reported as conflicts (remote wins).
 
 Each `config.json` or top-level `*.json` file can contain one case object or an
 array of case objects.

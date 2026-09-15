@@ -19,8 +19,10 @@ package dejavu
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -47,19 +49,35 @@ import (
 // syNodeSignatureIgnoredAttrs 是计算块签名时忽略的属性：只反映编辑时间或运行态，不代表内容变化。
 var syNodeSignatureIgnoredAttrs = []string{"updated", "refcount", "av-names"}
 
+// syMaxSupportedSpec 是本模块能够无损处理的最高 .sy 格式版本（SY-FORMAT.md：普通文档为 2，含页签的文档为 3）。
+// 更高版本可能包含当前 lute 不认识的节点，宽容解析会丢掉它们的子节点，因此不做合并。
+const syMaxSupportedSpec = 3
+
+var (
+	errSyUnsupportedSpec  = errors.New("unsupported .sy spec")
+	errSyUnknownNodeType  = errors.New("unknown .sy node type")
+	errSyLossyRoundTrip   = errors.New(".sy document does not round-trip losslessly")
+	errSyNotDocument      = errors.New("not a .sy document")
+	errSyDuplicateBlockID = errors.New("duplicate block id")
+)
+
 // mergeSyDocuments 对同一 .sy 文档的上次同步版本、本地版本和云端版本做结构化三方合并。
-// 返回 ok=false 表示存在无法自动合并的修改，调用方应回退到文件级冲突处理；err 仅表示解析或渲染失败。
+// 返回 ok=false 表示存在无法自动合并的修改，调用方应回退到文件级冲突处理；err 表示格式不受支持、解析或渲染失败。
 func mergeSyDocuments(base, local, cloud []byte, luteEngine *lute.Lute) (merged []byte, ok bool, err error) {
-	baseTree, err := dataparser.ParseJSONWithoutFix(base, luteEngine.ParseOptions)
+	baseTree, err := parseSyDocument(base, luteEngine)
 	if nil != err {
 		return
 	}
-	localTree, err := dataparser.ParseJSONWithoutFix(local, luteEngine.ParseOptions)
+	localTree, err := parseSyDocument(local, luteEngine)
 	if nil != err {
 		return
 	}
-	cloudTree, err := dataparser.ParseJSONWithoutFix(cloud, luteEngine.ParseOptions)
+	cloudTree, err := parseSyDocument(cloud, luteEngine)
 	if nil != err {
+		return
+	}
+
+	if !syBlockMovesMergeable(baseTree.Root, localTree.Root, cloudTree.Root) {
 		return
 	}
 
@@ -67,24 +85,170 @@ func mergeSyDocuments(base, local, cloud []byte, luteEngine *lute.Lute) (merged 
 	if !ok {
 		return
 	}
-
-	// 和思源内核落盘 .sy 的方式保持一致：JSON 渲染后按制表符缩进
-	tree := &parse.Tree{Name: localTree.Name, ID: mergedRoot.ID, Root: mergedRoot, Context: &parse.Context{ParseOption: luteEngine.ParseOptions}}
-	renderer := render.NewJSONRenderer(tree, luteEngine.RenderOptions, luteEngine.ParseOptions)
-	data := renderer.Render()
-	buf := bytes.Buffer{}
-	if err = json.Indent(&buf, data, "", "\t"); nil != err {
+	if !syBlockIDsUnique(mergedRoot) {
+		// 两端把同一个块移动到了不同的容器里，序列合并会各保留一份，无法判断应留哪份
 		ok = false
 		return
 	}
-	merged = buf.Bytes()
+
+	tree := &parse.Tree{Name: localTree.Name, ID: mergedRoot.ID, Root: mergedRoot, Context: &parse.Context{ParseOption: luteEngine.ParseOptions}}
+	merged, err = renderSyDocument(tree, luteEngine)
+	if nil != err {
+		ok = false
+		return
+	}
 
 	// 回读校验合并结果，避免把无法解析的文档写回数据目录
-	if _, err = dataparser.ParseJSONWithoutFix(merged, luteEngine.ParseOptions); nil != err {
+	mergedTree, err := dataparser.ParseJSONWithoutFix(merged, luteEngine.ParseOptions)
+	if nil != err || !syBlockIDsUnique(mergedTree.Root) {
+		if nil == err {
+			err = errSyDuplicateBlockID
+		}
 		merged, ok = nil, false
 		return
 	}
 	return
+}
+
+// parseSyDocument 按 SY-FORMAT.md 的兼容边界解析 .sy 文档：先检查原始 JSON 的格式版本，再要求整棵树能被无损地重新渲染。
+// 任何一条不满足都不做合并，避免宽容解析静默丢掉未知节点或字段。
+func parseSyDocument(data []byte, luteEngine *lute.Lute) (tree *parse.Tree, err error) {
+	var raw map[string]interface{}
+	if err = json.Unmarshal(data, &raw); nil != err {
+		return
+	}
+	if typ, _ := raw["Type"].(string); ast.NodeDocument.String() != typ {
+		err = errSyNotDocument
+		return
+	}
+	if spec, _ := raw["Spec"].(string); "" != spec {
+		specNum, convErr := strconv.Atoi(spec)
+		if nil != convErr || syMaxSupportedSpec < specNum {
+			err = errSyUnsupportedSpec
+			return
+		}
+	}
+
+	if tree, err = dataparser.ParseJSONWithoutFix(data, luteEngine.ParseOptions); nil != err {
+		return
+	}
+	unknown := false
+	ast.Walk(tree.Root, func(n *ast.Node, entering bool) ast.WalkStatus {
+		if entering && -1 == n.Type {
+			unknown = true
+			return ast.WalkStop
+		}
+		return ast.WalkContinue
+	})
+	if unknown {
+		err = errSyUnknownNodeType
+		return
+	}
+
+	rendered, err := renderSyDocument(tree, luteEngine)
+	if nil != err {
+		return
+	}
+	if !syJSONEquivalent(data, rendered) {
+		err = errSyLossyRoundTrip
+		return
+	}
+	// 渲染会重排节点链接（去掉块级 IAL 节点），重新解析一份干净的树用于合并
+	tree, err = dataparser.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
+	return
+}
+
+// renderSyDocument 和思源内核落盘 .sy 的方式保持一致：JSON 渲染后按制表符缩进。
+func renderSyDocument(tree *parse.Tree, luteEngine *lute.Lute) (data []byte, err error) {
+	renderer := render.NewJSONRenderer(tree, luteEngine.RenderOptions, luteEngine.ParseOptions)
+	rendered := renderer.Render()
+	buf := bytes.Buffer{}
+	if err = json.Indent(&buf, rendered, "", "\t"); nil != err {
+		return
+	}
+	data = buf.Bytes()
+	return
+}
+
+// syJSONEquivalent 判断两份 .sy JSON 在语义上是否一致：忽略格式和键顺序，忽略渲染时固定剔除的运行态属性。
+func syJSONEquivalent(left, right []byte) bool {
+	var l, r interface{}
+	if nil != json.Unmarshal(left, &l) || nil != json.Unmarshal(right, &r) {
+		return false
+	}
+	syStripRuntimeAttrs(l)
+	syStripRuntimeAttrs(r)
+	return reflect.DeepEqual(l, r)
+}
+
+func syStripRuntimeAttrs(v interface{}) {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		if props, isMap := t["Properties"].(map[string]interface{}); isMap {
+			delete(props, "refcount")
+			delete(props, "av-names")
+			if 0 == len(props) {
+				delete(t, "Properties")
+			}
+		}
+		for _, child := range t {
+			syStripRuntimeAttrs(child)
+		}
+	case []interface{}:
+		for _, child := range t {
+			syStripRuntimeAttrs(child)
+		}
+	}
+}
+
+// syBlockParents 返回文档里每个块 ID 所属父块的 ID。
+func syBlockParents(root *ast.Node) map[string]string {
+	ret := map[string]string{}
+	ast.Walk(root, func(n *ast.Node, entering bool) ast.WalkStatus {
+		if !entering || "" == n.ID || nil == n.Parent || ast.NodeDocument == n.Type {
+			return ast.WalkContinue
+		}
+		ret[n.ID] = n.Parent.ID
+		return ast.WalkContinue
+	})
+	return ret
+}
+
+// syBlockMovesMergeable 检查块在容器之间的移动是否可以自动合并：
+// 一端移动了某个块，另一端要么没动它，要么移动到了同一个地方；另一端删除或移到别处都视为冲突。
+func syBlockMovesMergeable(base, local, cloud *ast.Node) bool {
+	baseParents, localParents, cloudParents := syBlockParents(base), syBlockParents(local), syBlockParents(cloud)
+	for id, baseParent := range baseParents {
+		localParent, inLocal := localParents[id]
+		cloudParent, inCloud := cloudParents[id]
+		localMoved := inLocal && localParent != baseParent
+		cloudMoved := inCloud && cloudParent != baseParent
+		if localMoved && (!inCloud || (cloudMoved && cloudParent != localParent)) {
+			return false
+		}
+		if cloudMoved && (!inLocal || (localMoved && localParent != cloudParent)) {
+			return false
+		}
+	}
+	return true
+}
+
+// syBlockIDsUnique 检查整棵树里的块 ID 是否唯一。
+func syBlockIDsUnique(root *ast.Node) bool {
+	seen := map[string]bool{}
+	unique := true
+	ast.Walk(root, func(n *ast.Node, entering bool) ast.WalkStatus {
+		if !entering || "" == n.ID {
+			return ast.WalkContinue
+		}
+		if seen[n.ID] {
+			unique = false
+			return ast.WalkStop
+		}
+		seen[n.ID] = true
+		return ast.WalkContinue
+	})
+	return unique
 }
 
 // mergeSyNode 合并同一个块的三个版本，local 和 cloud 必须非空，base 为空表示两端各自新增了同一个块。
@@ -150,6 +314,9 @@ func mergeSyChildren(base, local, cloud *ast.Node) (ret []*ast.Node, ok bool) {
 	}
 	kept := make(map[string]bool, len(order))
 	for _, key := range order {
+		if kept[key] {
+			return nil, false // 两端把同一个块插到了不同位置，无法判断应保留哪个位置
+		}
 		kept[key] = true
 	}
 
@@ -372,10 +539,11 @@ func equalStrings(left, right []string) bool {
 }
 
 // mergeStructuredSyncFile 尝试对同一 .sy 文件的本地修改和云端修改做结构化合并。
-// 合并成功时把结果写入数据目录并返回 true，随后的合并索引会把它作为本地变更纳入；失败时返回 false，由调用方按文件级冲突处理。
-func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now string, context map[string]interface{}) bool {
+// 合并成功时把结果写入数据目录并立即入库索引，返回合并后的文件版本：调用方应把它作为 upsert 对外暴露，
+// 这样内核会像处理普通云端更新一样重新加载它，按需下载模式的上传快照也会包含它。失败时返回 nil，由调用方按文件级冲突处理。
+func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now string, context map[string]interface{}) *entity.File {
 	if nil == base || nil == local || nil == cloud || !strings.HasSuffix(local.Path, ".sy") {
-		return false
+		return nil
 	}
 
 	temp := filepath.Join(repo.TempPath, "repo", "sync", "merges", now, strings.TrimPrefix(local.Path, "/"))
@@ -383,33 +551,52 @@ func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now s
 
 	baseData, err := repo.readFileVersion(base, filepath.Join(temp, "base"), context)
 	if nil != err {
-		return false
+		return nil
 	}
 	localData, err := repo.readFileVersion(local, filepath.Join(temp, "local"), context)
 	if nil != err {
-		return false
+		return nil
 	}
 	cloudData, err := repo.readFileVersion(cloud, filepath.Join(temp, "cloud"), context)
 	if nil != err {
-		return false
+		return nil
 	}
 
 	merged, ok, err := mergeSyDocuments(baseData, localData, cloudData, lute.New())
 	if nil != err {
-		logging.LogWarnf("structured merge [%s] failed: %s", local.Path, err)
-		return false
+		logging.LogWarnf("structured merge [%s] skipped: %s", local.Path, err)
+		return nil
 	}
 	if !ok {
 		logging.LogInfof("structured merge [%s] found conflicting block changes, fallback to file conflict", local.Path)
-		return false
+		return nil
 	}
 
-	if err = filelock.WriteFile(repo.absPath(local.Path), merged); nil != err {
+	absPath := repo.absPath(local.Path)
+	if err = filelock.WriteFile(absPath, merged); nil != err {
 		logging.LogErrorf("write structured merge result [%s] failed: %s", local.Path, err)
-		return false
+		return nil
 	}
-	logging.LogInfof("structured merged [%s]", local.Path)
-	return true
+	mergedFile, err := repo.indexDataFile(local.Path, context)
+	if nil != err {
+		logging.LogErrorf("index structured merge result [%s] failed: %s", local.Path, err)
+		return nil
+	}
+	logging.LogInfof("structured merged [%s] -> [%s]", local.Path, mergedFile.ID)
+	return mergedFile
+}
+
+// indexDataFile 把数据目录里的一个文件按当前磁盘状态入库，返回其文件版本。
+func (repo *Repo) indexDataFile(relPath string, context map[string]interface{}) (ret *entity.File, err error) {
+	info, err := os.Stat(repo.absPath(relPath))
+	if nil != err {
+		return
+	}
+	ret = entity.NewFile(relPath, info.Size(), info.ModTime().UnixMilli())
+	if err = repo.putFileChunks(ret, context, 1, 1); nil != err {
+		ret = nil
+	}
+	return
 }
 
 // readFileVersion 把仓库中的某个文件版本检出到临时目录并读取内容。

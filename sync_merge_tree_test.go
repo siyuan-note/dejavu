@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -280,5 +281,114 @@ func TestMergeSyDocumentsInvalidJSON(t *testing.T) {
 	_, ok, err := mergeSyDocuments([]byte("not json"), syDoc(), syDoc(), lute.New())
 	if nil == err || ok {
 		t.Fatalf("expected parse error, got ok=%v err=%v", ok, err)
+	}
+}
+
+const (
+	i3 = "20240101000013-item003"
+	l2 = "20240101000014-list002"
+	l3 = "20240101000015-list003"
+	t1 = "20240101000030-tabs001"
+	a1 = "20240101000031-tabi001"
+	a2 = "20240101000032-tabi002"
+)
+
+func syTabItem(id, title string, blocks ...string) string {
+	return `{"ID":"` + id + `","Type":"NodeTabItem","TabItemTitle":"` + title + `","Properties":{"id":"` + id + `","updated":"20240101000000"},"Children":[` + strings.Join(blocks, ",") + `]}`
+}
+
+func syTabs(id, active string, items ...string) string {
+	return `{"ID":"` + id + `","Type":"NodeTabs","Properties":{"id":"` + id + `","updated":"20240101000000","tabs-active-id":"` + active + `","tabs-position":"top"},"Children":[` + strings.Join(items, ",") + `]}`
+}
+
+func syDocSpec(spec string, blocks ...string) []byte {
+	return []byte(`{"ID":"20240101000000-doc0000","Spec":"` + spec + `","Type":"NodeDocument","Properties":{"id":"20240101000000-doc0000","title":"t","type":"doc","updated":"20240101000000"},"Children":[` + strings.Join(blocks, ",") + `]}`)
+}
+
+func TestMergeSyDocumentsRejectsUnsupportedSpec(t *testing.T) {
+	future := syDocSpec("4", syPara(p1, "first", "20240101000000"))
+	_, ok, err := mergeSyDocuments(future, future, future, lute.New())
+	if !errors.Is(err, errSyUnsupportedSpec) || ok {
+		t.Fatalf("expected unsupported spec error, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestMergeSyDocumentsRejectsUnknownNodeType(t *testing.T) {
+	unknown := syDoc(`{"ID":"` + p1 + `","Type":"NodeFromTheFuture","Properties":{"id":"` + p1 + `","updated":"20240101000000"},"Children":[{"Type":"NodeText","Data":"x"}]}`)
+	_, ok, err := mergeSyDocuments(unknown, unknown, unknown, lute.New())
+	if !errors.Is(err, errSyUnknownNodeType) || ok {
+		t.Fatalf("expected unknown node type error, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestMergeSyDocumentsRejectsLossyRoundTrip(t *testing.T) {
+	// 段落上带了当前版本不认识的字段，重新渲染会丢掉它，这种文档不能自动合并
+	lossy := syDoc(`{"ID":"` + p1 + `","Type":"NodeParagraph","FieldFromTheFuture":1,"Properties":{"id":"` + p1 + `","updated":"20240101000000"},"Children":[{"Type":"NodeText","Data":"x"}]}`)
+	_, ok, err := mergeSyDocuments(lossy, lossy, lossy, lute.New())
+	if !errors.Is(err, errSyLossyRoundTrip) || ok {
+		t.Fatalf("expected lossy round trip error, got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestMergeSyDocumentsToleratesRuntimeAttrs(t *testing.T) {
+	// refcount / av-names 是渲染时固定剔除的运行态属性，不应阻止合并
+	withRuntime := func(text, updated string) string {
+		return `{"ID":"` + p1 + `","Type":"NodeParagraph","Properties":{"id":"` + p1 + `","updated":"` + updated + `","refcount":"2"},"Children":[{"Type":"NodeText","Data":"` + text + `"}]}`
+	}
+	base := syDoc(withRuntime("first", "20240101000000"), syPara(p2, "second", "20240101000000"))
+	local := syDoc(withRuntime("first edited", "20240102000000"), syPara(p2, "second", "20240101000000"))
+	cloud := syDoc(withRuntime("first", "20240101000000"), syPara(p2, "second edited", "20240103000000"))
+	merged := mustMerge(t, base, local, cloud)
+	assertOutline(t, syOutline(t, merged), []string{p1 + ":first edited", p2 + ":second edited"})
+}
+
+func TestMergeSyDocumentsMoveAcrossContainers(t *testing.T) {
+	item := func(id, text string) string {
+		return syListItem(id, syPara(text, "item "+id[len(id)-3:], "20240101000000"))
+	}
+	base := syDoc(syList(l1, item(i1, p2), item(i2, p3)), syList(l2, item(i3, p4)))
+
+	// 只有本地把 i2 从第一个列表移到第二个列表，云端没动：可以合并
+	localMoved := syDoc(syList(l1, item(i1, p2)), syList(l2, item(i3, p4), item(i2, p3)))
+	merged := mustMerge(t, base, localMoved, base)
+	assertOutline(t, syOutline(t, merged), []string{
+		l1 + ":NodeList", i1 + ":NodeListItem", p2 + ":item 001",
+		l2 + ":NodeList", i3 + ":NodeListItem", p4 + ":item 003", i2 + ":NodeListItem", p3 + ":item 002",
+	})
+
+	// 两端把 i2 移到了同一个列表的不同位置：冲突，不能出现两个相同 ID 的块
+	cloudMovedToOtherPosition := syDoc(syList(l1, item(i1, p2)), syList(l2, item(i2, p3), item(i3, p4)))
+	mustConflict(t, base, localMoved, cloudMovedToOtherPosition)
+
+	// 两端把 i2 移到了不同的容器：冲突
+	cloudMovedElsewhere := syDoc(syList(l1, item(i1, p2)), syList(l2, item(i3, p4)), syList(l3, item(i2, p3)))
+	mustConflict(t, base, localMoved, cloudMovedElsewhere)
+
+	// 本地移动、云端删除：冲突
+	cloudDeleted := syDoc(syList(l1, item(i1, p2)), syList(l2, item(i3, p4)))
+	mustConflict(t, base, localMoved, cloudDeleted)
+
+	// 两端移到同一个地方：合并
+	merged = mustMerge(t, base, localMoved, localMoved)
+	assertOutline(t, syOutline(t, merged), []string{
+		l1 + ":NodeList", i1 + ":NodeListItem", p2 + ":item 001",
+		l2 + ":NodeList", i3 + ":NodeListItem", p4 + ":item 003", i2 + ":NodeListItem", p3 + ":item 002",
+	})
+}
+
+func TestMergeSyDocumentsTabs(t *testing.T) {
+	base := syDocSpec("3", syTabs(t1, a1, syTabItem(a1, "One", syPara(p1, "tab one", "20240101000000")), syTabItem(a2, "Two", syPara(p2, "tab two", "20240101000000"))))
+	// 本地改了第一个页签的内容并切换了激活页签（容器属性）
+	local := syDocSpec("3", syTabs(t1, a2, syTabItem(a1, "One", syPara(p1, "tab one edited", "20240102000000")), syTabItem(a2, "Two", syPara(p2, "tab two", "20240101000000"))))
+	// 云端在第二个页签里追加了段落并改了页签标题
+	cloud := syDocSpec("3", syTabs(t1, a1, syTabItem(a1, "One", syPara(p1, "tab one", "20240101000000")), syTabItem(a2, "Two renamed", syPara(p2, "tab two", "20240101000000"), syPara(p3, "more", "20240103000000"))))
+	merged := mustMerge(t, base, local, cloud)
+	assertOutline(t, syOutline(t, merged), []string{
+		t1 + ":NodeTabs", a1 + ":NodeTabItem", p1 + ":tab one edited", a2 + ":NodeTabItem", p2 + ":tab two", p3 + ":more",
+	})
+	for _, want := range []string{`"Spec": "3"`, `"tabs-active-id": "` + a2 + `"`, `"TabItemTitle": "Two renamed"`} {
+		if !strings.Contains(string(merged), want) {
+			t.Fatalf("expected %s in merged doc:\n%s", want, merged)
+		}
 	}
 }
