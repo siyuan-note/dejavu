@@ -180,8 +180,17 @@ func (repo *Repo) GetTag(tag string) (id string, err error) {
 }
 
 func (repo *Repo) AddTag(id, tag string) (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	return repo.addTag(id, tag)
+}
+
+func (repo *Repo) addTag(id, tag string) (err error) {
 	if !gulu.File.IsValidFilename(tag) {
 		return errors.New("invalid tag name")
+	}
+	if err = repo.guardAppearanceTag(tag, false, map[string]interface{}{}); err != nil {
+		return
 	}
 
 	_, err = repo.store.GetIndex(id)
@@ -199,6 +208,11 @@ func (repo *Repo) AddTag(id, tag string) (err error) {
 }
 
 func (repo *Repo) RemoveTag(tag string) (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	if err = repo.guardAppearanceTag(tag, false, map[string]interface{}{}); err != nil {
+		return
+	}
 	tag = filepath.Join(repo.Path, "refs", "tags", tag)
 	if !gulu.File.IsExist(tag) {
 		return

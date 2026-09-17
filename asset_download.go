@@ -64,6 +64,11 @@ type assetDownloads struct {
 	state    assetDownloadState
 }
 
+type assetDownloadConfig struct {
+	path  string
+	scope string
+}
+
 type assetDownloadState struct {
 	Version  int                     `json:"version"`
 	Scope    string                  `json:"scope"`
@@ -123,9 +128,14 @@ func (repo *Repo) assetStateMarker() string {
 func (repo *Repo) ConfigureAssetDownloads(onDemand bool, statePath, scope string) error {
 	lock.Lock()
 	defer lock.Unlock()
+	return repo.configureAssetDownloads(onDemand, statePath, scope)
+}
+
+func (repo *Repo) configureAssetDownloads(onDemand bool, statePath, scope string) error {
 	if statePath == "" || scope == "" {
 		return ErrAssetDownloadState
 	}
+	repo.assetDownloadConfig = &assetDownloadConfig{path: statePath, scope: scope}
 	state := assetDownloadState{Version: 1, Scope: scope, Deferred: map[string]*entity.File{}}
 	data, err := readAssetStateFile(statePath)
 	if err == nil {
@@ -493,6 +503,7 @@ func (repo *Repo) ensureFileChunks(file *entity.File, context map[string]interfa
 func (repo *Repo) EnsureAsset(p string, context map[string]interface{}) (bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
+	defer repo.lockAppearance()()
 	if err := repo.checkAssetState(); err != nil {
 		return false, err
 	}
@@ -500,6 +511,12 @@ func (repo *Repo) EnsureAsset(p string, context map[string]interface{}) (bool, e
 }
 
 func (repo *Repo) ensureAsset(p string, context map[string]interface{}) (bool, error) {
+	if repo.appearanceSyncEnabled && appearancePackageKey(p) != "" && repo.assetDownloads != nil && repo.assetDownloads.state.Deferred[p] != nil {
+		if err := repo.materializeDeferredAppearance(context); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 	p = "/" + strings.TrimPrefix(filepath.ToSlash(p), "/")
 	if !IsAssetDownloadPath(p) || repo.assetDownloads == nil {
 		return false, nil
@@ -541,6 +558,7 @@ func (repo *Repo) ensureAsset(p string, context map[string]interface{}) (bool, e
 func (repo *Repo) EnsureAllAssets(context map[string]interface{}) error {
 	lock.Lock()
 	defer lock.Unlock()
+	defer repo.lockAppearance()()
 	context, report := repo.assetTrafficContext(context)
 	defer report()
 	if err := repo.checkAssetState(); err != nil {
@@ -578,7 +596,7 @@ func (repo *Repo) NeedsAssetDownloadsForIndex() (bool, error) {
 	}
 	matcher := repo.ignoreMatcher()
 	for p, file := range repo.assetDownloads.state.Deferred {
-		if !matcher.MatchesPath(p) {
+		if !matcher.MatchesPath(p) && (!repo.appearanceSyncEnabled || appearancePackageKey(p) == "") {
 			continue
 		}
 		missing, err := repo.localNotFoundChunks(file.Chunks)
@@ -595,6 +613,9 @@ func (repo *Repo) NeedsAssetDownloadsForIndex() (bool, error) {
 func (repo *Repo) ensureAllAssets(context map[string]interface{}) error {
 	if repo.assetDownloads == nil {
 		return nil
+	}
+	if err := repo.materializeDeferredAppearance(context); err != nil {
+		return err
 	}
 	for p := range repo.assetDownloads.state.Deferred {
 		if _, err := repo.ensureAsset(p, context); err != nil {
@@ -613,7 +634,8 @@ func (repo *Repo) usesAssetDownloads() bool {
 }
 
 func (repo *Repo) shouldDeferAsset(file *entity.File) bool {
-	if repo.assetDownloads == nil || !repo.assetDownloads.onDemand || !IsAssetDownloadPath(file.Path) {
+	if repo.assetDownloads == nil || !repo.assetDownloads.onDemand || !IsAssetDownloadPath(file.Path) ||
+		repo.appearanceSyncEnabled && appearancePackageKey(file.Path) != "" {
 		return false
 	}
 	_, err := os.Stat(repo.absPath(file.Path))
@@ -662,6 +684,9 @@ func (repo *Repo) promoteIndexedAssets() error {
 func (repo *Repo) downloadedCloudFiles(files []*entity.File) []*entity.File {
 	var ret []*entity.File
 	for _, f := range files {
+		if repo.appearanceProtocolFileIgnored(f.Path) {
+			continue
+		}
 		if !repo.shouldDeferAsset(f) {
 			ret = append(ret, f)
 		}
@@ -757,6 +782,12 @@ func (repo *Repo) matchesAssetFile(expected *entity.File) (bool, error) {
 
 func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool, latest, cloudLatest *entity.Index,
 	cloudChunks []string, traffic *TrafficStat, context map[string]interface{}, ignoredAssets map[string]bool) error {
+	unlockAppearance := repo.lockAppearance()
+	defer func() {
+		if unlockAppearance != nil {
+			unlockAppearance()
+		}
+	}()
 	files, err := repo.getFiles(latest.Files)
 	if err != nil {
 		return err
@@ -772,6 +803,11 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 	for p := range ignoredAssets {
 		delete(logical, p)
 		localChanged = true
+	}
+	if repo.appearanceSyncEnabled {
+		if _, err = repo.validateAppearancePackages(mapAppearanceFiles(logical), context); err != nil {
+			return err
+		}
 	}
 	target := latest
 	if merge.DataChanged() || len(ignoredAssets) != 0 {
@@ -790,7 +826,7 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 	}
 	pending := &assetApply{Index: target, Base: cloudLatest, Deferred: map[string]*entity.File{}, Before: map[string]*entity.File{}}
 	for p, f := range logical {
-		if repo.shouldDeferAsset(f) || (repo.deferredVersion(f) && !repo.assetDownloads.onDemand) {
+		if repo.shouldDeferAsset(f) || (repo.deferredVersion(f) && !repo.assetDownloads.onDemand && (!repo.appearanceSyncEnabled || appearancePackageKey(p) == "")) {
 			pending.Deferred[p] = f
 		}
 	}
@@ -808,6 +844,42 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 		pending.Removes = append(pending.Removes, f)
 		pending.Before[f.Path] = before[f.Path]
 	}
+	// 旧状态中的外观资源在下一次同步中补齐，不再继续按需延迟。
+	for p, f := range logical {
+		if repo.appearanceSyncEnabled && appearancePackageKey(p) != "" && repo.deferredVersion(f) {
+			pending.Upserts = appendUniqueSyncFile(pending.Upserts, f)
+			pending.Before[p] = before[p]
+		}
+	}
+	applyTarget, applyBefore := logical, before
+	if repo.appearanceSyncEnabled {
+		applyTarget, err = repo.appearanceProjectionFiles(mapAppearanceFiles(logical), context)
+		if err != nil {
+			return err
+		}
+		applyBefore, err = repo.appearanceBeforeProjectionFiles(mapAppearanceFiles(before), context)
+		if err != nil {
+			return err
+		}
+		for p, f := range applyTarget {
+			if !equalFileContent(f, applyBefore[p]) {
+				pending.Upserts = append(pending.Upserts, f)
+				pending.Before[p] = applyBefore[p]
+			}
+		}
+		for p, f := range applyBefore {
+			if applyTarget[p] == nil && !repo.appearanceIgnored(appearancePackageKey(p)) {
+				pending.Removes = append(pending.Removes, f)
+				pending.Before[p] = f
+			}
+		}
+		if err = repo.completeAppearanceApply(pending, applyTarget, applyBefore, context); err != nil {
+			return err
+		}
+		if err = repo.preflightAppearanceApply(pending); err != nil {
+			return err
+		}
+	}
 	if err = repo.store.PutIndex(target); err != nil {
 		return err
 	}
@@ -821,8 +893,22 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 		repo.assetDownloads.state.Pending = nil
 		return err
 	}
-	if err = repo.recoverAssetApply(context); err != nil {
+	unlockAppearance()
+	unlockAppearance = nil
+	if err = repo.recoverAssetApply(context, false); err != nil {
 		return err
+	}
+	if repo.appearanceSyncEnabled {
+		for _, file := range pending.Upserts {
+			if appearancePackageKey(file.Path) != "" {
+				merge.Upserts = appendUniqueSyncFile(merge.Upserts, file)
+			}
+		}
+		for _, file := range pending.Removes {
+			if appearancePackageKey(file.Path) != "" {
+				merge.Removes = appendUniqueSyncFile(merge.Removes, file)
+			}
+		}
 	}
 	if publish && (localChanged || cloudLatest.ID == "") {
 		if err = repo.uploadCloud(context, target, cloudLatest, cloudChunks, traffic); err != nil {
@@ -836,12 +922,12 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 		return err
 	}
 	if !repo.assetDownloads.onDemand {
-		return repo.ensureAllAssets(context)
+		return repo.withAppearanceLock(func() error { return repo.ensureAllAssets(context) })
 	}
 	return nil
 }
 
-func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
+func (repo *Repo) recoverAssetApply(context map[string]interface{}, appearanceLocked ...bool) error {
 	pending := repo.assetDownloads.state.Pending
 	if pending == nil {
 		return nil
@@ -862,8 +948,31 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 	if err := repo.recordAssetRecovery(pending); err != nil {
 		return err
 	}
+	locked := len(appearanceLocked) == 0 || appearanceLocked[0]
+	projection := repo.appearanceSyncEnabled && hasAppearanceProjection(pending)
+	if !projection && pending.Index != nil {
+		marker := entity.NewFile(appearanceFormatPath, int64(len(appearanceFormatData)), appearanceEventModified)
+		for _, id := range pending.Index.Files {
+			if id == marker.ID {
+				projection = hasAppearanceProjection(pending)
+				break
+			}
+		}
+	}
 	var localChangeErr error
 	for _, f := range pending.Upserts {
+		if projection && appearancePackageKey(f.Path) != "" {
+			continue
+		}
+		if projection && repo.beforeAppearanceApply != nil && f.Path == repo.ignoreRulePath {
+			matches, err := repo.matchesManagedAppearanceIgnore(f)
+			if err != nil {
+				return err
+			}
+			if matches {
+				continue
+			}
+		}
 		matches, err := func() (bool, error) {
 			abs := repo.absPath(f.Path)
 			filelock.Lock(abs)
@@ -892,6 +1001,18 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		}
 	}
 	for _, f := range pending.Removes {
+		if projection && appearancePackageKey(f.Path) != "" {
+			continue
+		}
+		if projection && repo.beforeAppearanceApply != nil && f.Path == repo.ignoreRulePath {
+			matches, err := repo.matchesManagedAppearanceIgnore(nil)
+			if err != nil {
+				return err
+			}
+			if matches {
+				continue
+			}
+		}
 		if err := func() error {
 			abs := repo.absPath(f.Path)
 			filelock.Lock(abs)
@@ -911,6 +1032,24 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 			return err
 		}
 	}
+	if projection && localChangeErr != nil {
+		return localChangeErr
+	}
+	if projection && !locked && repo.beforeAppearanceApply != nil {
+		if err := repo.beforeAppearanceApply(); err != nil {
+			return err
+		}
+	}
+	if projection {
+		if err := func() error {
+			if !locked {
+				defer repo.lockAppearance()()
+			}
+			return repo.recoverAppearanceApply(pending, context)
+		}(); err != nil {
+			return err
+		}
+	}
 	if err := repo.UpdateLatest(pending.Index); err != nil {
 		return err
 	}
@@ -926,6 +1065,9 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		repo.assetDownloads.state.Deferred = previous
 		repo.assetDownloads.state.Pending = pending
 		return err
+	}
+	if projection {
+		repo.cleanupAppearanceApply(pending)
 	}
 	return localChangeErr
 }

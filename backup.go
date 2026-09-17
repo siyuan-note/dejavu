@@ -38,6 +38,9 @@ func (repo *Repo) DownloadIndex(id string, context map[string]interface{}) (down
 func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{}) (downloadFileCount, downloadChunkCount int, downloadBytes int64, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.guardAppearanceTag(tag, true, context); err != nil {
+		return
+	}
 
 	downloadFileCount, downloadChunkCount, downloadBytes, err = repo.downloadIndex(id, context)
 	if err != nil {
@@ -45,7 +48,7 @@ func (repo *Repo) DownloadTagIndex(tag, id string, context map[string]interface{
 	}
 
 	// 更新本地标签
-	err = repo.AddTag(id, tag)
+	err = repo.addTag(id, tag)
 	if nil != err {
 		logging.LogErrorf("add tag failed: %s", err)
 		return
@@ -82,6 +85,7 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	downloadBytes += downloadStat.CloudBytes + downloadStat.PeerBytes
 	cloudDownloadBytes += downloadStat.CloudBytes
 	downloadFileCount += len(fetchFileIDs)
+	downloadChunkCount += downloadStat.PrefetchedChunkCount
 	apiGet += len(fetchFileIDs) - downloadStat.PeerCount
 
 	// 从文件列表中得到去重后的分块列表
@@ -107,8 +111,8 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 	}
 	downloadBytes += downloadStat.CloudBytes + downloadStat.PeerBytes
 	cloudDownloadBytes += downloadStat.CloudBytes
-	downloadChunkCount = len(fetchChunkIDs)
-	apiGet += downloadChunkCount - downloadStat.PeerCount
+	downloadChunkCount += len(fetchChunkIDs)
+	apiGet += len(fetchChunkIDs) - downloadStat.PeerCount
 	for _, file := range files {
 		if err = repo.ensureFileChunks(file, context); err != nil {
 			return
@@ -130,6 +134,15 @@ func (repo *Repo) downloadIndex(id string, context map[string]interface{}) (down
 func (repo *Repo) UploadTagIndex(tag, id string, context map[string]interface{}) (uploadFileCount, uploadChunkCount int, uploadBytes int64, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	unlock, lockErr := repo.lockAppearanceCloudTag(tag, context)
+	if lockErr != nil {
+		err = lockErr
+		return
+	}
+	defer unlock()
+	if err = repo.guardAppearanceTag(tag, true, context); err != nil {
+		return
+	}
 
 	uploadFileCount, uploadChunkCount, uploadBytes, err = repo.uploadTagIndex(tag, id, context)
 	if e, ok := err.(*os.PathError); ok && os.IsNotExist(err) {
@@ -278,7 +291,7 @@ func (repo *Repo) uploadTagIndex(tag, id string, context map[string]interface{})
 }
 
 func (repo *Repo) getCloudRepoStat() (repoSize int64, backupCount int, err error) {
-	repoStat, err := repo.cloud.GetStat()
+	repoStat, err := repo.appearanceCloudRepoStat()
 	if nil != err {
 		return
 	}
@@ -289,6 +302,17 @@ func (repo *Repo) getCloudRepoStat() (repoSize int64, backupCount int, err error
 }
 
 func (repo *Repo) RemoveCloudRepoTag(tag string) (err error) {
+	lock.Lock()
+	defer lock.Unlock()
+	context := map[string]interface{}{}
+	unlock, err := repo.lockAppearanceCloudTag(tag, context)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err = repo.guardAppearanceTag(tag, true, context); err != nil {
+		return err
+	}
 	key := path.Join("refs", "tags", tag)
 	return repo.cloud.RemoveObject(key)
 }

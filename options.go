@@ -17,6 +17,12 @@ type Options struct {
 	IgnoreLines                               []string
 	IgnoreRulePath                            string
 	Cloud                                     cloud.Cloud
+	// EnableAppearanceSync 显式启用外观包事件同步；普通仓库保持原有文件格式与行为。
+	EnableAppearanceSync bool
+	// AppearanceIgnoreLines 仅包含用户忽略规则，不包含本地外观投影的自动隔离规则。
+	AppearanceIgnoreLines []string
+	// BeforeAppearanceApply 在普通文件恢复后、外观投影发布前持久化隔离规则，此时未持有外观锁。
+	BeforeAppearanceApply func() error
 	// HiddenDirectoryNames 显式保留应用允许遍历的点前缀目录名称。
 	HiddenDirectoryNames []string
 	// PathFilter 返回是否忽略当前条目，目录剪枝通过 filepath.SkipDir 表示。
@@ -36,6 +42,9 @@ func NewRepoWithOptions(options Options) (*Repo, error) {
 		return nil, err
 	}
 	repo.ignoreRulePath = ""
+	repo.appearanceSyncEnabled = options.EnableAppearanceSync
+	repo.appearanceIgnoreLines = append([]string(nil), options.AppearanceIgnoreLines...)
+	repo.beforeAppearanceApply = options.BeforeAppearanceApply
 	if rulePath != "" {
 		repo.ignoreRulePath = "/" + rulePath
 	}

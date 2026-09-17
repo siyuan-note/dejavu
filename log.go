@@ -70,11 +70,20 @@ func (repo *Repo) GetCloudRepoLogs(page int) (ret []*Log, pageCount, totalCount 
 }
 
 func (repo *Repo) GetCloudRepoTagLogs(context map[string]interface{}) (ret []*Log, err error) {
+	lock.Lock()
+	defer lock.Unlock()
 	cloudTags, err := repo.cloud.GetTags()
 	if nil != err {
 		return
 	}
 	for _, tag := range cloudTags {
+		owned, ownedErr := repo.appearanceTagOwned(tag.Name, true, context)
+		if ownedErr != nil {
+			return nil, ownedErr
+		}
+		if owned {
+			continue
+		}
 		index, _ := repo.store.GetIndex(tag.ID)
 		if nil == index {
 			_, index, err = repo.downloadCloudIndex(tag.ID, context)
@@ -97,6 +106,8 @@ func (repo *Repo) GetCloudRepoTagLogs(context map[string]interface{}) (ret []*Lo
 }
 
 func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
+	lock.Lock()
+	defer lock.Unlock()
 	tags := filepath.Join(repo.Path, "refs", "tags")
 	if !gulu.File.IsExist(tags) {
 		return
@@ -112,6 +123,13 @@ func (repo *Repo) GetTagLogs() (ret []*Log, err error) {
 		}
 		var data []byte
 		name := entry.Name()
+		owned, ownedErr := repo.appearanceTagOwned(name, false, map[string]interface{}{})
+		if ownedErr != nil {
+			return nil, ownedErr
+		}
+		if owned {
+			continue
+		}
 		data, err = filelock.ReadFile(filepath.Join(tags, name))
 		if nil != err {
 			return

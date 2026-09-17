@@ -29,6 +29,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/encryption"
+	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 )
 
@@ -438,6 +439,8 @@ func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 		return errors.New("invalid id")
 	}
 	dir, file := store.AbsPath(chunk.ID)
+	filelock.Lock(file)
+	defer filelock.Unlock(file)
 	if gulu.File.IsExist(file) {
 		return
 	}
@@ -460,6 +463,8 @@ func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 
 func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 	_, file := store.AbsPath(id)
+	filelock.Lock(file)
+	defer filelock.Unlock(file)
 	data, err := os.ReadFile(file)
 	if nil != err {
 		return

@@ -31,7 +31,12 @@ import (
 func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	appearanceIgnoreLines := repo.appearanceIgnoreLines
+	defer func() { repo.appearanceIgnoreLines = appearanceIgnoreLines }()
 	if err = repo.checkAssetState(); err != nil {
+		return
+	}
+	if err = repo.withAppearanceLock(func() error { return repo.materializeDeferredAppearance(context) }); err != nil {
 		return
 	}
 
@@ -64,12 +69,12 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	trafficStat.DownloadBytes += length
 	trafficStat.APIGet++
 
-	if cloudLatest.ID == latest.ID || "" == cloudLatest.ID {
+	if !repo.appearanceSyncEnabled && cloudLatest.ID == latest.ID || "" == cloudLatest.ID {
 		// 数据一致或者云端为空，直接返回
 		if repo.assetDownloads != nil && cloudLatest.ID == latest.ID {
 			err = repo.UpdateLatestSync(latest)
 			if err == nil && !repo.assetDownloads.onDemand {
-				err = repo.ensureAllAssets(context)
+				err = repo.withAppearanceLock(func() error { return repo.ensureAllAssets(context) })
 			}
 		}
 		return
@@ -94,11 +99,22 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	trafficStat.PeerDownloadBytes += fileDownloadStat.PeerBytes
 	trafficStat.PeerDownloadFileCount += fileDownloadStat.PeerCount
 	trafficStat.PeerFallbackCount += fileDownloadStat.PeerFallbackCount
+	trafficStat.DownloadChunkCount += fileDownloadStat.PrefetchedChunkCount
+	trafficStat.PeerDownloadChunkCount += fileDownloadStat.PrefetchedChunkCount
 
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
 	if nil != err {
 		logging.LogErrorf("get cloud latest files failed: %s", err)
+		return
+	}
+	if err = repo.prepareAppearanceSyncIgnore(latest, cloudLatestFiles, context, "download"); err != nil {
+		return
+	}
+	appearanceStat, appearanceErr := repo.validateRemoteAppearanceFormat(cloudLatest, cloudLatestFiles, context)
+	addAppearanceTraffic(trafficStat, appearanceStat)
+	if appearanceErr != nil {
+		err = appearanceErr
 		return
 	}
 
@@ -140,12 +156,29 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
+	cloudLatestFiles, appearancePublish, err := repo.mergeAppearanceEventFiles(latestSyncFiles, latestFiles,
+		cloudLatestFiles, mergeResult, trafficStat, context, "download")
+	if err != nil {
+		return nil, trafficStat, err
+	}
+	localChanged = localChanged || appearancePublish
+	if repo.appearanceSyncEnabled {
+		if _, err = repo.validateAppearancePackages(cloudLatestFiles, context); err != nil {
+			return
+		}
+		if _, err = repo.validateAppearancePackages(latestFiles, context); err != nil {
+			return
+		}
+	}
+	if err = repo.ensureAppearanceJournal(append(append([]*entity.File{}, latestFiles...), cloudLatestFiles...)); err != nil {
+		return
+	}
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	// 在单向同步的情况下该结果可直接作为合并结果
 	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
 	var ignoredAssets map[string]bool
-	if repo.usesAssetDownloads() {
+	if repo.usesAssetDownloads() || repo.appearanceJournal {
 		matcher, matcherErr := repo.cloudAssetIgnoreMatcher(cloudLatestFiles, context)
 		if matcherErr != nil {
 			return mergeResult, trafficStat, matcherErr
@@ -154,7 +187,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 			return
 		}
 		for _, file := range latestFiles {
-			if matcher.MatchesPath(file.Path) {
+			if repo.appearanceSyncIgnored(matcher, file.Path) {
 				ignoredAssets[file.Path] = true
 			}
 		}
@@ -188,6 +221,18 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 			logging.LogInfof("sync download conflict [%s, %s, %s]", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
 	}
+	// 外观包的一部分被覆盖时，将整个本地版本保留到同一历史目录。
+	conflictedPackages := map[string]bool{}
+	for _, file := range mergeResult.Conflicts {
+		if key := appearancePackageKey(file.Path); repo.appearanceSyncEnabled && key != "" {
+			conflictedPackages[key] = true
+		}
+	}
+	for _, file := range latestFiles {
+		if conflictedPackages[appearancePackageKey(file.Path)] {
+			mergeResult.Conflicts = appendUniqueSyncFile(mergeResult.Conflicts, file)
+		}
+	}
 
 	// 冲突文件复制到数据历史文件夹
 	if 0 < len(mergeResult.Conflicts) {
@@ -219,7 +264,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 数据变更后还原文件
-	if repo.usesAssetDownloads() {
+	if repo.usesAssetDownloads() || repo.appearanceJournal {
 		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: trafficStat.DownloadBytes, APIGet: trafficStat.APIGet})
@@ -254,6 +299,8 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	appearanceIgnoreLines := repo.appearanceIgnoreLines
+	defer func() { repo.appearanceIgnoreLines = appearanceIgnoreLines }()
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -272,6 +319,15 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 		logging.LogErrorf("get latest failed: %s", err)
 		return
 	}
+	latestFiles, err := repo.getFiles(latest.Files)
+	if err != nil {
+		return
+	}
+	if repo.appearanceSyncEnabled {
+		if _, err = repo.validateAppearancePackages(latestFiles, context); err != nil {
+			return
+		}
+	}
 
 	// 从云端获取最新索引
 	length, cloudLatest, err := repo.downloadCloudLatest(context)
@@ -284,6 +340,10 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += length
 	trafficStat.APIPut++
+	if repo.appearanceSyncEnabled {
+		err = repo.syncAppearanceUpload(latest, cloudLatest, latestFiles, trafficStat, context)
+		return
+	}
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
