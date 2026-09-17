@@ -399,3 +399,29 @@ func TestAppearanceProjectionChangedNewDeletedAndIgnored(t *testing.T) {
 	writeProjectionTestFiles(t, repo, archive)
 	assertProjectionChangedReadOnly(t, repo, false, true)
 }
+
+func TestAppearanceProjectionDirectoryFiltering(t *testing.T) {
+	repo := newAppearanceProjectionTestRepo(t)
+	files := map[string][]byte{
+		"theme.css": []byte("css"), ".siyuan/settings.json": []byte("settings"),
+		"assets/.siyuan/settings.json": []byte("nested settings"), "assets.tmp/font.woff": []byte("font"),
+	}
+	archive := &appearanceArchive{Key: "/themes/custom", Files: files, State: appearanceArchiveTestState(t, files, false)}
+	writeProjectionTestFiles(t, repo, archive)
+	for _, name := range []string{".git/config", ".siyuan/.draft", ".siyuan/cache.tmp", "assets/.private/config"} {
+		writeAssetTestFile(t, repo, archive.Key+"/"+name, "local ignored file", 1)
+	}
+	if _, err := repo.writeAppearanceArchive(archive); err != nil {
+		t.Fatal(err)
+	}
+	projection, err := repo.readAppearanceProjection(archive.Key)
+	if err != nil || !sameAppearanceProjection(archive, projection) {
+		t.Fatalf("package scan changed the supported file set: %+v %v", projection, err)
+	}
+	assertProjectionChangedReadOnly(t, repo, false, false)
+	writeAssetTestFile(t, repo, archive.Key+"/.siyuan/settings.json", "edited settings", 1)
+	assertProjectionChangedReadOnly(t, repo, true, false)
+	if _, err = repo.readAppearanceProjection(archive.Key); err == nil {
+		t.Fatal("unrecorded settings modification was accepted")
+	}
+}

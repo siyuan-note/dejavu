@@ -329,7 +329,7 @@ func (repo *Repo) readAppearanceProjection(key string) (*appearanceArchive, erro
 		if infoErr != nil {
 			return infoErr
 		}
-		if ignoredAppearanceRelative(rel) {
+		if ignoredAppearanceRelative(rel, entry.IsDir()) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}

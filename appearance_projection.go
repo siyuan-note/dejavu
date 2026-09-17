@@ -310,7 +310,7 @@ func (repo *Repo) readAppearanceProjectionForCheck(key string) (*appearanceArchi
 			return relErr
 		}
 		relative = filepath.ToSlash(relative)
-		if relative != "." && ignoredAppearanceRelative(relative) {
+		if relative != "." && ignoredAppearanceRelative(relative, entry.IsDir()) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}

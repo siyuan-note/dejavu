@@ -165,7 +165,7 @@ func (repo *Repo) validateAppearancePackage(pkg *appearancePackage, context map[
 	for relative, digest := range record.Files {
 		if relative == "" || relative == "." || strings.HasPrefix(relative, "/") ||
 			path.Clean(relative) != relative || strings.HasPrefix(relative, "../") ||
-			strings.ContainsAny(relative, "\\:\x00") || ignoredAppearanceRelative(relative) ||
+			strings.ContainsAny(relative, "\\:\x00") || ignoredAppearanceRelative(relative, false) ||
 			len(digest) != 64 || strings.ToLower(digest) != digest {
 			return fmt.Errorf("invalid appearance package file: %s/%s", pkg.Key, relative)
 		}

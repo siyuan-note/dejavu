@@ -482,7 +482,7 @@ func (repo *Repo) checkAppearanceDirectory(directory, key string, target, before
 		p := key + "/" + filepath.ToSlash(relative)
 		seen[p] = true
 		if entry.Type()&os.ModeSymlink != 0 {
-			if before[p] == nil && target[p] == nil && (matcher.MatchesPath(p) || ignoredAppearanceRelative(relative)) {
+			if before[p] == nil && target[p] == nil && (matcher.MatchesPath(p) || ignoredAppearanceRelative(relative, false)) {
 				return nil
 			}
 			return fmt.Errorf("appearance package contains symlink: %s", abs)
@@ -518,7 +518,7 @@ func (repo *Repo) checkAppearanceDirectory(directory, key string, target, before
 			if ignoreErr != nil {
 				return ignoreErr
 			}
-			if matcher.MatchesPath(p) || ignoredAppearanceRelative(relative) || ignored {
+			if matcher.MatchesPath(p) || ignoredAppearanceRelative(relative, false) || ignored {
 				return nil
 			}
 		}
@@ -544,14 +544,14 @@ func (repo *Repo) checkAppearanceDirectory(directory, key string, target, before
 	return nil
 }
 
-func ignoredAppearanceRelative(relative string) bool {
+func ignoredAppearanceRelative(relative string, isDir bool) bool {
 	parts := strings.Split(filepath.ToSlash(relative), "/")
 	for i, part := range parts {
-		if strings.HasPrefix(part, ".") && !(part == ".siyuan" && i < len(parts)-1) {
+		if strings.HasPrefix(part, ".") && !(part == ".siyuan" && (isDir || i < len(parts)-1)) {
 			return true
 		}
 	}
-	return strings.HasSuffix(relative, ".tmp")
+	return !isDir && strings.HasSuffix(relative, ".tmp")
 }
 
 func (repo *Repo) matchesAppearanceFile(abs string, expected *entity.File) (bool, error) {

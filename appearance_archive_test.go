@@ -158,7 +158,7 @@ func TestAppearanceArchiveKeySafety(t *testing.T) {
 }
 
 func TestAppearanceArchivePayloadSafety(t *testing.T) {
-	for _, name := range []string{"../outside", "/absolute", "a/../../outside", "a\\b", "a:b", "a//b", "a/./b", "dir/", ".git/config", "private.tmp", "CON.txt", "NUL", "COM².txt", "name.", "name ", "a/PRN/file", "a\x00b"} {
+	for _, name := range []string{"../outside", "/absolute", "a/../../outside", "a\\b", "a:b", "a//b", "a/./b", "dir/", ".git/config", ".siyuan", "nested/.siyuan", ".siyuan/.draft", ".siyuan/private.tmp", "private.tmp", "CON.txt", "NUL", "COM².txt", "name.", "name ", "a/PRN/file", "a\x00b"} {
 		t.Run(name, func(t *testing.T) {
 			files := map[string][]byte{name: []byte("data")}
 			archive := &appearanceArchive{Key: "/themes/custom", State: appearanceArchiveTestState(t, files, false), Files: files}

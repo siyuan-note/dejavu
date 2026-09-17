@@ -216,7 +216,7 @@ func validAppearanceArchiveKey(key string) bool {
 }
 
 func validAppearanceArchiveRelative(relative string) bool {
-	if relative == "" || strings.HasPrefix(relative, "/") || path.Clean(relative) != relative || ignoredAppearanceRelative(relative) {
+	if relative == "" || strings.HasPrefix(relative, "/") || path.Clean(relative) != relative || ignoredAppearanceRelative(relative, false) {
 		return false
 	}
 	for _, component := range strings.Split(relative, "/") {
