@@ -1307,7 +1307,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		if err = repo.verifyAppearanceFileIdentity(file); err != nil {
 			return
 		}
-		err = repo.store.PutFile(file)
+		err = repo.putIndexedFile(file)
 		if nil != err {
 			return
 		}
@@ -1372,7 +1372,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	if err = repo.verifyAppearanceFileIdentity(file); err != nil {
 		return
 	}
-	err = repo.store.PutFile(file)
+	err = repo.putIndexedFile(file)
 	return
 }
 
