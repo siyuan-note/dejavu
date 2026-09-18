@@ -126,12 +126,12 @@ func TestIndexReusedTimestampPreservesConcurrentEdit(t *testing.T) {
 	}
 }
 
-func TestAppearanceSyncReusedPluginTimestamp(t *testing.T) {
+func TestSyncReusedPluginTimestamp(t *testing.T) {
 	base := t.TempDir()
 	remote := filepath.Join(base, "cloud")
-	repo := newAppearanceSyncTestRepo(t, base, remote, "first", false)
+	repo := newAssetTestRepo(t, base, remote, "first", false)
 	p := "/plugins/example/plugin.json"
-	writeAppearanceTestPackage(t, repo, "/themes/example", map[string]string{"theme.json": "{}", "theme.css": "body {}"}, 1, false)
+	writeAssetTestFile(t, repo, "/themes/example/theme.css", "body {}", 1)
 	const zipTime = int64(315532800 - 1700000000)
 	writeAssetTestFile(t, repo, p, "first package", zipTime)
 	syncAssetTestRepo(t, repo)
@@ -139,7 +139,7 @@ func TestAppearanceSyncReusedPluginTimestamp(t *testing.T) {
 	syncAssetTestRepo(t, repo)
 	writeAssetTestFile(t, repo, p, "later package", zipTime)
 	syncAssetTestRepo(t, repo)
-	other := newAppearanceSyncTestRepo(t, base, remote, "second", false)
+	other := newAssetTestRepo(t, base, remote, "second", false)
 	syncAssetTestRepo(t, other)
 	data, err := os.ReadFile(other.absPath(p))
 	if err != nil || string(data) != "later package" {

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/siyuan-note/dejavu/entity"
@@ -27,10 +26,6 @@ func (repo *Repo) putIndexedFile(file *entity.File) error {
 	}
 	if equalFileContent(previous, file) {
 		return nil
-	}
-	// 外观协议文件的路径绑定内容，固定时间戳不可用于修复内容不一致。
-	if strings.HasPrefix(file.Path, "/storage/appearance-v1/") {
-		return fmt.Errorf("%w: inconsistent appearance object: %s", ErrRepoFatal, file.Path)
 	}
 	abs := repo.absPath(file.Path)
 	filelock.Lock(abs)

@@ -55,7 +55,7 @@ func (repo *Repo) RecoverAssetDownloads(context map[string]interface{}) (string,
 	}
 	var recoverErr error
 	if repo.assetDownloads != nil {
-		recoverErr = repo.recoverAssetApply(context, false)
+		recoverErr = repo.recoverAssetApply(context)
 	}
 	id, changes, err := repo.assetDownloadChanges()
 	return id, changes, errors.Join(recoverErr, err)

@@ -14,7 +14,6 @@ import (
 func (repo *Repo) IndexWithResult(memo string, checkChunks bool, context map[string]interface{}) (*entity.Index, bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
-	defer repo.lockAppearance()()
 	latest, err := repo.Latest()
 	if err != nil && !errors.Is(err, ErrNotFoundIndex) {
 		return nil, false, err
@@ -26,18 +25,12 @@ func (repo *Repo) IndexWithResult(memo string, checkChunks bool, context map[str
 	return index, latest == nil || latest.ID != index.ID, nil
 }
 
-// CheckSnapshot 只读比较逻辑文件和外观内容，不下载资源、不修复引用，也不写入分块。
+// CheckSnapshot 只比较逻辑文件元数据，不下载资源、不修复引用，也不校验或写入分块。
 func (repo *Repo) CheckSnapshot() (bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
-	defer repo.lockAppearance()()
 	if err := repo.checkAssetState(); err != nil {
 		return false, err
-	}
-	if repo.appearanceSyncEnabled {
-		if changed, err := repo.appearanceProjectionChanged(); changed || err != nil {
-			return changed, err
-		}
 	}
 	files, err := repo.walkSnapshotFiles(nil)
 	if err != nil {

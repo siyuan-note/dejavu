@@ -64,13 +64,8 @@ type Repo struct {
 	chunkPol chunker.Pol // 文件分块多项式值
 	cloud    cloud.Cloud // 云端存储服务
 
-	chunkSource           ChunkSource     // 同步时可选的只读分块来源
-	assetDownloads        *assetDownloads // 当前设备的资源下载状态
-	assetDownloadConfig   *assetDownloadConfig
-	appearanceJournal     bool
-	appearanceSyncEnabled bool
-	appearanceIgnoreLines []string
-	beforeAppearanceApply func() error
+	chunkSource    ChunkSource     // 同步时可选的只读分块来源
+	assetDownloads *assetDownloads // 当前设备的资源下载状态
 }
 
 // SetChunkSource 设置同步时可选的只读分块来源。
@@ -107,14 +102,6 @@ func NewRepo(dataPath, repoPath, historyPath, tempPath, deviceID, deviceName, de
 	ret.IgnoreLines = ignoreLines
 	ret.ignoreRulePath = "/.siyuan/syncignore"
 	ret.store, err = NewStore(ret.Path, aesKey)
-	if err == nil {
-		ret.assetDownloadConfig = &assetDownloadConfig{path: filepath.Join(ret.Path, "appearance-sync-v1"), scope: "appearance:" + ret.DataPath}
-		if _, stateErr := os.Stat(ret.assetDownloadConfig.path); stateErr == nil {
-			err = ret.configureAssetDownloads(false, ret.assetDownloadConfig.path, ret.assetDownloadConfig.scope)
-		} else if !errors.Is(stateErr, os.ErrNotExist) {
-			err = stateErr
-		}
-	}
 	return
 }
 
@@ -441,10 +428,6 @@ var removeEmptyDirExcludes = append(workspaceDataDirs, ".git")
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
 	lock.Lock()
 	defer lock.Unlock()
-	if repo.appearanceSyncEnabled {
-		return repo.checkoutAppearanceSnapshot(id, context)
-	}
-	defer repo.lockAppearance()()
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -494,11 +477,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 			return nil
 		}
 
-		file, fileErr := repo.snapshotFile(path, p, info)
-		if fileErr != nil {
-			return fileErr
-		}
-		files = append(files, file)
+		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
 		eventbus.Publish(eventbus.EvtCheckoutWalkData, context, p)
 		return nil
 	})
@@ -512,10 +491,12 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	if nil != err {
 		return
 	}
+
 	upserts, removes = repo.diffUpsertRemove(latestFiles, files, false)
 	if 1 > len(upserts) && 1 > len(removes) {
 		return
 	}
+
 	err = repo.checkoutFiles(upserts, context)
 	if nil != err {
 		return
@@ -537,7 +518,6 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 func (repo *Repo) Index(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
 	lock.Lock()
 	defer lock.Unlock()
-	defer repo.lockAppearance()()
 
 	ret, err = repo.index(memo, checkChunks, context)
 	return
@@ -951,12 +931,6 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
-	if err = repo.materializeDeferredAppearance(context); err != nil {
-		return
-	}
-	if err = repo.prepareAppearanceEvents(); err != nil {
-		return
-	}
 	var files []*entity.File
 	ignoreMatcher := repo.ignoreMatcher()
 	if _, err = repo.materializeIgnoredAssets(ignoreMatcher, context); err != nil {
@@ -1094,9 +1068,6 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false)
 	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
-		if err = repo.validateIndexedAppearance(latestFiles, context); err != nil {
-			return
-		}
 		err = repo.promoteIndexedAssets()
 		return
 	}
@@ -1175,15 +1146,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 		ret.Size += file.Size
 	}
 	ret.Count = len(ret.Files)
-	if err = repo.validateIndexedAppearance(files, context); err != nil {
-		return
-	}
 
-	if repo.appearanceSyncEnabled && !repo.appearanceProtocolIgnored() {
-		if err = repo.rememberAppearanceRecoveryRoot(ret); err != nil {
-			return
-		}
-	}
 	err = repo.UpdateLatest(ret)
 	if nil != err {
 		logging.LogErrorf("update latest failed: %s", err)
@@ -1194,22 +1157,6 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 }
 
 func (repo *Repo) builtInIgnore(info os.FileInfo, absPath string) (ignored bool, err error) {
-	if repo.appearanceSyncEnabled {
-		p := repo.relPath(absPath)
-		if appearancePackageKey(p) != "" || p == "/themes" || p == "/icons" ||
-			p == "/storage/bazaar/themes" || p == "/storage/bazaar/icons" {
-			if info.IsDir() {
-				return true, filepath.SkipDir
-			}
-			return true, nil
-		}
-		if repo.appearanceProtocolFileIgnored(p) {
-			if info.IsDir() {
-				return true, filepath.SkipDir
-			}
-			return true, nil
-		}
-	}
 	if repo.pathFilter != nil {
 		return repo.pathFilter(info, absPath)
 	}
@@ -1304,9 +1251,6 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		}
 
 		eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
-		if err = repo.verifyAppearanceFileIdentity(file); err != nil {
-			return
-		}
 		err = repo.putIndexedFile(file)
 		if nil != err {
 			return
@@ -1369,9 +1313,6 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	}
 
 	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
-	if err = repo.verifyAppearanceFileIdentity(file); err != nil {
-		return
-	}
 	err = repo.putIndexedFile(file)
 	return
 }
@@ -1657,11 +1598,7 @@ func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*en
 			return nil
 		}
 
-		file, fileErr := repo.snapshotFile(path, p, info)
-		if fileErr != nil {
-			return fileErr
-		}
-		files = append(files, file)
+		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
 		eventbus.Publish(eventbus.EvtIndexWalkData, context, p)
 		return nil
 	})

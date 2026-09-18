@@ -21,7 +21,6 @@ import (
 	"errors"
 	"path"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -40,7 +39,6 @@ type testChunkSource struct {
 	downloadDelay  time.Duration
 	active         atomic.Int32
 	maxActive      atomic.Int32
-	downloads      sync.Map
 }
 
 func (source *testChunkSource) Name() string {
@@ -59,8 +57,6 @@ func (source *testChunkSource) HasChunks(ids []string) (ret map[string]bool, err
 }
 
 func (source *testChunkSource) DownloadChunk(id string) (data []byte, err error) {
-	requests, _ := source.downloads.LoadOrStore(id, &atomic.Int32{})
-	requests.(*atomic.Int32).Add(1)
 	active := source.active.Add(1)
 	defer source.active.Add(-1)
 	for current := source.maxActive.Load(); current < active && !source.maxActive.CompareAndSwap(current, active); {

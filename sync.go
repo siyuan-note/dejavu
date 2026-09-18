@@ -166,17 +166,15 @@ func (repo *Repo) GetCloudLatestFast(context map[string]interface{}) (cloudLates
 func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
 	lock.Lock()
 	defer lock.Unlock()
-	appearanceIgnoreLines := repo.appearanceIgnoreLines
-	defer func() { repo.appearanceIgnoreLines = appearanceIgnoreLines }()
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
-	if err = repo.withAppearanceLock(func() error { return repo.materializeDeferredAppearance(context) }); err != nil {
+	if _, err = repo.materializeIgnoredAssets(repo.ignoreMatcher(), context); err != nil {
 		return
 	}
 
 	skipCloudPreflight, _ := context["skipCloudPreflight"].(bool)
-	if !skipCloudPreflight && !repo.appearanceSyncEnabled {
+	if !skipCloudPreflight {
 		mergeResult = &MergeResult{Time: time.Now()}
 		trafficStat = &TrafficStat{m: &sync.Mutex{}}
 		latest, latestErr := repo.Latest()
@@ -201,7 +199,7 @@ func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult
 			if repo.assetDownloads != nil {
 				err = repo.UpdateLatestSync(latest)
 				if err == nil && !repo.assetDownloads.onDemand {
-					err = repo.withAppearanceLock(func() error { return repo.ensureAllAssets(context) })
+					err = repo.ensureAllAssets(context)
 				}
 			}
 			return
@@ -252,12 +250,12 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	trafficStat.DownloadBytes += length
 	trafficStat.APIGet++
 
-	if cloudLatest.ID == latest.ID && !repo.appearanceSyncEnabled {
+	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
 		if repo.assetDownloads != nil {
 			err = repo.UpdateLatestSync(latest)
 			if err == nil && !repo.assetDownloads.onDemand {
-				err = repo.withAppearanceLock(func() error { return repo.ensureAllAssets(context) })
+				err = repo.ensureAllAssets(context)
 			}
 		}
 		return
@@ -288,8 +286,6 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
 	trafficStat.PeerDownloadFileCount += downloadStat.PeerCount
 	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
-	trafficStat.DownloadChunkCount += downloadStat.PrefetchedChunkCount
-	trafficStat.PeerDownloadChunkCount += downloadStat.PrefetchedChunkCount
 
 	// 执行数据同步
 	err = repo.sync0(context, cloudLatest, latest, mergeResult, trafficStat)
@@ -309,14 +305,6 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	if nil != err {
 		logging.LogErrorf("get cloud latest files failed: %s", err)
 		return
-	}
-	if err = repo.prepareAppearanceSyncIgnore(latest, cloudLatestFiles, context, "sync"); err != nil {
-		return
-	}
-	appearanceStat, appearanceErr := repo.validateRemoteAppearanceFormat(cloudLatest, cloudLatestFiles, context)
-	addAppearanceTraffic(trafficStat, appearanceStat)
-	if appearanceErr != nil {
-		return appearanceErr
 	}
 
 	// 从文件列表中得到去重后的分块列表
@@ -359,7 +347,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	waitGroup.Add(1)
 	go func() { // 上传差异数据
 		defer waitGroup.Done()
-		if repo.usesAssetDownloads() || repo.appearanceSyncEnabled {
+		if repo.usesAssetDownloads() {
 			return
 		}
 
@@ -394,14 +382,6 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	cloudLatestFiles, appearancePublish, err := repo.mergeAppearanceEventFiles(latestSyncFiles, latestFiles,
-		cloudLatestFiles, mergeResult, trafficStat, context, "sync")
-	if err != nil {
-		return err
-	}
-	if err = repo.ensureAppearanceJournal(append(append([]*entity.File{}, latestFiles...), cloudLatestFiles...)); err != nil {
-		return
-	}
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
@@ -431,11 +411,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		cloudMergeFiles = latestFiles
 	}
 	versionsList := classifySyncFileVersions(latestSyncFiles, latestFiles, cloudMergeFiles)
-	packageDecisions, err := repo.appearanceDecisions(latestSyncFiles, latestFiles, cloudMergeFiles, context)
-	if err != nil {
-		return err
-	}
-	localChanged := appearancePublish
+	localChanged := false
 	var historyFiles []*entity.File
 	var cloudUpsertIgnore *entity.File
 	for _, versions := range versionsList {
@@ -447,19 +423,13 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 			cloudUpsertIgnore = versions.Cloud
 		}
 
-		decision, packageFile := packageDecisions[versions.Path]
-		if !packageFile {
-			decision = decideSyncFile(versions)
-		}
-		if !packageFile && ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType &&
+		decision := decideSyncFile(versions)
+		if ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType &&
 			repo.ignoreLocalUpsert(versions.Local, versions.Base, nowStr, context) {
 			// 本地仅变更了折叠属性，使用云端内容进行合并
 			decision = syncFileDecision{Winner: syncFileWinnerCloud, HistoryFile: versions.Local}
 		}
-		resolvedDecision := decision
-		if !packageFile {
-			resolvedDecision = resolveTmpSyncFile(versions, decision)
-		}
+		resolvedDecision := resolveTmpSyncFile(versions, decision)
 		if decision.Winner != resolvedDecision.Winner {
 			logging.LogWarnf("ignored tmp file [%s]", versions.Path)
 		}
@@ -527,11 +497,6 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		dataStr := string(data)
 		dataStr = strings.ReplaceAll(dataStr, "\r\n", "\n")
 		ignoreLines = strings.Split(dataStr, "\n")
-		if repo.appearanceSyncEnabled {
-			if ignoreLines, err = appearanceUserIgnoreLines(ignoreLines); err != nil {
-				return err
-			}
-		}
 		//logging.LogInfof("sync merge ignore rules: \n  %s", strings.Join(ignoreLines, "\n  "))
 	}
 
@@ -541,13 +506,13 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		return
 	}
 	for _, file := range latestFiles {
-		if repo.appearanceSyncIgnored(ignoreMatcher, file.Path) {
+		if ignoreMatcher.MatchesPath(file.Path) {
 			ignoredAssets[file.Path] = true
 		}
 	}
 	var mergeResultRemovesTmp []*entity.File
 	for _, remove := range mergeResult.Removes {
-		if !repo.appearanceSyncIgnored(ignoreMatcher, remove.Path) {
+		if !ignoreMatcher.MatchesPath(remove.Path) {
 			mergeResultRemovesTmp = append(mergeResultRemovesTmp, remove)
 			continue
 		}
@@ -589,7 +554,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	// 数据变更后还原文件
-	if repo.usesAssetDownloads() || repo.appearanceJournal {
+	if repo.usesAssetDownloads() {
 		err = repo.finishAssetSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{UploadBytes: trafficStat.UploadBytes, DownloadBytes: trafficStat.DownloadBytes,
@@ -754,12 +719,7 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 		if localChanged { // 如果云端和本地都改变了，则需要创建合并索引并再次同步
 			logging.LogInfof("creating merge index [%s]", latest.ID)
 			mergeStart := time.Now()
-			var mergedLatest *entity.Index
-			mergeIndexErr := repo.withAppearanceLock(func() error {
-				var indexErr error
-				mergedLatest, indexErr = repo.index("[Sync] Cloud sync merge", false, context)
-				return indexErr
-			})
+			mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", false, context)
 			if nil != mergeIndexErr {
 				logging.LogErrorf("merge index failed: %s", mergeIndexErr)
 				err = mergeIndexErr
@@ -843,13 +803,6 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 	if err = repo.store.PutIndex(latest); nil != err {
 		logging.LogErrorf("put index failed: %s", err)
 		return
-	}
-	if repo.appearanceSyncEnabled && !repo.appearanceProtocolIgnored() {
-		rootTraffic, rootErr := repo.publishAppearanceRecoveryRoot(latest, context)
-		addAppearanceTraffic(trafficStat, rootTraffic)
-		if rootErr != nil {
-			return rootErr
-		}
 	}
 
 	// 以下步骤是更新云端相关索引数据
@@ -1022,8 +975,6 @@ func (repo *Repo) getSyncCloudFiles(cloudLatest *entity.Index, context map[strin
 	trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
 	trafficStat.PeerDownloadFileCount += downloadStat.PeerCount
 	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
-	trafficStat.DownloadChunkCount += downloadStat.PrefetchedChunkCount
-	trafficStat.PeerDownloadChunkCount += downloadStat.PrefetchedChunkCount
 
 	// 统计流量
 	go repo.cloud.AddTraffic(&cloud.Traffic{
@@ -1202,7 +1153,6 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	peerBytes := atomic.Int64{}
 	peerCount := atomic.Int32{}
 	peerFallbackCount := atomic.Int32{}
-	prefetchedChunkCount := atomic.Int32{}
 	total := len(fileIDs)
 	p, err := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
@@ -1220,11 +1170,8 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 		var dcfErr error
 		if peerFiles[fileID] {
 			peerSemaphore <- struct{}{}
-			prefetched := &chunkDownloadStat{}
-			length, file, dcfErr = repo.downloadSourceFile(fileID, prefetched)
+			length, file, dcfErr = repo.downloadSourceFile(fileID)
 			<-peerSemaphore
-			peerBytes.Add(prefetched.PeerBytes)
-			prefetchedChunkCount.Add(int32(prefetched.PeerCount))
 			if nil == dcfErr {
 				peerBytes.Add(length)
 				peerCount.Add(1)
@@ -1285,7 +1232,6 @@ func (repo *Repo) downloadCloudFilesPut(fileIDs []string, context map[string]int
 	stat.PeerBytes = peerBytes.Load()
 	stat.PeerCount = int(peerCount.Load())
 	stat.PeerFallbackCount = int(peerFallbackCount.Load())
-	stat.PrefetchedChunkCount = int(prefetchedChunkCount.Load())
 	downloadErrLock.Lock()
 	defer downloadErrLock.Unlock()
 	if nil != downloadErr {
@@ -1949,7 +1895,7 @@ func (repo *Repo) downloadSourceChunk(id string) (length int64, ret *entity.Chun
 	return
 }
 
-func (repo *Repo) downloadSourceFile(id string, prefetched *chunkDownloadStat) (length int64, ret *entity.File, err error) {
+func (repo *Repo) downloadSourceFile(id string) (length int64, ret *entity.File, err error) {
 	source, ok := repo.chunkSource.(ObjectSource)
 	if !ok {
 		err = errors.New("object source unavailable")
@@ -1965,23 +1911,9 @@ func (repo *Repo) downloadSourceFile(id string, prefetched *chunkDownloadStat) (
 		if validateErr = gulu.JSON.UnmarshalJSON(data, file); nil != validateErr {
 			return
 		}
-		if file.ID != id {
+		if file.ID != id || entity.NewFile(file.Path, file.Size, file.Updated).ID != id {
 			validateErr = fmt.Errorf("%w: source file [%s] ID mismatch", ErrRepoFatal, id)
 			return
-		}
-		if entity.NewFile(file.Path, file.Size, file.Updated).ID != id {
-			return fmt.Errorf("%w: source file [%s] ID mismatch", ErrRepoFatal, id)
-		}
-		if repo.appearanceSyncEnabled && file.Path == appearanceFormatPath {
-			return fmt.Errorf("appearance format marker requires authoritative cloud source")
-		}
-		if key, _ := appearanceArchiveKey(file.Path); repo.appearanceSyncEnabled && key != "" {
-			if repo.appearanceProtocolFileIgnored(file.Path) {
-				return fmt.Errorf("ignored appearance archive requires authoritative cloud metadata")
-			}
-			if validateErr = repo.verifySourceAppearanceFile(file, prefetched); validateErr != nil {
-				return
-			}
 		}
 		ret = file
 		return
@@ -2233,12 +2165,6 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, context map[strin
 	lock.Lock()
 	defer lock.Unlock()
 	stat = &DownloadTrafficStat{}
-	for _, file := range files {
-		if repo.appearanceSyncEnabled && (appearancePackageKey(file.Path) != "" ||
-			strings.HasPrefix(file.Path, "/storage/appearance-v1/")) {
-			return stat, fmt.Errorf("appearance packages require complete snapshot checkout: %s", file.Path)
-		}
-	}
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -2301,7 +2227,5 @@ func (repo *Repo) GetCloudAvailableSize() (ret int64) {
 }
 
 func (repo *Repo) GetCloudRepoStat() (stat *cloud.Stat, err error) {
-	lock.Lock()
-	defer lock.Unlock()
-	return repo.appearanceCloudRepoStat()
+	return repo.cloud.GetStat()
 }

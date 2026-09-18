@@ -40,10 +40,9 @@ type ObjectSource interface {
 }
 
 type chunkDownloadStat struct {
-	CloudCount           int
-	CloudBytes           int64
-	PeerBytes            int64
-	PeerCount            int
-	PeerFallbackCount    int
-	PrefetchedChunkCount int // 验证文件身份时提前取得的局域网分块数
+	CloudCount        int
+	CloudBytes        int64
+	PeerBytes         int64
+	PeerCount         int
+	PeerFallbackCount int
 }

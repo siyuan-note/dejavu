@@ -93,7 +93,7 @@ func TestAssetDownloadsSyncAndHydrate(t *testing.T) {
 	remote := filepath.Join(base, "cloud")
 	full := newAssetTestRepo(t, base, remote, "full", false)
 	writeAssetTestFile(t, full, "/assets/test.bin", "version one", 2)
-	writeAssetTestFile(t, full, "/book/doc/assets/nested.bin", "nested data", 2)
+	writeAssetTestFile(t, full, "/20260918000000-abcdefg/20260918000001-hijklmn/assets/nested.bin", "nested data", 2)
 	writeAssetTestFile(t, full, "/assets/ocr-texts.json", "{}", 2)
 	writeAssetTestFile(t, full, "/assets/test.sya", "annotations", 2)
 	syncAssetTestRepo(t, full)
@@ -103,7 +103,7 @@ func TestAssetDownloadsSyncAndHydrate(t *testing.T) {
 	if err != nil || len(deferred) != 2 {
 		t.Fatalf("deferred=%v err=%v", deferred, err)
 	}
-	for _, p := range []string{"/assets/test.bin", "/book/doc/assets/nested.bin"} {
+	for _, p := range []string{"/assets/test.bin", "/20260918000000-abcdefg/20260918000001-hijklmn/assets/nested.bin"} {
 		if _, err = os.Stat(partial.absPath(p)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("unexpected local asset: %s, %v", p, err)
 		}
@@ -281,12 +281,17 @@ func TestAssetDownloadsConcurrentHydrationAndLocalWrite(t *testing.T) {
 }
 
 func TestAssetDownloadPath(t *testing.T) {
-	for _, p := range []string{"assets/a.png", "/assets/sub/a.pdf", "/book/doc/assets/a.bin"} {
+	for _, p := range []string{"assets/a.png", "/assets/sub/a.pdf", "/20260918000000-abcdefg/assets/a.bin",
+		"/20260918000000-abcdefg/20260918000001-hijklmn/assets/a.bin",
+		"/20260918000000-abcdefg/20260918000001-hijklmn/20260918000002-opqrstu/assets/sub/a.bin"} {
 		if !IsAssetDownloadPath(p) {
 			t.Fatal(p)
 		}
 	}
-	for _, p := range []string{"/assets/ocr-texts.json", "/assets/a.sya", "/assets/.metadata", "/assets/../note.sy", "/book/a.sy"} {
+	for _, p := range []string{"/assets/ocr-texts.json", "/assets/a.sya", "/assets/.metadata", "/assets/../note.sy", "/book/a.sy",
+		"/themes/example/assets/font.woff2", "/icons/example/assets/icon.png", "/plugins/example/assets/a.png",
+		"/widgets/example/assets/a.png", "/templates/example/assets/a.png", "/storage/assets/a.png",
+		"/book/doc/assets/a.bin", "/20260918000000-abcdefg/plugin/assets/a.bin", "/20260918000000-ABCDEFG/assets/a.png"} {
 		if IsAssetDownloadPath(p) {
 			t.Fatal(p)
 		}
