@@ -62,6 +62,7 @@ type syncScenarioStep struct {
 	SourceDir string                   `json:"sourceDir"`
 	Memo      string                   `json:"memo"`
 	Minutes   int                      `json:"minutes"`
+	Now       bool                     `json:"now"`
 	Want      *syncScenarioExpectation `json:"want"`
 }
 
@@ -211,7 +212,12 @@ func runSyncScenarioStep(t *testing.T, client *syncScenarioClient, stepNum int, 
 			}
 			content = string(data)
 		}
-		client.writeFile(step.Path, content, syncScenarioBaseTime().Add(time.Duration(step.Minutes)*time.Minute))
+		modTime := syncScenarioBaseTime().Add(time.Duration(step.Minutes) * time.Minute)
+		if step.Now {
+			// 使用当前时间，让随后的同步合并与本地修改落在同一秒
+			modTime = time.Now()
+		}
+		client.writeFile(step.Path, content, modTime)
 	case "apply_dir":
 		if step.SourceDir == "" {
 			t.Fatalf("[%s] apply_dir step [%d] has empty sourceDir", client.name, stepNum)
@@ -255,17 +261,9 @@ func runSyncScenarioStep(t *testing.T, client *syncScenarioClient, stepNum int, 
 			client.assertMergeResult(result, *step.Want)
 		}
 	case "assert":
-		content := step.Content
-		if step.Source != "" {
-			data, err := os.ReadFile(syncScenarioFixturePath(client.env.t, client.env.caseBaseDir, step.Source))
-			if err != nil {
-				client.env.t.Fatalf("[%s] read assert source [%s] failed: %s", client.name, step.Source, err)
-			}
-			content = string(data)
-		}
-		client.assertFile(step.Path, content)
+		client.assertFile(step.Path, client.expectedContent(step))
 	case "assert_history":
-		client.assertHistoryFile(step.Path, step.Content)
+		client.assertHistoryFile(step.Path, client.expectedContent(step))
 	case "assert_missing":
 		client.assertMissing(step.Path)
 	default:
@@ -549,6 +547,20 @@ func (client *syncScenarioClient) assertPaths(kind string, got, want []string) {
 			client.env.t.Fatalf("[%s] expected %s paths=%v, got %v", client.name, kind, want, got)
 		}
 	}
+}
+
+// expectedContent 返回断言步骤期望的内容：设置了 source 时从用例目录下的夹具文件读取。
+func (client *syncScenarioClient) expectedContent(step *syncScenarioStep) string {
+	client.env.t.Helper()
+
+	if step.Source == "" {
+		return step.Content
+	}
+	data, err := os.ReadFile(syncScenarioFixturePath(client.env.t, client.env.caseBaseDir, step.Source))
+	if err != nil {
+		client.env.t.Fatalf("[%s] read expected source [%s] failed: %s", client.name, step.Source, err)
+	}
+	return string(data)
 }
 
 func (client *syncScenarioClient) assertFile(relPath, want string) {

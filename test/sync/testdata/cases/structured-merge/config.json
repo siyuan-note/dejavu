@@ -101,5 +101,39 @@
       {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
       {"client": "a", "op": "assert", "path": "doc.sy", "source": "rich/merged.sy"}
     ]
+  },
+  {
+    "name": "sync merge in the same second as the local edit is stored, uploaded and downloaded",
+    "seedDir": "seed",
+    "clients": ["a", "b", "c"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "cloud.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a inserts a block and edits the third block"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "local.sy", "now": true},
+      {"client": "b", "op": "index", "memo": "b edits the second block right before syncing"},
+      {"client": "b", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0, "merged": 1, "mergedPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "merged.sy"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "sync", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "a", "op": "assert", "path": "doc.sy", "source": "merged.sy"},
+      {"client": "c", "op": "sync_download", "want": {"upserts": 1, "removes": 0, "conflicts": 0}},
+      {"client": "c", "op": "assert", "path": "doc.sy", "source": "merged.sy"}
+    ]
+  },
+  {
+    "name": "sync keeps spec 4 table cell rich documents as a lossless file conflict",
+    "seedDir": "spec4/seed",
+    "clients": ["a", "b"],
+    "steps": [
+      {"client": "a", "op": "write", "path": "doc.sy", "source": "spec4/cloud.sy", "minutes": 10},
+      {"client": "a", "op": "index", "memo": "a edits the trailing paragraph"},
+      {"client": "a", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 0}},
+      {"client": "b", "op": "write", "path": "doc.sy", "source": "spec4/local.sy", "minutes": 11},
+      {"client": "b", "op": "index", "memo": "b edits the leading paragraph"},
+      {"client": "b", "op": "sync", "want": {"upserts": 0, "removes": 0, "conflicts": 1, "merged": 0, "conflictTypes": ["local-upsert-cloud-upsert"], "winners": ["local"], "conflictPaths": ["/doc.sy"], "historyPaths": ["/doc.sy"]}},
+      {"client": "b", "op": "assert", "path": "doc.sy", "source": "spec4/local.sy"},
+      {"client": "b", "op": "assert_history", "path": "doc.sy", "source": "spec4/cloud.sy"}
+    ]
   }
 ]

@@ -19,12 +19,16 @@ package dejavu
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/88250/lute"
 	"github.com/88250/lute/ast"
 	"github.com/siyuan-note/dataparser"
+	"github.com/siyuan-note/dejavu/entity"
 )
 
 func syPara(id, text, updated string) string {
@@ -390,5 +394,115 @@ func TestMergeSyDocumentsTabs(t *testing.T) {
 		if !strings.Contains(string(merged), want) {
 			t.Fatalf("expected %s in merged doc:\n%s", want, merged)
 		}
+	}
+}
+
+// 合并结果和本地修改落在同一秒时，必须入库为新的文件版本，且不能覆盖已有版本。
+func TestIndexMergedFileSameSecond(t *testing.T) {
+	tempDir := t.TempDir()
+	dataPath := filepath.Join(tempDir, "data")
+	if err := os.MkdirAll(dataPath, 0755); nil != err {
+		t.Fatal(err)
+	}
+	repo, err := NewRepo(dataPath, filepath.Join(tempDir, "repo"), filepath.Join(tempDir, "history"), filepath.Join(tempDir, "temp"),
+		"device", "Device", "linux", []byte("0123456789abcdef0123456789abcdef"), nil, nil)
+	if nil != err {
+		t.Fatal(err)
+	}
+
+	absPath := filepath.Join(dataPath, "doc.sy")
+	sameSecond := time.Now().Truncate(time.Second)
+	localData := []byte("local content")
+	if err = os.WriteFile(absPath, localData, 0644); nil != err {
+		t.Fatal(err)
+	}
+	if err = os.Chtimes(absPath, sameSecond, sameSecond); nil != err {
+		t.Fatal(err)
+	}
+	if _, err = repo.Index("local edit", false, map[string]interface{}{}); nil != err {
+		t.Fatal(err)
+	}
+	latest, err := repo.Latest()
+	if nil != err {
+		t.Fatal(err)
+	}
+	files, err := repo.GetFiles(latest)
+	if nil != err || 1 != len(files) {
+		t.Fatalf("expected one indexed file, got %d (%v)", len(files), err)
+	}
+	local := files[0]
+
+	// 合并结果在同一秒写回，大小也相同
+	mergedData := []byte("merged content")
+	if err = os.WriteFile(absPath, mergedData, 0644); nil != err {
+		t.Fatal(err)
+	}
+	if err = os.Chtimes(absPath, sameSecond.Add(300*time.Millisecond), sameSecond.Add(300*time.Millisecond)); nil != err {
+		t.Fatal(err)
+	}
+	if entity.NewFile(local.Path, int64(len(mergedData)), sameSecond.Add(300*time.Millisecond).UnixMilli()).ID != local.ID {
+		t.Fatalf("test setup must reproduce the same-second ID collision")
+	}
+
+	merged, err := repo.indexMergedFile(local.Path, []*entity.File{local}, map[string]interface{}{})
+	if nil != err {
+		t.Fatal(err)
+	}
+	if merged.ID == local.ID {
+		t.Fatalf("merged version reused the local version ID [%s]", local.ID)
+	}
+	if merged.SecUpdated() <= local.SecUpdated() {
+		t.Fatalf("merged version updated [%d] must be later than local [%d]", merged.SecUpdated(), local.SecUpdated())
+	}
+
+	readVersion := func(file *entity.File) string {
+		stored, getErr := repo.store.GetFile(file.ID)
+		if nil != getErr {
+			t.Fatal(getErr)
+		}
+		var buf []byte
+		for _, id := range stored.Chunks {
+			chunk, chunkErr := repo.store.GetChunk(id)
+			if nil != chunkErr {
+				t.Fatal(chunkErr)
+			}
+			buf = append(buf, chunk.Data...)
+		}
+		return string(buf)
+	}
+	if got := readVersion(merged); got != string(mergedData) {
+		t.Fatalf("merged version content = %q, want %q", got, mergedData)
+	}
+	if got := readVersion(local); got != string(localData) {
+		t.Fatalf("existing local version was changed: %q", got)
+	}
+
+	// 重新扫描数据目录必须得到同一个合并版本
+	reindexed, err := repo.Index("rescan", false, map[string]interface{}{})
+	if nil != err {
+		t.Fatal(err)
+	}
+	files, err = repo.GetFiles(reindexed)
+	if nil != err || 1 != len(files) || files[0].ID != merged.ID {
+		t.Fatalf("rescan produced %v, want merged version [%s] (%v)", files, merged.ID, err)
+	}
+}
+
+// Spec 4 的表格单元格富文本（TableCellRich）超出当前支持范围，必须拒绝合并，交给文件级冲突原样保留。
+func TestMergeSyDocumentsRejectsSpec4TableCellRich(t *testing.T) {
+	read := func(name string) []byte {
+		data, err := os.ReadFile(filepath.Join("test", "sync", "testdata", "cases", "structured-merge", "spec4", name))
+		if nil != err {
+			t.Fatal(err)
+		}
+		return data
+	}
+	base, local, cloud := read("base.sy"), read("local.sy"), read("cloud.sy")
+	if !strings.Contains(string(cloud), `"TableCellRich"`) || !strings.Contains(string(cloud), `"custom-sy-table-rich": "1"`) {
+		t.Fatalf("fixture must contain a real table cell rich envelope")
+	}
+	merged, ok, err := mergeSyDocuments(base, local, cloud, lute.New())
+	if !errors.Is(err, errSyUnsupportedSpec) || ok || nil != merged {
+		t.Fatalf("expected unsupported spec rejection, got ok=%v err=%v", ok, err)
 	}
 }

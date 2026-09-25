@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/88250/lute"
 	"github.com/88250/lute/ast"
@@ -577,7 +578,7 @@ func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now s
 		logging.LogErrorf("write structured merge result [%s] failed: %s", local.Path, err)
 		return nil
 	}
-	mergedFile, err := repo.indexDataFile(local.Path, context)
+	mergedFile, err := repo.indexMergedFile(local.Path, []*entity.File{base, local, cloud}, context)
 	if nil != err {
 		logging.LogErrorf("index structured merge result [%s] failed: %s", local.Path, err)
 		return nil
@@ -586,13 +587,36 @@ func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now s
 	return mergedFile
 }
 
-// indexDataFile 把数据目录里的一个文件按当前磁盘状态入库，返回其文件版本。
-func (repo *Repo) indexDataFile(relPath string, context map[string]interface{}) (ret *entity.File, err error) {
-	info, err := os.Stat(repo.absPath(relPath))
+// indexMergedFile 把结构化合并写回数据目录的文件入库，返回合并后的文件版本。
+//
+// 文件版本 ID 由路径和秒级修改时间计算，合并往往和本地修改发生在同一秒，直接按磁盘时间入库会得到和已有版本相同的 ID，
+// 而仓库中已存在的对象不会被覆盖，合并内容就会丢失。因此这里把合并结果的修改时间调整到一个仓库中尚未使用的秒上：
+// 不早于参与合并的各版本，已有版本（快照引用的对象）保持不变，后续重新扫描数据目录时也会得到同一个 ID。
+func (repo *Repo) indexMergedFile(relPath string, versions []*entity.File, context map[string]interface{}) (ret *entity.File, err error) {
+	absPath := repo.absPath(relPath)
+	info, err := os.Stat(absPath)
 	if nil != err {
 		return
 	}
-	ret = entity.NewFile(relPath, info.Size(), info.ModTime().UnixMilli())
+
+	updated := info.ModTime().Truncate(time.Second).UnixMilli()
+	for _, version := range versions {
+		if nil != version && updated/1000 <= version.Updated/1000 {
+			updated = (version.Updated/1000 + 1) * 1000
+		}
+	}
+	for {
+		if _, getErr := repo.store.GetFile(entity.NewFile(relPath, info.Size(), updated).ID); nil != getErr {
+			break // 该 ID 在仓库中还不存在
+		}
+		updated += 1000
+	}
+
+	modTime := time.UnixMilli(updated)
+	if err = os.Chtimes(absPath, modTime, modTime); nil != err {
+		return
+	}
+	ret = entity.NewFile(relPath, info.Size(), updated)
 	if err = repo.putFileChunks(ret, context, 1, 1); nil != err {
 		ret = nil
 	}
