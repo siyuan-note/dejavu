@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,23 @@ var (
 const (
 	lockSyncKey = "lock-sync"
 )
+
+// cloudLockError 保留错误链供调用方分类，默认文本不包含请求凭据或签名地址。
+type cloudLockError struct {
+	cause error
+}
+
+func (err *cloudLockError) Error() string {
+	return ErrLockCloudFailed.Error()
+}
+
+func (err *cloudLockError) Unwrap() error {
+	return err.cause
+}
+
+func (err *cloudLockError) Is(target error) bool {
+	return target == ErrLockCloudFailed
+}
 
 func (repo *Repo) unlockCloud(context map[string]interface{}) {
 	endRefreshLock <- true
@@ -149,29 +167,35 @@ func (repo *Repo) lockCloud0(currentDeviceID string) (err error) {
 	data, err := gulu.JSON.MarshalJSON(content)
 	if nil != err {
 		logging.LogErrorf("marshal lock sync failed: %s", err)
-		err = ErrLockCloudFailed
+		err = &cloudLockError{cause: err}
 		return
 	}
 	err = gulu.File.WriteFileSafer(lockSyncPath, data, 0644)
 	if nil != err {
 		logging.LogErrorf("write lock sync failed: %s", err)
-		err = ErrCloudLocked
+		err = &cloudLockError{cause: err}
 		return
 	}
 
 	_, err = repo.cloud.UploadObject(lockSyncKey, true)
 	if nil != err {
 		if errors.Is(err, cloud.ErrSystemTimeIncorrect) || errors.Is(err, cloud.ErrCloudAuthFailed) || errors.Is(err, cloud.ErrDeprecatedVersion) ||
-			errors.Is(err, cloud.ErrCloudCheckFailed) {
+			errors.Is(err, cloud.ErrCloudCheckFailed) || errors.Is(err, cloud.ErrCloudServiceUnavailable) ||
+			errors.Is(err, cloud.ErrCloudForbidden) || errors.Is(err, cloud.ErrCloudTooManyRequests) {
 			return
 		}
 
 		logging.LogErrorf("upload lock sync failed: %s", err)
+		// 网络错误保留类型和原因，避免把地址中的数字误判为 HTTP 状态码。
+		var networkErr net.Error
+		if errors.As(err, &networkErr) {
+			return &cloudLockError{cause: err}
+		}
 		if ok, retErr := parseErr(err); ok {
 			return retErr
 		}
 
-		err = ErrLockCloudFailed
+		err = &cloudLockError{cause: err}
 		return
 	}
 	return
