@@ -209,7 +209,7 @@ func (repo *Repo) PurgeCloud() (ret *entity.PurgeStat, err error) {
 
 	if 1 > len(indexIDs) || 1 > len(objIDs) {
 		logging.LogInfof("skip purge cloud")
-		return
+		return &entity.PurgeStat{}, nil
 	}
 
 	eventbus.Publish(eventbus.EvtCloudPurgeListRefs, context)
