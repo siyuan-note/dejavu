@@ -2115,6 +2115,9 @@ func (repo *Repo) downloadCloudIndexOrReuseLocal(id string, localLatest *entity.
 
 func (repo *Repo) getSeqNumLatest() (id string, maxSeqNum int, seqNumLatests []string) {
 	refs, listErr := repo.cloud.ListObjects("refs/")
+	if repo.onCloudIndexList != nil {
+		repo.onCloudIndexList(listErr)
+	}
 	if nil != listErr {
 		logging.LogErrorf("list refs failed: %s", listErr)
 		return
