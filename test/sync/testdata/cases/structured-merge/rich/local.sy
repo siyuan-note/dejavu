@@ -1,0 +1,185 @@
+{
+	"ID": "20240201120000-doc0002",
+	"Spec": "3",
+	"Type": "NodeDocument",
+	"Properties": {
+		"id": "20240201120000-doc0002",
+		"title": "Rich Merge Demo",
+		"type": "doc",
+		"updated": "20240202120000"
+	},
+	"Children": [
+		{
+			"ID": "20240201120001-head001",
+			"Type": "NodeHeading",
+			"HeadingLevel": 2,
+			"Properties": {
+				"id": "20240201120001-head001",
+				"updated": "20240201120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "Rich"
+				}
+			]
+		},
+		{
+			"ID": "20240201120002-tabs001",
+			"Type": "NodeTabs",
+			"Properties": {
+				"id": "20240201120002-tabs001",
+				"updated": "20240202120000",
+				"tabs-active-id": "20240201120004-item002",
+				"tabs-position": "top"
+			},
+			"Children": [
+				{
+					"ID": "20240201120003-item001",
+					"Type": "NodeTabItem",
+					"TabItemTitle": "**First**",
+					"Properties": {
+						"id": "20240201120003-item001",
+						"updated": "20240202120000"
+					},
+					"Children": [
+						{
+							"ID": "20240201120005-para001",
+							"Type": "NodeParagraph",
+							"Properties": {
+								"id": "20240201120005-para001",
+								"updated": "20240202120000"
+							},
+							"Children": [
+								{
+									"Type": "NodeText",
+									"Data": "tab one edited"
+								}
+							]
+						}
+					]
+				},
+				{
+					"ID": "20240201120004-item002",
+					"Type": "NodeTabItem",
+					"TabItemTitle": "Second",
+					"Properties": {
+						"id": "20240201120004-item002",
+						"updated": "20240201120000"
+					},
+					"Children": [
+						{
+							"ID": "20240201120006-para002",
+							"Type": "NodeParagraph",
+							"Properties": {
+								"id": "20240201120006-para002",
+								"updated": "20240201120000"
+							},
+							"Children": [
+								{
+									"Type": "NodeText",
+									"Data": "tab two"
+								}
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"ID": "20240201120007-tabl001",
+			"Type": "NodeTable",
+			"TableAligns": [
+				0,
+				0
+			],
+			"Properties": {
+				"id": "20240201120007-tabl001",
+				"updated": "20240201120000",
+				"colgroup": "|"
+			},
+			"Children": [
+				{
+					"Type": "NodeTableHead",
+					"Data": "thead",
+					"Children": [
+						{
+							"Type": "NodeTableRow",
+							"Data": "tr",
+							"Children": [
+								{
+									"Type": "NodeTableCell",
+									"Data": "th",
+									"Children": [
+										{
+											"Type": "NodeText",
+											"Data": "Name"
+										}
+									]
+								},
+								{
+									"Type": "NodeTableCell",
+									"Data": "th",
+									"Children": [
+										{
+											"Type": "NodeText",
+											"Data": "Note"
+										}
+									]
+								}
+							]
+						}
+					]
+				},
+				{
+					"Type": "NodeTableRow",
+					"Data": "tr",
+					"Children": [
+						{
+							"Type": "NodeTableCell",
+							"Data": "td",
+							"Children": [
+								{
+									"Type": "NodeText",
+									"Data": "cell"
+								}
+							]
+						},
+						{
+							"Type": "NodeTableCell",
+							"Data": "td",
+							"Children": [
+								{
+									"Type": "NodeTextMark",
+									"TextMarkType": "strong",
+									"TextMarkTextContent": "bold"
+								},
+								{
+									"Type": "NodeText",
+									"Data": " tail"
+								}
+							],
+							"Properties": {
+								"style": "background-color: var(--b3-font-background3);"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"ID": "20240201120008-para003",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240201120008-para003",
+				"updated": "20240201120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "after table"
+				}
+			]
+		}
+	]
+}
