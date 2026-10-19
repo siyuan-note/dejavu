@@ -18,6 +18,7 @@ package cloud
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"math"
 	"os"
@@ -86,6 +87,16 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 	err = webdav.parseErr(err)
 	if nil != err {
 		logging.LogErrorf("upload object [%s] failed: %s", key, err)
+		return
+	}
+	if "refs/latest" == filePath {
+		// WebDAV 可能允许写入无扩展名文件，但拒绝随后读取，不能将这种上传报告为成功。
+		if _, err = webdav.Client.Read(key); nil != err {
+			err = webdav.parseErr(err)
+			if errors.Is(err, ErrCloudObjectNotFound) {
+				err = fmt.Errorf("read uploaded WebDAV refs/latest: %w", ErrCloudCheckFailed)
+			}
+		}
 	}
 	return
 }
@@ -114,6 +125,29 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 	data, err = webdav.Client.Read(key)
 	err = webdav.parseErr(err)
 	if nil != err {
+		if "refs/latest" == filePath && errors.Is(err, ErrCloudObjectNotFound) {
+			// 非空索引清单说明云端已有数据，不能把无法读取的同步指针当作空仓库。
+			indexesData, readErr := webdav.Client.Read(path.Join(webdav.Dir, "siyuan", "repo", "indexes-v2.json"))
+			if nil != readErr {
+				if readErr = webdav.parseErr(readErr); !errors.Is(readErr, ErrCloudObjectNotFound) {
+					err = readErr
+				}
+				return
+			}
+			indexesData, readErr = compressDecoder.DecodeAll(indexesData, nil)
+			if nil != readErr {
+				err = readErr
+				return
+			}
+			var indexes *Indexes
+			if readErr = gulu.JSON.UnmarshalJSON(indexesData, &indexes); nil != readErr {
+				err = readErr
+				return
+			}
+			if nil == indexes || 0 < len(indexes.Indexes) {
+				err = fmt.Errorf("missing WebDAV refs/latest with existing cloud indexes: %w", ErrCloudCheckFailed)
+			}
+		}
 		return
 	}
 
@@ -185,7 +219,14 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 		index, getErr := webdav.repoIndex(repoKey, indexesJSON.Indexes[i].ID)
 		if nil != getErr {
 			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
-			continue
+			err = webdav.parseErr(getErr)
+			ret = nil
+			return
+		}
+		if nil == index {
+			err = ErrCloudCheckFailed
+			ret = nil
+			return
 		}
 
 		index.Files = nil // Optimize the performance of obtaining cloud snapshots https://github.com/siyuan-note/siyuan/issues/8387
