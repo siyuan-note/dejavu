@@ -160,6 +160,18 @@ func TestWebDAVHTMLMetadata(t *testing.T) {
 	}
 }
 
+func TestWebDAVEmptyCollectionResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(207)
+		_, _ = w.Write([]byte(`<d:multistatus xmlns:d="DAV:"/>`))
+	}))
+	defer server.Close()
+	client := NewWebDAV(&BaseCloud{Conf: &Conf{Dir: "main"}}, gowebdav.NewClient(server.URL, "", ""))
+	if _, err := client.UploadBytes("probe", []byte("test"), true); !errors.Is(err, ErrWebDAVInvalidResponse) {
+		t.Fatalf("accepted empty collection response: %v", err)
+	}
+}
+
 func newWebDAVFixture(t *testing.T) (*WebDAV, *webDAVFixture) {
 	t.Helper()
 	f := &webDAVFixture{objects: map[string][]byte{}, getStatus: map[string]int{}, getData: map[string][]byte{}, reads: map[string]int{}}

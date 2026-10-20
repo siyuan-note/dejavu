@@ -513,8 +513,8 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 
 	info, err := webdav.Client.Stat(folder)
 	if nil == err {
-		if !info.IsDir() {
-			return &fs.PathError{Op: "Mkdir", Path: folder, Err: fs.ErrExist}
+		if err = webDAVDirectoryError(info, folder); err != nil {
+			return err
 		}
 		webdav.dirs[path.Clean(folder)] = time.Now().Add(time.Minute)
 		return nil
@@ -548,10 +548,22 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 			}
 			return webdav.parseErr(err)
 		}
-		if !info.IsDir() {
-			return &fs.PathError{Op: "Mkdir", Path: sub, Err: fs.ErrExist}
+		if err = webDAVDirectoryError(info, sub); err != nil {
+			return err
 		}
 		webdav.dirs[path.Clean(sub)] = time.Now().Add(time.Minute)
+	}
+	return nil
+}
+
+func webDAVDirectoryError(info os.FileInfo, folder string) error {
+	// 空的多状态响应可能得到装有 nil 指针的 FileInfo，不能直接调用其方法。
+	file, ok := info.(*gowebdav.File)
+	if !ok || file == nil {
+		return ErrWebDAVInvalidResponse
+	}
+	if !file.IsDir() {
+		return &fs.PathError{Op: "Mkdir", Path: folder, Err: fs.ErrExist}
 	}
 	return nil
 }
