@@ -29,7 +29,7 @@ type webDAVFixture struct {
 }
 
 func TestWebDAVDirectoryCreation(t *testing.T) {
-	for _, mode := range []string{"first failure", "405 absent", "405 existing", "file parent", "new client", "expired", "failed write", "remove"} {
+	for _, mode := range []string{"first failure", "405 absent", "405 existing", "file parent", "file parent after 404", "file target", "new client", "expired", "failed write", "remove"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			handler := &dav.Handler{FileSystem: dav.Dir(root), LockSystem: dav.NewMemLS()}
@@ -39,6 +39,11 @@ func TestWebDAVDirectoryCreation(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
 				defer mu.Unlock()
+				if mode == "file parent after 404" && r.Method == "PROPFIND" && path.Clean(r.URL.Path) == "/main/siyuan/repo" {
+					// Reach MKCOL verification regardless of the host's error for a non-directory ancestor.
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
 				if r.Method == "MKCOL" {
 					created = append(created, r.URL.Path)
 					if mode == "first failure" {
@@ -61,13 +66,21 @@ func TestWebDAVDirectoryCreation(t *testing.T) {
 				return NewWebDAV(&BaseCloud{Conf: &Conf{Dir: "main", WebDAV: &ConfWebDAV{}}}, gowebdav.NewClient(server.URL, "", ""))
 			}
 			client := newClient()
-			if mode == "405 existing" || mode == "file parent" {
+			if mode == "405 existing" || mode == "file parent" || mode == "file parent after 404" {
 				if err := os.Mkdir(filepath.Join(root, "main"), 0755); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if mode == "file parent" {
+			if mode == "file parent" || mode == "file parent after 404" {
 				if err := os.WriteFile(filepath.Join(root, "main", "siyuan"), []byte("file"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "file target" {
+				if err := os.MkdirAll(filepath.Join(root, "main", "siyuan"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "main", "siyuan", "repo"), []byte("file"), 0644); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -85,6 +98,17 @@ func TestWebDAVDirectoryCreation(t *testing.T) {
 				}
 				return
 			case "file parent":
+				// A non-directory ancestor produces PROPFIND 405 on Unix, but 404 on Windows.
+				// The latter reaches MKCOL verification and returns os.ErrExist instead.
+				var status gowebdav.StatusError
+				var pathErr *os.PathError
+				propfind405 := errors.As(err, &pathErr) && pathErr.Op == "PROPFIND" &&
+					errors.As(err, &status) && status.Status == http.StatusMethodNotAllowed
+				if (!errors.Is(err, os.ErrExist) && !propfind405) || len(client.dirs) != 0 {
+					t.Fatalf("accepted file as collection: %v", err)
+				}
+				return
+			case "file parent after 404", "file target":
 				if !errors.Is(err, os.ErrExist) || len(client.dirs) != 0 {
 					t.Fatalf("accepted file as collection: %v", err)
 				}
