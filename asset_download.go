@@ -898,8 +898,21 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 	if err := repo.recordAssetRecovery(pending); err != nil {
 		return err
 	}
+	if err := repo.checkoutCanceled(); err != nil {
+		return err
+	}
+	released, cleanupErr := repo.cleanupCheckoutTemps(pending.Upserts)
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	if released > 0 && repo.checkoutHooks.Cleaned != nil {
+		repo.checkoutHooks.Cleaned(released)
+	}
 	var localChangeErr error
-	for _, f := range pending.Upserts {
+	for index, f := range pending.Upserts {
+		if err := repo.checkoutCanceled(); err != nil {
+			return err
+		}
 		matches, err := func() (bool, error) {
 			abs := repo.absPath(f.Path)
 			filelock.Lock(abs)
@@ -919,7 +932,7 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 			}
 			return err
 		}
-		if err = repo.checkoutFile(f, repo.DataPath, 1, 1, context, pending.Before[f.Path]); err != nil {
+		if err = repo.checkoutFile(f, repo.DataPath, index+1, len(pending.Upserts), context, pending.Before[f.Path]); err != nil {
 			if errors.Is(err, ErrIndexFileChanged) {
 				localChangeErr = err
 				continue
@@ -928,6 +941,9 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		}
 	}
 	for _, f := range pending.Removes {
+		if err := repo.checkoutCanceled(); err != nil {
+			return err
+		}
 		if err := func() error {
 			abs := repo.absPath(f.Path)
 			filelock.Lock(abs)
@@ -946,6 +962,12 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 			}
 			return err
 		}
+		if repo.checkoutHooks.Removed != nil {
+			repo.checkoutHooks.Removed(f)
+		}
+	}
+	if err := repo.checkoutCanceled(); err != nil {
+		return err
 	}
 	if err := repo.UpdateLatest(pending.Index); err != nil {
 		return err

@@ -711,7 +711,7 @@ func (repo *Repo) restoreFiles(mergeResult *MergeResult, context map[string]inte
 		logging.LogErrorf("remove files failed: %s", err)
 		return
 	}
-	return
+	return repo.checkoutCanceled()
 }
 
 func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
@@ -1855,6 +1855,9 @@ func (repo *Repo) latestSync() (ret *entity.Index) {
 }
 
 func (repo *Repo) downloadCloudChunk(id string, count, total int, context map[string]interface{}) (length int64, ret *entity.Chunk, err error) {
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, count, total)
 
 	key := path.Join("objects", id[:2], id[2:])
@@ -1938,6 +1941,9 @@ func (repo *Repo) downloadSourceObject(id string, validate func(data []byte) err
 }
 
 func (repo *Repo) downloadCloudFile(id string, count, total int, context map[string]interface{}) (length int64, ret *entity.File, err error) {
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, count, total)
 
 	key := path.Join("objects", id[:2], id[2:])

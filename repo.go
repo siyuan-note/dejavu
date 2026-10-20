@@ -60,6 +60,7 @@ type Repo struct {
 	ignoreRulePath   string
 	pathFilter       func(os.FileInfo, string) (bool, error)
 	onCloudIndexList func(error)
+	checkoutHooks    CheckoutHooks
 
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
@@ -1350,9 +1351,15 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 
 	eventbus.Publish(eventbus.EvtCheckoutRemoveFiles, context, total)
 	for i, file := range files {
+		if err = repo.checkoutCanceled(); err != nil {
+			return err
+		}
 		absPath := repo.absPath(file.Path)
 		if err = filelock.Remove(absPath); nil != err {
 			return
+		}
+		if repo.checkoutHooks.Removed != nil {
+			repo.checkoutHooks.Removed(file)
 		}
 		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, i+1, total)
 	}
@@ -1362,6 +1369,16 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
 	if 1 > len(files) {
 		return
+	}
+	if err = repo.checkoutCanceled(); err != nil {
+		return err
+	}
+	released, cleanupErr := repo.cleanupCheckoutTemps(files)
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	if released > 0 && repo.checkoutHooks.Cleaned != nil {
+		repo.checkoutHooks.Cleaned(released)
 	}
 
 	//now := time.Now()
@@ -1446,32 +1463,63 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 }
 
 func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, total int, context map[string]interface{}, before ...*entity.File) (err error) {
+	active := filepath.Clean(checkoutDir) == filepath.Clean(repo.DataPath)
+	if active {
+		if err = repo.checkoutCanceled(); err != nil {
+			return err
+		}
+		if repo.checkoutHooks.Before != nil {
+			if err = repo.checkoutHooks.Before([]*entity.File{file}); err != nil {
+				return err
+			}
+		}
+		repo.reportCheckout(file, 0, count, total)
+	}
 	absPath := filepath.Join(checkoutDir, file.Path)
-	dir, name := filepath.Split(absPath)
+	dir, _ := filepath.Split(absPath)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return
 	}
 
-	tmp := filepath.Join(dir, name+gulu.Rand.String(7)+".tmp")
-	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	f, err := os.CreateTemp(dir, ".siyuan-checkout-"+util.Hash([]byte(file.Path))+"-*.tmp")
 	if nil != err {
 		return
 	}
 	defer func() {
 		f.Close()
-		os.Remove(tmp)
+		os.Remove(f.Name())
 	}()
 
+	written := int64(0)
 	for _, c := range file.Chunks {
+		if active {
+			if err = repo.checkoutCanceled(); err != nil {
+				return err
+			}
+		}
 		var chunk *entity.Chunk
 		chunk, err = repo.store.GetChunk(c)
 		if nil != err {
 			return
 		}
 
-		if _, err = f.Write(chunk.Data); nil != err {
-			logging.LogErrorf("write file [%s] failed: %s", absPath, err)
-			return
+		for offset := 0; offset < len(chunk.Data); {
+			if active {
+				if err = repo.checkoutCanceled(); err != nil {
+					return err
+				}
+			}
+			end := min(offset+1024*1024, len(chunk.Data))
+			var n int
+			n, err = f.Write(chunk.Data[offset:end])
+			written += int64(n)
+			if err != nil {
+				return err
+			}
+			offset = end
+			if active {
+				repo.reportCheckout(file, written, count, total)
+			}
 		}
 	}
 
@@ -1496,6 +1544,11 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 			return
 		}
 	}
+	if active {
+		if err = repo.checkoutCanceled(); err != nil {
+			return err
+		}
+	}
 
 	for i := 0; i < 3; i++ {
 		err = os.Rename(f.Name(), absPath) // Windows 上重命名是非原子的
@@ -1513,6 +1566,9 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 	if nil != err {
 		logging.LogErrorf("write file [%s] failed: %s", absPath, err)
 		return
+	}
+	if active && repo.checkoutHooks.Committed != nil {
+		repo.checkoutHooks.Committed(file)
 	}
 
 	updated := time.UnixMilli(file.Updated)
