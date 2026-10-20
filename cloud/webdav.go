@@ -17,6 +17,7 @@
 package cloud
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -27,6 +28,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
@@ -40,13 +42,18 @@ type WebDAV struct {
 	Client *gowebdav.Client
 
 	lock sync.Mutex
+	dirs map[string]time.Time
 }
+
+// ErrWebDAVInvalidResponse 表示端点没有返回 WebDAV 集合或同步元数据。
+var ErrWebDAVInvalidResponse = errors.New("WebDAV endpoint did not return a collection or repository data")
 
 func NewWebDAV(baseCloud *BaseCloud, client *gowebdav.Client) (ret *WebDAV) {
 	ret = &WebDAV{
 		BaseCloud: baseCloud,
 		Client:    client,
 		lock:      sync.Mutex{},
+		dirs:      map[string]time.Time{},
 	}
 	return
 }
@@ -78,6 +85,11 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 	length = info.Size()
 
 	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
+	defer func() {
+		if nil != err {
+			webdav.clearDirs()
+		}
+	}()
 	folder := path.Dir(key)
 	if err = webdav.mkdirAll(folder); nil != err {
 		return
@@ -91,7 +103,7 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 	}
 	if "refs/latest" == filePath {
 		// WebDAV 可能允许写入无扩展名文件，但拒绝随后读取，不能将这种上传报告为成功。
-		if _, err = webdav.Client.Read(key); nil != err {
+		if _, err = webdav.readMetadata(key); nil != err {
 			err = webdav.parseErr(err)
 			if errors.Is(err, ErrCloudObjectNotFound) {
 				err = fmt.Errorf("read uploaded WebDAV refs/latest: %w", ErrCloudCheckFailed)
@@ -102,6 +114,11 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 }
 
 func (webdav *WebDAV) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
+	defer func() {
+		if nil != err {
+			webdav.clearDirs()
+		}
+	}()
 	length = int64(len(data))
 	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
 	folder := path.Dir(key)
@@ -123,6 +140,9 @@ func (webdav *WebDAV) UploadBytes(filePath string, data []byte, overwrite bool) 
 func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
 	data, err = webdav.Client.Read(key)
+	if nil == err && (strings.HasPrefix(filePath, "refs/") || filePath == "lock-sync") && webDAVHTML(data) {
+		return nil, ErrWebDAVInvalidResponse
+	}
 	err = webdav.parseErr(err)
 	if nil != err {
 		if "refs/latest" == filePath && errors.Is(err, ErrCloudObjectNotFound) {
@@ -156,6 +176,7 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 }
 
 func (webdav *WebDAV) RemoveObject(filePath string) (err error) {
+	defer webdav.clearDirs()
 	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
 	err = webdav.Client.Remove(key)
 	err = webdav.parseErr(err)
@@ -354,7 +375,7 @@ func (webdav *WebDAV) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 			continue
 		}
 
-		data, ReadErr := webdav.Client.Read(path.Join(keyPath, info.Name()))
+		data, ReadErr := webdav.readMetadata(path.Join(keyPath, info.Name()))
 		if nil != ReadErr {
 			err = webdav.parseErr(ReadErr)
 			return
@@ -403,7 +424,7 @@ func (webdav *WebDAV) repoLatest(repoDir string) (id string, err error) {
 		return
 	}
 
-	data, err := webdav.Client.Read(latestPath)
+	data, err := webdav.readMetadata(latestPath)
 	if nil != err {
 		return
 	}
@@ -465,7 +486,7 @@ func (webdav *WebDAV) parseErr(err error) error {
 				} else if 503 == statusErr.Status || 502 == statusErr.Status || 500 == statusErr.Status {
 					return ErrCloudServiceUnavailable
 				} else if 200 == statusErr.Status {
-					return nil
+					return ErrWebDAVInvalidResponse
 				}
 			}
 		}
@@ -478,31 +499,28 @@ func (webdav *WebDAV) parseErr(err error) error {
 }
 
 func (webdav *WebDAV) mkdirAll(folder string) (err error) {
-	cacheKey := "webdav.dir." + folder
-	_, ok := cache.Get(cacheKey)
-	if ok {
-		return
-	}
-
 	webdav.lock.Lock()
 	defer webdav.lock.Unlock()
+	// 目录缓存只属于当前客户端，限时复核，失败后不再复用已有缓存。
+	defer func() {
+		if nil != err {
+			clear(webdav.dirs)
+		}
+	}()
+	if time.Now().Before(webdav.dirs[path.Clean(folder)]) {
+		return nil
+	}
 
 	info, err := webdav.Client.Stat(folder)
-	if nil != err {
-		err = webdav.parseErr(err)
-		if nil == err {
-			cache.Set(cacheKey, true, 1)
-			return
+	if nil == err {
+		if !info.IsDir() {
+			return &fs.PathError{Op: "Mkdir", Path: folder, Err: fs.ErrExist}
 		}
-
-		if ErrCloudObjectNotFound != err {
-			return
-		}
+		webdav.dirs[path.Clean(folder)] = time.Now().Add(time.Minute)
+		return nil
 	}
-	i := info.(*gowebdav.File)
-	if nil != i && i.IsDir() {
-		cache.Set(cacheKey, true, 1)
-		return
+	if !errors.Is(webdav.parseErr(err), ErrCloudObjectNotFound) {
+		return webdav.parseErr(err)
 	}
 
 	paths := strings.Split(folder, "/")
@@ -513,17 +531,51 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 		}
 		sub += e + "/"
 
-		if _, ok := cache.Get("webdav.dir." + sub); ok {
+		if time.Now().Before(webdav.dirs[path.Clean(sub)]) {
 			continue
 		}
 
 		err = webdav.Client.Mkdir(sub, 0755)
 		err = webdav.parseErr(err)
 		if nil != err {
-			logging.LogErrorf("mkdir [%s] failed: %s", folder, err)
-		} else {
-			cache.Set("webdav.dir."+sub, true, 1)
+			return err
 		}
+		// gowebdav 将 MKCOL 的 405 当作成功，必须确认目标确实为集合。
+		info, err = webdav.Client.Stat(sub)
+		if nil != err {
+			if errors.Is(webdav.parseErr(err), ErrCloudObjectNotFound) {
+				return fmt.Errorf("WebDAV collection not created: %w", ErrWebDAVInvalidResponse)
+			}
+			return webdav.parseErr(err)
+		}
+		if !info.IsDir() {
+			return &fs.PathError{Op: "Mkdir", Path: sub, Err: fs.ErrExist}
+		}
+		webdav.dirs[path.Clean(sub)] = time.Now().Add(time.Minute)
 	}
-	return
+	return nil
+}
+
+func (webdav *WebDAV) clearDirs() {
+	webdav.lock.Lock()
+	defer webdav.lock.Unlock()
+	clear(webdav.dirs)
+}
+
+// 只检查格式明确的明文元数据，不对加密对象按文本前缀进行判定。
+func (webdav *WebDAV) readMetadata(key string) ([]byte, error) {
+	data, err := webdav.Client.Read(key)
+	if nil == err && webDAVHTML(data) {
+		return nil, ErrWebDAVInvalidResponse
+	}
+	return data, err
+}
+
+func webDAVHTML(data []byte) bool {
+	data = bytes.TrimSpace(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf}))
+	if len(data) > 32 {
+		data = data[:32]
+	}
+	prefix := strings.ToLower(string(data))
+	return strings.HasPrefix(prefix, "<!doctype html") || strings.HasPrefix(prefix, "<html")
 }
