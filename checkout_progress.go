@@ -69,7 +69,9 @@ func (repo *Repo) checkoutCanceled() error {
 // normalizeCheckoutError 保留已取消请求的错误身份，包括未包装 context 错误的云服务。
 func (repo *Repo) normalizeCheckoutError(err *error) {
 	if *err != nil {
-		*err = errors.Join(*err, repo.checkoutCanceled())
+		if canceled := repo.checkoutCanceled(); canceled != nil && !errors.Is(*err, canceled) {
+			*err = errors.Join(*err, canceled)
+		}
 	}
 }
 

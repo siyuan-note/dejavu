@@ -170,6 +170,12 @@ func TestSyncCheckoutCancellationPreservesProviderErrorIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal("a late cancellation changed a completed result")
 	}
+	repo.SetCheckoutHooks(CheckoutHooks{})
+	err = providerErr
+	repo.normalizeCheckoutError(&err)
+	if err != providerErr {
+		t.Fatal("an uncanceled provider error was unnecessarily wrapped")
+	}
 }
 
 func TestSyncCheckoutFixesSnapshotBeforeResumingUpload(t *testing.T) {
