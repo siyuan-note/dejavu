@@ -930,6 +930,9 @@ func (repo *Repo) index(memo string, checkChunks bool, context map[string]interf
 }
 
 func (repo *Repo) index0(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -993,6 +996,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 			waitGroup := &sync.WaitGroup{}
 			p, _ := ants.NewPoolWithFunc(4, func(arg interface{}) {
 				defer waitGroup.Done()
+				if repo.checkoutCanceled() != nil {
+					return
+				}
 
 				count.Add(1)
 				eventbus.Publish(eventbus.EvtIndexGetLatestFile, context, int(count.Load()), total)
@@ -1058,6 +1064,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 			}
 			waitGroup.Wait()
 			p.Release()
+			if err = repo.checkoutCanceled(); err != nil {
+				return
+			}
 			logging.LogInfof("get latest files [files=%d] cost [%s]", len(latestFiles), time.Since(start))
 			if 0 < len(workerErrs) {
 				err = workerErrs[0]
@@ -1068,6 +1077,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	}
 
 	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false)
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
 		err = repo.promoteIndexedAssets()
@@ -1129,6 +1141,9 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	}
 	waitGroup.Wait()
 	p.Release()
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 
 	if 0 < len(workerErrs) {
 		for _, e := range workerErrs {
@@ -1219,6 +1234,9 @@ func (repo *Repo) relPath(absPath string) string {
 }
 
 func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	absPath := repo.absPath(file.Path)
 
 	if chunker.MinSize > file.Size {
@@ -1269,6 +1287,10 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 	chnkr := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
 	buf := make([]byte, chunker.MaxSize)
 	for {
+		if err = repo.checkoutCanceled(); err != nil {
+			_ = filelock.CloseFile(reader)
+			return
+		}
 		chnk, chnkErr := chnkr.Next(buf)
 		if io.EOF == chnkErr {
 			break
@@ -1343,9 +1365,12 @@ func (repo *Repo) openFile(file *entity.File) (ret []byte, err error) {
 	return
 }
 
-func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}) (err error) {
+func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface{}, before ...map[string]*entity.File) (err error) {
 	total := len(files)
 	if 1 > total {
+		return
+	}
+	if err = repo.prepareCheckout(); err != nil {
 		return
 	}
 
@@ -1355,7 +1380,22 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 			return err
 		}
 		absPath := repo.absPath(file.Path)
-		if err = filelock.Remove(absPath); nil != err {
+		if len(before) > 0 {
+			if _, statErr := os.Stat(absPath); errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+		}
+		err = func() error {
+			filelock.Lock(absPath)
+			defer filelock.Unlock(absPath)
+			if len(before) > 0 {
+				if err := repo.checkAssetBefore(file.Path, before[0][file.Path]); err != nil {
+					return err
+				}
+			}
+			return os.Remove(absPath)
+		}()
+		if err != nil {
 			return
 		}
 		if repo.checkoutHooks.Removed != nil {
@@ -1366,7 +1406,7 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 	return
 }
 
-func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}) (err error) {
+func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interface{}, before ...map[string]*entity.File) (err error) {
 	if 1 > len(files) {
 		return
 	}
@@ -1452,7 +1492,11 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFiles, context, total)
 	for _, file := range files {
 		count++
-		err = repo.checkoutFile(file, repo.DataPath, count, total, context)
+		if len(before) > 0 {
+			err = repo.checkoutFile(file, repo.DataPath, count, total, context, before[0][file.Path])
+		} else {
+			err = repo.checkoutFile(file, repo.DataPath, count, total, context)
+		}
 		if nil != err {
 			return
 		}
@@ -1465,7 +1509,7 @@ func (repo *Repo) checkoutFiles(files []*entity.File, context map[string]interfa
 func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, total int, context map[string]interface{}, before ...*entity.File) (err error) {
 	active := filepath.Clean(checkoutDir) == filepath.Clean(repo.DataPath)
 	if active {
-		if err = repo.checkoutCanceled(); err != nil {
+		if err = repo.prepareCheckout(); err != nil {
 			return err
 		}
 		if repo.checkoutHooks.Before != nil {
@@ -1631,6 +1675,9 @@ func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*en
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	start := time.Now()
 	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
+		if canceled := repo.checkoutCanceled(); canceled != nil {
+			return canceled
+		}
 		if nil != err {
 			if isNoSuchFileOrDirErr(err) {
 				// 扫描期间消失的文件由下一次索引处理。

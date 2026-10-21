@@ -29,6 +29,7 @@ import (
 )
 
 func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
+	defer repo.normalizeCheckoutError(&err)
 	lock.Lock()
 	defer lock.Unlock()
 	if err = repo.checkAssetState(); err != nil {
@@ -255,6 +256,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 }
 
 func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *TrafficStat, err error) {
+	defer repo.normalizeCheckoutError(&err)
 	lock.Lock()
 	defer lock.Unlock()
 	if err = repo.checkAssetState(); err != nil {

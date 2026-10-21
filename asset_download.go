@@ -567,6 +567,7 @@ func (repo *Repo) ensureAsset(p string, context map[string]interface{}) (bool, e
 		repo.assetDownloads.state.Deferred[p] = f
 		return false, err
 	}
+	repo.completeCheckout()
 	return true, nil
 }
 
@@ -941,6 +942,9 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		}
 	}
 	for _, f := range pending.Removes {
+		if err := repo.prepareCheckout(); err != nil {
+			return err
+		}
 		if err := repo.checkoutCanceled(); err != nil {
 			return err
 		}
@@ -984,6 +988,9 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		repo.assetDownloads.state.Deferred = previous
 		repo.assetDownloads.state.Pending = pending
 		return err
+	}
+	if localChangeErr == nil {
+		repo.completeCheckout()
 	}
 	return localChangeErr
 }

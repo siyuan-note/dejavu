@@ -73,7 +73,7 @@ func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
 
 func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
 	absFilePath := filepath.Join(s3.Conf.RepoPath, filePath)
@@ -107,7 +107,7 @@ func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err e
 func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
 	length = int64(len(data))
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
 	key := path.Join("repo", filePath)
@@ -127,7 +127,7 @@ func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length 
 
 func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 	key := path.Join("repo", filePath)
 	input := &as3.GetObjectInput{
@@ -155,7 +155,7 @@ func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {
 func (s3 *S3) RemoveObject(key string) (err error) {
 	key = path.Join("repo", key)
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 	_, err = svc.DeleteObject(ctx, &as3.DeleteObjectInput{
 		Bucket: aws.String(s3.Conf.S3.Bucket),
@@ -317,7 +317,7 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 		pathPrefix += "/"
 	}
 	limit := int32(1000)
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
 	entries, err := listS3Objects(ctx, svc, &as3.ListObjectsInput{
@@ -383,7 +383,7 @@ func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 
 func (s3 *S3) listRepoRefs(refPrefix string) (ret []*Ref, err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
 	prefix := path.Join("repo", "refs", refPrefix) + "/"
@@ -477,7 +477,7 @@ func listS3Objects(ctx context.Context, svc listObjectsAPIClient, input *as3.Lis
 
 func (s3 *S3) listRepos() (ret []*Repo, err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
 	output, err := svc.ListBuckets(ctx, &as3.ListBucketsInput{})
@@ -503,7 +503,7 @@ func (s3 *S3) listRepos() (ret []*Repo, err error) {
 
 func (s3 *S3) statFile(key string) (info *objectInfo, err error) {
 	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(context.Background(), time.Duration(s3.S3.Timeout)*time.Second)
+	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
 	header, err := svc.HeadObject(ctx, &as3.HeadObjectInput{

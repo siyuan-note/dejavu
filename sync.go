@@ -164,8 +164,12 @@ func (repo *Repo) GetCloudLatestFast(context map[string]interface{}) (cloudLates
 }
 
 func (repo *Repo) Sync(context map[string]interface{}) (mergeResult *MergeResult, trafficStat *TrafficStat, err error) {
+	defer repo.normalizeCheckoutError(&err)
 	lock.Lock()
 	defer lock.Unlock()
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -288,7 +292,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
 	// 执行数据同步
-	err = repo.sync0(context, cloudLatest, latest, mergeResult, trafficStat)
+	err = repo.sync0(context, cloudLatest, latest, mergeResult, trafficStat, false)
 	return
 }
 
@@ -299,7 +303,7 @@ func (repo *Repo) sync(context map[string]interface{}) (mergeResult *MergeResult
 // mergeResult 待返回的同步合并结果
 // trafficStat 待返回的流量统计
 func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Index, latest *entity.Index, mergeResult *MergeResult,
-	trafficStat *TrafficStat) (err error) {
+	trafficStat *TrafficStat, rechecked bool) (err error) {
 	// 组装还原云端最新文件列表
 	cloudLatestFiles, err := repo.getFiles(cloudLatest.Files)
 	if nil != err {
@@ -310,64 +314,66 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
 
-	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(1)
-	var errs []error
-	errsLock := sync.Mutex{}
-	go func() { // 下载缺失分块并入库
-		defer waitGroup.Done()
+	if !rechecked {
+		waitGroup := sync.WaitGroup{}
+		waitGroup.Add(1)
+		var errs []error
+		errsLock := sync.Mutex{}
+		go func() { // 下载缺失分块并入库
+			defer waitGroup.Done()
 
-		fetchChunkIDs, downloadErr := repo.localNotFoundChunks(repo.getChunks(repo.downloadedCloudFiles(cloudLatestFiles)))
-		if nil != downloadErr {
-			logging.LogErrorf("get local not found chunks failed: %s", downloadErr)
-			errsLock.Lock()
-			errs = append(errs, downloadErr)
+			fetchChunkIDs, downloadErr := repo.localNotFoundChunks(repo.getChunks(repo.downloadedCloudFiles(cloudLatestFiles)))
+			if nil != downloadErr {
+				logging.LogErrorf("get local not found chunks failed: %s", downloadErr)
+				errsLock.Lock()
+				errs = append(errs, downloadErr)
+				errsLock.Unlock()
+				return
+			}
+
+			downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
+			if nil != downloadErr {
+				logging.LogErrorf("download cloud chunks put failed: %s", downloadErr)
+				errsLock.Lock()
+				errs = append(errs, downloadErr)
+				errsLock.Unlock()
+				return
+			}
+			trafficStat.m.Lock()
+			trafficStat.DownloadBytes += downloadStat.CloudBytes
+			trafficStat.DownloadChunkCount += len(fetchChunkIDs)
+			trafficStat.APIGet += len(fetchChunkIDs) - downloadStat.PeerCount
+			trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
+			trafficStat.PeerDownloadChunkCount += downloadStat.PeerCount
+			trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
+			trafficStat.m.Unlock()
+		}()
+
+		waitGroup.Add(1)
+		go func() { // 上传差异数据
+			defer waitGroup.Done()
+			if repo.usesAssetDownloads() {
+				return
+			}
+
+			uploadErr := repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
+			if nil != uploadErr {
+				logging.LogErrorf("upload cloud failed: %s", uploadErr)
+				errsLock.Lock()
+				errs = append(errs, uploadErr)
+				errsLock.Unlock()
+				return
+			}
+		}()
+		waitGroup.Wait()
+		errsLock.Lock()
+		if 0 < len(errs) {
+			err = errs[0]
 			errsLock.Unlock()
 			return
 		}
-
-		downloadStat, downloadErr := repo.downloadCloudChunksPut(fetchChunkIDs, context)
-		if nil != downloadErr {
-			logging.LogErrorf("download cloud chunks put failed: %s", downloadErr)
-			errsLock.Lock()
-			errs = append(errs, downloadErr)
-			errsLock.Unlock()
-			return
-		}
-		trafficStat.m.Lock()
-		trafficStat.DownloadBytes += downloadStat.CloudBytes
-		trafficStat.DownloadChunkCount += len(fetchChunkIDs)
-		trafficStat.APIGet += len(fetchChunkIDs) - downloadStat.PeerCount
-		trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
-		trafficStat.PeerDownloadChunkCount += downloadStat.PeerCount
-		trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
-		trafficStat.m.Unlock()
-	}()
-
-	waitGroup.Add(1)
-	go func() { // 上传差异数据
-		defer waitGroup.Done()
-		if repo.usesAssetDownloads() {
-			return
-		}
-
-		uploadErr := repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
-		if nil != uploadErr {
-			logging.LogErrorf("upload cloud failed: %s", uploadErr)
-			errsLock.Lock()
-			errs = append(errs, uploadErr)
-			errsLock.Unlock()
-			return
-		}
-	}()
-	waitGroup.Wait()
-	errsLock.Lock()
-	if 0 < len(errs) {
-		err = errs[0]
 		errsLock.Unlock()
-		return
 	}
-	errsLock.Unlock()
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -519,6 +525,27 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		// logging.LogInfof("sync merge ignore remove [%s]", remove.Path)
 	}
 	mergeResult.Removes = mergeResultRemovesTmp
+	if mergeResult.DataChanged() && repo.checkoutHooks.Apply != nil && !rechecked {
+		if err = repo.prepareCheckout(); err != nil {
+			return
+		}
+		// 调用方已停止输入并排空写入；基于当前磁盘快照重新计算合并，保留后台传输期间的编辑。
+		fresh, indexErr := func() (*entity.Index, error) {
+			applied := repo.checkoutHooks.Applied
+			repo.checkoutHooks.Applied = nil
+			defer func() { repo.checkoutHooks.Applied = applied }()
+			return repo.index("[Sync] Recheck before applying changes", false, context)
+		}()
+		if indexErr != nil {
+			return indexErr
+		}
+		if fresh.ID != latest.ID {
+			next := &MergeResult{Time: mergeResult.Time}
+			err = repo.sync0(context, cloudLatest, fresh, next, trafficStat, true)
+			*mergeResult = *next
+			return
+		}
+	}
 
 	// 被合并策略舍弃的文件复制到数据历史文件夹
 	if 0 < len(historyFiles) {
@@ -701,12 +728,46 @@ func (repo *Repo) checkoutTree(file *entity.File, checkoutDir string, luteEngine
 }
 
 func (repo *Repo) restoreFiles(mergeResult *MergeResult, context map[string]interface{}) (err error) {
-	err = repo.checkoutFiles(mergeResult.Upserts, context)
+	if !mergeResult.DataChanged() {
+		return repo.checkoutCanceled()
+	}
+	if err = repo.prepareCheckout(); err != nil {
+		return
+	}
+	latest, err := repo.Latest()
+	if err != nil {
+		return
+	}
+	files, err := repo.getFiles(latest.Files)
+	if err != nil {
+		return
+	}
+	before := filesByPath(files)
+	// 客户端保存完成后重新认证待替换和删除的源文件，保留传输期间产生的本地修改。
+	for _, file := range mergeResult.Upserts {
+		if matches, matchErr := repo.matchesAssetFile(file); matchErr != nil {
+			return matchErr
+		} else if matches {
+			continue
+		}
+		if err = repo.checkAssetBefore(file.Path, before[file.Path]); err != nil {
+			return
+		}
+	}
+	for _, file := range mergeResult.Removes {
+		if _, statErr := os.Stat(repo.absPath(file.Path)); errors.Is(statErr, os.ErrNotExist) {
+			continue
+		}
+		if err = repo.checkAssetBefore(file.Path, before[file.Path]); err != nil {
+			return
+		}
+	}
+	err = repo.checkoutFiles(mergeResult.Upserts, context, before)
 	if nil != err {
 		logging.LogErrorf("checkout files failed: %s", err)
 		return
 	}
-	err = repo.removeFiles(mergeResult.Removes, context)
+	err = repo.removeFiles(mergeResult.Removes, context, before)
 	if nil != err {
 		logging.LogErrorf("remove files failed: %s", err)
 		return
@@ -750,15 +811,19 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 			}
 			logging.LogInfof("created merge index [%s]", latest.ID)
 
-			if needSyncCloud {
-				err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
-				if nil != err {
-					logging.LogErrorf("upload cloud failed: %s", err)
-					return
-				}
-			}
 		} else { // 只有云端改变了，本地没有改变，则直接使用云端索引作为本地最新索引
 			latest = cloudLatest
+		}
+	}
+	// 合并索引必须在编辑保护内固定，上传期间的新输入留给下一轮快照。
+	if err = repo.UpdateLatest(latest); err != nil {
+		return
+	}
+	repo.completeCheckout()
+	if mergeResult.DataChanged() && localChanged && needSyncCloud {
+		err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat)
+		if err != nil {
+			return
 		}
 	}
 
@@ -770,11 +835,6 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 		}
 	}
 
-	// 更新本地最新索引
-	if err = repo.UpdateLatest(latest); nil != err {
-		logging.LogErrorf("update latest failed: %s", err)
-		return
-	}
 	// 更新本地同步点
 	err = repo.UpdateLatestSync(latest)
 	if nil != err {
@@ -1959,7 +2019,13 @@ func (repo *Repo) downloadCloudFile(id string, count, total int, context map[str
 }
 
 func (repo *Repo) downloadCloudObject(filePath string) (ret []byte, err error) {
+	if err = repo.checkoutCanceled(); err != nil {
+		return
+	}
 	data, err := repo.cloud.DownloadObject(filePath)
+	if canceled := repo.checkoutCanceled(); canceled != nil {
+		return nil, canceled
+	}
 	if nil != err {
 		return
 	}

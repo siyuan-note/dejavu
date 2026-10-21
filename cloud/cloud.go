@@ -17,8 +17,10 @@
 package cloud
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/klauspost/compress/zstd"
@@ -202,6 +204,25 @@ type Index struct {
 type BaseCloud struct {
 	*Conf
 	Cloud
+	operationContext atomic.Pointer[cloudContext]
+}
+
+type cloudContext struct{ context.Context }
+
+// SetContext 将取消绑定到当前仓库操作；清除后恢复普通请求上下文。
+func (baseCloud *BaseCloud) SetContext(ctx context.Context) {
+	if ctx == nil {
+		baseCloud.operationContext.Store(nil)
+		return
+	}
+	baseCloud.operationContext.Store(&cloudContext{ctx})
+}
+
+func (baseCloud *BaseCloud) Context() context.Context {
+	if ctx := baseCloud.operationContext.Load(); ctx != nil {
+		return ctx.Context
+	}
+	return context.Background()
 }
 
 func (baseCloud *BaseCloud) CreateRepo(name string) (err error) {

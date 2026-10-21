@@ -17,6 +17,7 @@
 package dejavu
 
 import (
+	stdcontext "context"
 	"errors"
 	"net"
 	"os"
@@ -58,6 +59,13 @@ func (err *cloudLockError) Is(target error) bool {
 
 func (repo *Repo) unlockCloud(context map[string]interface{}) {
 	endRefreshLock <- true
+	// 清理云端锁必须独立于用户取消；后续仓库阶段仍使用原取消信号。
+	if backend, ok := repo.cloud.(interface{ SetContext(stdcontext.Context) }); ok {
+		ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), 5*time.Second)
+		defer cancel()
+		backend.SetContext(ctx)
+		defer backend.SetContext(repo.checkoutHooks.Context)
+	}
 	var err error
 	for i := 0; i < 3; i++ {
 		eventbus.Publish(eventbus.EvtCloudUnlock, context)
@@ -83,7 +91,16 @@ func (repo *Repo) tryLockCloud(currentDeviceID string, context map[string]interf
 		if nil != err {
 			if errors.Is(err, ErrCloudLocked) {
 				logging.LogInfof("cloud repo is locked, retry after 5s")
-				time.Sleep(5 * time.Second)
+				ctx := repo.checkoutHooks.Context
+				if ctx == nil {
+					time.Sleep(5 * time.Second)
+				} else {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(5 * time.Second):
+					}
+				}
 				continue
 			}
 			return

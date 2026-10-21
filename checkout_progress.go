@@ -24,7 +24,11 @@ type CheckoutProgress struct {
 // CheckoutHooks 在仓库操作前设置，不得在回调中重入仓库。回调只报告 DataPath 中的文件。
 // 取消保留已完成的文件，不更新成功同步点，当前临时文件由退出清理。
 type CheckoutHooks struct {
-	Context   context.Context
+	Context context.Context
+	// Apply 在改写数据目录前准备调用方；空差异和纯上传不会调用。
+	Apply func() error
+	// Applied 在本批落盘完成后恢复调用方索引，再进入后续网络阶段。
+	Applied   func()
 	Before    func([]*entity.File) error
 	Progress  func(CheckoutProgress)
 	Committed func(*entity.File)
@@ -32,13 +36,41 @@ type CheckoutHooks struct {
 	Cleaned   func(int64)
 }
 
-func (repo *Repo) SetCheckoutHooks(hooks CheckoutHooks) { repo.checkoutHooks = hooks }
+func (repo *Repo) completeCheckout() {
+	if repo.checkoutHooks.Applied != nil {
+		repo.checkoutHooks.Applied()
+	}
+}
+
+func (repo *Repo) prepareCheckout() error {
+	if err := repo.checkoutCanceled(); err != nil {
+		return err
+	}
+	if repo.checkoutHooks.Apply != nil {
+		return repo.checkoutHooks.Apply()
+	}
+	return nil
+}
+
+func (repo *Repo) SetCheckoutHooks(hooks CheckoutHooks) {
+	repo.checkoutHooks = hooks
+	if backend, ok := repo.cloud.(interface{ SetContext(context.Context) }); ok {
+		backend.SetContext(hooks.Context)
+	}
+}
 
 func (repo *Repo) checkoutCanceled() error {
 	if repo.checkoutHooks.Context != nil {
 		return repo.checkoutHooks.Context.Err()
 	}
 	return nil
+}
+
+// normalizeCheckoutError 保留已取消请求的错误身份，包括未包装 context 错误的云服务。
+func (repo *Repo) normalizeCheckoutError(err *error) {
+	if *err != nil {
+		*err = errors.Join(*err, repo.checkoutCanceled())
+	}
 }
 
 func (repo *Repo) reportCheckout(file *entity.File, written int64, count, total int) {

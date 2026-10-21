@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -55,6 +56,9 @@ func NewWebDAV(baseCloud *BaseCloud, client *gowebdav.Client) (ret *WebDAV) {
 		lock:      sync.Mutex{},
 		dirs:      map[string]time.Time{},
 	}
+	client.SetInterceptor(func(_ string, request *http.Request) {
+		*request = *request.WithContext(ret.Context())
+	})
 	return
 }
 
