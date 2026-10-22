@@ -544,6 +544,9 @@ func (repo *Repo) ensureAsset(p string, context map[string]interface{}) (bool, e
 	if err := repo.ensureFileChunks(f, context); err != nil {
 		return false, err
 	}
+	if err := repo.preflightCheckout([]*entity.File{f}, nil, context); err != nil {
+		return false, err
+	}
 	if _, err := os.Stat(repo.absPath(p)); err == nil {
 		matches, matchErr := func() (bool, error) {
 			abs := repo.absPath(p)
@@ -895,6 +898,9 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		if !validAssetFile(f) || (pending.Before[f.Path] != nil && !validAssetFile(pending.Before[f.Path])) {
 			return ErrAssetDownloadState
 		}
+	}
+	if err := repo.preflightCheckout(pending.Upserts, pending.Removes, context); err != nil {
+		return err
 	}
 	if err := repo.recordAssetRecovery(pending); err != nil {
 		return err

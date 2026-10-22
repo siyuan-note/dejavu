@@ -39,14 +39,17 @@ func (backend *checkoutGuardCloud) DownloadObject(path string) ([]byte, error) {
 func TestSyncCheckoutGuardLeavesUploadAndNoChangeEditable(t *testing.T) {
 	base := t.TempDir()
 	repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "device", false)
-	applies := 0
-	repo.SetCheckoutHooks(CheckoutHooks{Apply: func() error { applies++; return nil }})
+	applies, preflights := 0, 0
+	repo.SetCheckoutHooks(CheckoutHooks{
+		Apply:     func() error { applies++; return nil },
+		Preflight: func(*CheckoutPlan) error { preflights++; return nil },
+	})
 	syncAssetTestRepo(t, repo)
 	if _, _, err := repo.Sync(nil); err != nil {
 		t.Fatal(err)
 	}
-	if applies != 0 {
-		t.Fatalf("upload/no-change started editing protection %d times", applies)
+	if applies != 0 || preflights != 0 {
+		t.Fatalf("upload/no-change started editing protection: apply=%d preflight=%d", applies, preflights)
 	}
 }
 

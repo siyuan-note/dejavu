@@ -487,8 +487,6 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	defer gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
-
 	latestFiles, err := repo.getFiles(index.Files)
 	if nil != err {
 		return
@@ -496,8 +494,13 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 
 	upserts, removes = repo.diffUpsertRemove(latestFiles, files, false)
 	if 1 > len(upserts) && 1 > len(removes) {
+		gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
 		return
 	}
+	if err = repo.preflightCheckout(upserts, removes, context); err != nil {
+		return
+	}
+	defer gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
 
 	err = repo.checkoutFiles(upserts, context)
 	if nil != err {

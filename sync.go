@@ -762,6 +762,9 @@ func (repo *Repo) restoreFiles(mergeResult *MergeResult, context map[string]inte
 			return
 		}
 	}
+	if err = repo.preflightCheckout(mergeResult.Upserts, mergeResult.Removes, context); err != nil {
+		return
+	}
 	err = repo.checkoutFiles(mergeResult.Upserts, context, before)
 	if nil != err {
 		logging.LogErrorf("checkout files failed: %s", err)
@@ -2261,6 +2264,9 @@ func (repo *Repo) CheckoutFilesFromCloud(files []*entity.File, context map[strin
 	stat.PeerDownloadChunkCount += downloadStat.PeerCount
 	stat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
+	if err = repo.preflightCheckout(files, nil, context); err != nil {
+		return
+	}
 	err = repo.checkoutFiles(files, context)
 	return
 }

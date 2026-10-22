@@ -28,7 +28,11 @@ type CheckoutHooks struct {
 	// Apply 在改写数据目录前准备调用方；空差异和纯上传不会调用。
 	Apply func() error
 	// Applied 在本批落盘完成后恢复调用方索引，再进入后续网络阶段。
-	Applied   func()
+	Applied func()
+	// Preflight 在本批实际落盘文件的替换及删除前检查目标内容；返回错误时不应用该批变更。
+	// 回调可通过 CheckoutPlan.ReadFile 读取待写入的已认证内容，不得重入仓库或保留计划供异步使用。
+	Preflight func(*CheckoutPlan) error
+	// Before 在单个文件替换前检查磁盘空间等条件，不能用于需要整批拒绝的兼容检查。
 	Before    func([]*entity.File) error
 	Progress  func(CheckoutProgress)
 	Committed func(*entity.File)
