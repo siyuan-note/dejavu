@@ -119,6 +119,7 @@ func (repo *Repo) UpdateLatest(index *entity.Index) (err error) {
 	}
 
 	logging.LogInfof("updated local latest to [%s], full latest [size=%s], cost [%s]", index.String(), humanize.Bytes(uint64(len(data))), time.Since(start))
+	err = repo.saveFileState(index)
 	return
 }
 

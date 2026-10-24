@@ -10,29 +10,29 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 )
 
-// IndexWithResult 在索引锁内判断是否创建了新快照。
-func (repo *Repo) IndexWithResult(memo string, checkChunks bool, context map[string]interface{}) (*entity.Index, bool, error) {
+// IndexWithResult 在索引锁内判断是否创建了新快照；fullCheck 校验所有已落盘文件。
+func (repo *Repo) IndexWithResult(memo string, checkChunks bool, context map[string]interface{}, fullCheck ...bool) (*entity.Index, bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
 	latest, err := repo.Latest()
 	if err != nil && !errors.Is(err, ErrNotFoundIndex) {
 		return nil, false, err
 	}
-	index, err := repo.index(memo, checkChunks, context)
+	index, err := repo.index(memo, checkChunks, context, fullCheck...)
 	if err != nil {
 		return nil, false, err
 	}
 	return index, latest == nil || latest.ID != index.ID, nil
 }
 
-// CheckSnapshot 只比较逻辑文件元数据，不下载资源、不修复引用，也不校验或写入分块。
+// CheckSnapshot 复用已确认的本机文件属性，必要时读取内容；不下载资源、不修复引用或写入仓库。
 func (repo *Repo) CheckSnapshot() (bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
 	if err := repo.checkAssetState(); err != nil {
 		return false, err
 	}
-	files, err := repo.walkSnapshotFiles(nil)
+	files, stamps, err := repo.walkSnapshotFiles(nil)
 	if err != nil {
 		return false, err
 	}
@@ -72,7 +72,13 @@ func (repo *Repo) CheckSnapshot() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	upserts, removes := repo.diffUpsertRemove(files, latestFiles, false)
+	if err = repo.loadFileState(latest.ID); err != nil {
+		return false, err
+	}
+	upserts, removes, err := repo.diffLocalFiles(files, latestFiles, stamps, false)
+	if err != nil {
+		return false, err
+	}
 	return len(upserts) != 0 || len(removes) != 0, nil
 }
 

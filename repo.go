@@ -61,6 +61,8 @@ type Repo struct {
 	pathFilter       func(os.FileInfo, string) (bool, error)
 	onCloudIndexList func(error)
 	checkoutHooks    CheckoutHooks
+	fileStateMu      sync.Mutex
+	fileState        *localFileState
 
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
@@ -457,6 +459,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 	var files []*entity.File
+	stamps := map[string]fileStamp{}
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtCheckoutBeforeWalkData, context, repo.DataPath)
 	err = filelock.Walk(repo.DataPath, func(path string, d fs.DirEntry, err error) error {
@@ -480,6 +483,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		}
 
 		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
+		stamps[p] = stampFile(path, info)
 		eventbus.Publish(eventbus.EvtCheckoutWalkData, context, p)
 		return nil
 	})
@@ -492,9 +496,16 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		return
 	}
 
-	upserts, removes = repo.diffUpsertRemove(latestFiles, files, false)
+	if err = repo.loadFileState(index.ID); err != nil {
+		return
+	}
+	upserts, removes, err = repo.diffCheckoutFiles(latestFiles, files, stamps)
+	if err != nil {
+		return
+	}
 	if 1 > len(upserts) && 1 > len(removes) {
 		gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
+		err = repo.saveFileState(index)
 		return
 	}
 	if err = repo.preflightCheckout(upserts, removes, context); err != nil {
@@ -516,15 +527,16 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		}
 		eventbus.Publish(eventbus.EvtCheckoutRemoveFile, context, i+1, total)
 	}
+	err = repo.saveFileState(index)
 	return
 }
 
-// Index 将 repo 数据文件夹中的文件索引到仓库中。context 参数用于发布事件时传递调用上下文。
-func (repo *Repo) Index(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
+// Index 将数据文件索引到仓库；fullCheck 为 true 时校验所有已落盘文件的内容。
+func (repo *Repo) Index(memo string, checkChunks bool, context map[string]interface{}, fullCheck ...bool) (ret *entity.Index, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	ret, err = repo.index(memo, checkChunks, context)
+	ret, err = repo.index(memo, checkChunks, context, fullCheck...)
 	return
 }
 
@@ -914,9 +926,9 @@ func (repo *Repo) removeCloudObjects(objects []string) (err error) {
 	return
 }
 
-func (repo *Repo) index(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
+func (repo *Repo) index(memo string, checkChunks bool, context map[string]interface{}, fullCheck ...bool) (ret *entity.Index, err error) {
 	for i := 0; i < 7; i++ {
-		ret, err = repo.index0(memo, checkChunks, context)
+		ret, err = repo.index0(memo, checkChunks, context, len(fullCheck) > 0 && fullCheck[0])
 		if nil == err {
 			return
 		}
@@ -932,7 +944,7 @@ func (repo *Repo) index(memo string, checkChunks bool, context map[string]interf
 	return
 }
 
-func (repo *Repo) index0(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
+func (repo *Repo) index0(memo string, checkChunks bool, context map[string]interface{}, fullCheck bool) (ret *entity.Index, err error) {
 	if err = repo.checkoutCanceled(); err != nil {
 		return
 	}
@@ -944,7 +956,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 	if _, err = repo.materializeIgnoredAssets(ignoreMatcher, context); err != nil {
 		return
 	}
-	files, err = repo.walkSnapshotFiles(context)
+	files, stamps, err := repo.walkSnapshotFiles(context)
 	if err != nil {
 		return
 	}
@@ -1079,13 +1091,22 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 		}
 	}
 
-	upserts, removes = repo.diffUpsertRemove(files, latestFiles, false)
+	if err = repo.loadFileState(latest.ID); err != nil {
+		return
+	}
+	upserts, removes, err = repo.diffLocalFiles(files, latestFiles, stamps, fullCheck)
+	if err != nil {
+		return
+	}
 	if err = repo.checkoutCanceled(); err != nil {
 		return
 	}
 	if 1 > len(upserts) && 1 > len(removes) {
 		ret = latest
 		err = repo.promoteIndexedAssets()
+		if err == nil {
+			err = repo.saveFileState(latest)
+		}
 		return
 	}
 
@@ -1114,7 +1135,7 @@ func (repo *Repo) index0(memo string, checkChunks bool, context map[string]inter
 
 		count.Add(1)
 		file := arg.(*entity.File)
-		putErr := repo.putFileChunks(file, context, int(count.Load()), total)
+		putErr := repo.putFileChunks(file, stamps[file.Path], context, int(count.Load()), total)
 		if nil != putErr {
 			workerErrLock.Lock()
 			workerErrs = append(workerErrs, putErr)
@@ -1236,7 +1257,7 @@ func (repo *Repo) relPath(absPath string) string {
 	return "/" + filepath.ToSlash(strings.TrimPrefix(absPath, repo.DataPath))
 }
 
-func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{}, count, total int) (err error) {
+func (repo *Repo) putFileChunks(file *entity.File, stamp fileStamp, context map[string]interface{}, count, total int) (err error) {
 	if err = repo.checkoutCanceled(); err != nil {
 		return
 	}
@@ -1267,7 +1288,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 
 		newSize := newInfo.Size()
 		newUpdated := newInfo.ModTime().Unix()
-		if file.Size != newSize || file.SecUpdated() != newUpdated {
+		if stamp != stampFile(absPath, newInfo) {
 			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
 			err = ErrIndexFileChanged
 			return
@@ -1278,6 +1299,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 		if nil != err {
 			return
 		}
+		repo.rememberFile(file, stamp)
 		return
 	}
 
@@ -1333,7 +1355,7 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 
 	newSize := newInfo.Size()
 	newUpdated := newInfo.ModTime().Unix()
-	if file.Size != newSize || file.SecUpdated() != newUpdated {
+	if stamp != stampFile(absPath, newInfo) {
 		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
 		err = ErrIndexFileChanged
 		return
@@ -1341,6 +1363,9 @@ func (repo *Repo) putFileChunks(file *entity.File, context map[string]interface{
 
 	eventbus.Publish(eventbus.EvtIndexUpsertFile, context, count, total)
 	err = repo.putIndexedFile(file)
+	if err == nil {
+		repo.rememberFile(file, stamp)
+	}
 	return
 }
 
@@ -1623,6 +1648,13 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 		logging.LogErrorf("change [%s] time [file.Updated=%d, updated=%v] failed: %s", absPath, file.Updated, updated, err)
 		return
 	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return err
+	}
+	if active {
+		repo.rememberFile(file, stampFile(absPath, info))
+	}
 	eventbus.Publish(eventbus.EvtCheckoutUpsertFile, context, count, total)
 	return
 }
@@ -1673,7 +1705,8 @@ func (repo *Repo) isCloudSiYuan() bool {
 	}
 }
 
-func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*entity.File, err error) {
+func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*entity.File, stamps map[string]fileStamp, err error) {
+	stamps = map[string]fileStamp{}
 	ignoreMatcher := repo.ignoreMatcher()
 	eventbus.Publish(eventbus.EvtIndexBeforeWalkData, context, repo.DataPath)
 	start := time.Now()
@@ -1706,6 +1739,7 @@ func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*en
 		}
 
 		files = append(files, entity.NewFile(p, info.Size(), info.ModTime().UnixMilli()))
+		stamps[p] = stampFile(path, info)
 		eventbus.Publish(eventbus.EvtIndexWalkData, context, p)
 		return nil
 	})

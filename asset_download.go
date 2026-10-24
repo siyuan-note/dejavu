@@ -767,6 +767,9 @@ func (repo *Repo) matchesAssetFile(expected *entity.File) (bool, error) {
 		return false, err
 	}
 	defer f.Close()
+	if err = repo.checkoutCanceled(); err != nil {
+		return false, err
+	}
 	info, err := f.Stat()
 	if err != nil || info.Size() != expected.Size {
 		return false, err
@@ -782,6 +785,9 @@ func (repo *Repo) matchesAssetFile(expected *entity.File) (bool, error) {
 		reader := chunker.NewWithBoundaries(f, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
 		buf := make([]byte, chunker.MaxSize)
 		for {
+			if err = repo.checkoutCanceled(); err != nil {
+				return false, err
+			}
 			chunk, readErr := reader.Next(buf)
 			if readErr == io.EOF {
 				break
@@ -1008,7 +1014,15 @@ func (repo *Repo) alignMatchingFileTime(expected *entity.File) (bool, error) {
 		return matches, err
 	}
 	updated := time.UnixMilli(expected.Updated)
-	return true, os.Chtimes(repo.absPath(expected.Path), updated, updated)
+	if err = os.Chtimes(repo.absPath(expected.Path), updated, updated); err != nil {
+		return false, err
+	}
+	info, err := os.Stat(repo.absPath(expected.Path))
+	if err != nil {
+		return false, err
+	}
+	repo.rememberFile(expected, stampFile(repo.absPath(expected.Path), info))
+	return true, nil
 }
 
 func (repo *Repo) checkAssetBefore(p string, expected *entity.File) error {

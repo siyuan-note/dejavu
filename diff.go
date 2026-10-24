@@ -140,7 +140,7 @@ func (repo *Repo) diffIndex(leftIndex, rightIndex *entity.Index) (ret *LeftRight
 }
 
 func equalFile(left, right *entity.File) bool {
-	if left.Path != right.Path {
+	if left.Path != right.Path || left.Size != right.Size {
 		return false
 	}
 	if left.Updated/1000 != right.Updated/1000 { // Improve data sync file timestamp comparison https://github.com/siyuan-note/siyuan/issues/8573
