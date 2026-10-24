@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
@@ -60,11 +59,12 @@ func (repo *Repo) newFileState() *localFileState {
 	return &localFileState{Version: 1, DataPath: repo.DataPath, DeviceID: repo.DeviceID, Files: map[string]fileObservation{}}
 }
 
+// loadFileState 读取本机派生缓存；缓存不可用时从空记录开始，重新核对源文件内容。
 func (repo *Repo) loadFileState(indexID string) error {
 	state := repo.newFileState()
 	data, err := os.ReadFile(repo.fileStatePath())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		logging.LogWarnf("read local file observations failed, verify file content instead: %s", err)
 	}
 	if err == nil {
 		var saved localFileState
@@ -100,7 +100,8 @@ func (repo *Repo) rememberFile(file *entity.File, stamp fileStamp) {
 	repo.fileState.Files[file.Path] = fileObservation{ID: file.ID, fileStamp: stamp}
 }
 
-// saveFileState 只发布已验证且属于目标快照的记录；失败或中断后缺失的记录需要重新校验。
+// saveFileState 只发布已验证且属于目标快照的记录；缓存读写失败不影响已认证的快照。
+// 缓存未成功保存时保留写入标记，后续操作重新核对内容。
 func (repo *Repo) saveFileState(index *entity.Index) error {
 	repo.fileStateMu.Lock()
 	defer repo.fileStateMu.Unlock()
@@ -124,11 +125,13 @@ func (repo *Repo) saveFileState(index *entity.Index) error {
 	}
 	previous, readErr := os.ReadFile(repo.fileStatePath())
 	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-		return readErr
+		logging.LogWarnf("read local file observations failed, skip cache update: %s", readErr)
+		return nil
 	}
 	if !bytes.Equal(data, previous) {
-		if err = gulu.File.WriteFileSafer(repo.fileStatePath(), data, 0600); err != nil {
-			return err
+		if err = writeFileState(repo.fileStatePath(), data); err != nil {
+			logging.LogWarnf("save local file observations failed, verify file content next time: %s", err)
+			return nil
 		}
 	}
 	for p, observation := range state.Files {
@@ -140,6 +143,26 @@ func (repo *Repo) saveFileState(index *entity.Index) error {
 	}
 	repo.fileState = state
 	return nil
+}
+
+// writeFileState 原子替换派生缓存，并在写入或重命名失败后清理本次临时文件。
+func writeFileState(path string, data []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+	if _, err = file.Write(data); err != nil {
+		return err
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	if err = file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
 
 // matchesObservedContent 在同一文件锁内验证内容及前后属性，防止将读取期间的修改记为已确认。

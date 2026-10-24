@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -259,6 +260,160 @@ func TestFileStateColdReuseAndTimePrecision(t *testing.T) {
 	stateAfter, err := os.ReadFile(repo.fileStatePath())
 	if err != nil || !bytes.Equal(stateBefore, stateAfter) {
 		t.Fatalf("unchanged observations rewritten: %v", err)
+	}
+}
+
+func TestFileStateCacheReadFailureFallsBackToContent(t *testing.T) {
+	for _, fullCheck := range []bool{false, true} {
+		t.Run(map[bool]string{false: "normal", true: "full"}[fullCheck], func(t *testing.T) {
+			base := t.TempDir()
+			repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "device", false)
+			p := "/assets/probe.txt"
+			stamp := time.Unix(1700000100, 100000000)
+			writeFileStateTest(t, repo, p, "before", stamp)
+			before, err := repo.Index("before", true, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Remove(repo.fileStatePath()); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Mkdir(repo.fileStatePath(), 0700); err != nil {
+				t.Fatal(err)
+			}
+			sentinel := filepath.Join(repo.fileStatePath(), "keep")
+			if err = os.WriteFile(sentinel, []byte("preserve"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if changed, checkErr := repo.CheckSnapshot(); checkErr != nil || changed {
+				t.Fatalf("cache failure blocked unchanged precheck: changed=%v err=%v", changed, checkErr)
+			}
+			writeFileStateTest(t, repo, p, "AFTER!", stamp)
+			if changed, checkErr := repo.CheckSnapshot(); checkErr != nil || !changed {
+				t.Fatalf("cache failure hid changed content: changed=%v err=%v", changed, checkErr)
+			}
+			after, created, err := repo.IndexWithResultOptions("after", true, nil, IndexOptions{FullCheck: fullCheck})
+			if err != nil || !created || after.ID == before.ID {
+				t.Fatalf("cache failure blocked indexing: created=%v err=%v", created, err)
+			}
+			if content := snapshotFileStateContent(t, repo, after, p); content != "AFTER!" {
+				t.Fatalf("wrong indexed content: %q", content)
+			}
+			if _, _, err = repo.Checkout(before.ID, nil); err != nil {
+				t.Fatalf("cache failure blocked restoration: %v", err)
+			}
+			if content, readErr := os.ReadFile(repo.absPath(p)); readErr != nil || string(content) != "before" {
+				t.Fatalf("wrong restored content: %q %v", content, readErr)
+			}
+			if content, readErr := os.ReadFile(sentinel); readErr != nil || string(content) != "preserve" {
+				t.Fatalf("unreadable cache path was modified: %q %v", content, readErr)
+			}
+		})
+	}
+}
+
+func TestFileStateCacheWriteFailureKeepsSnapshotUsable(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows read-only files reject replacement without changing repository permissions")
+	}
+	base := t.TempDir()
+	repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "device", false)
+	p := "/assets/probe.txt"
+	stamp := time.Unix(1700000100, 100000000)
+	writeFileStateTest(t, repo, p, "before", stamp)
+	before, err := repo.Index("before", true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, err := os.ReadFile(repo.fileStatePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(repo.fileStatePath(), 0400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(repo.fileStatePath(), 0600) })
+	writeFileStateTest(t, repo, p, "AFTER!", stamp)
+	MarkFileChanged(repo.absPath(p))
+	after, created, err := repo.IndexWithResult("after", true, nil)
+	if err != nil || !created || after.ID == before.ID || snapshotFileStateContent(t, repo, after, p) != "AFTER!" {
+		t.Fatalf("cache write failure invalidated the snapshot: created=%v err=%v", created, err)
+	}
+	if content, readErr := os.ReadFile(repo.fileStatePath()); readErr != nil || !bytes.Equal(content, cached) {
+		t.Fatalf("read-only cache was changed: %v", readErr)
+	}
+	if _, ok := fileWrites.Load(filepath.Clean(repo.absPath(p))); !ok {
+		t.Fatal("failed cache persistence discarded the write mark")
+	}
+	other, err := NewRepo(repo.DataPath, repo.Path, repo.HistoryPath, repo.TempPath,
+		repo.DeviceID, repo.DeviceName, repo.DeviceOS, repo.store.AesKey, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFileStateTest(t, other, p, "LATER!", stamp)
+	if changed, checkErr := other.CheckSnapshot(); checkErr != nil || !changed {
+		t.Fatalf("stale persisted cache hid changed content: changed=%v err=%v", changed, checkErr)
+	}
+	if _, _, err = other.Checkout(before.ID, nil); err != nil {
+		t.Fatalf("cache write failure blocked restoration: %v", err)
+	}
+	if content, readErr := os.ReadFile(other.absPath(p)); readErr != nil || string(content) != "before" {
+		t.Fatalf("wrong restored content: %q %v", content, readErr)
+	}
+	if temporary, globErr := filepath.Glob(repo.fileStatePath() + ".*.tmp"); globErr != nil || len(temporary) != 0 {
+		t.Fatalf("cache write failures left temporary files: %v %v", temporary, globErr)
+	}
+}
+
+func TestFileStateCacheWriteCleansTemporaryOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file-state-v1.json")
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileState(path, []byte("cache")); err == nil {
+		t.Fatal("cache unexpectedly replaced an existing directory")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "file-state-v1.json" || !entries[0].IsDir() {
+		t.Fatalf("failed cache replacement left temporary files or changed original data: %v %v", entries, err)
+	}
+}
+
+func TestFileStateCacheFailurePreservesAuthenticationErrors(t *testing.T) {
+	base := t.TempDir()
+	repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "device", false)
+	file := assetTestFile(t, repo, "/seed.txt")
+	latest, err := repo.Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(repo.fileStatePath()); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(repo.fileStatePath(), 0700); err != nil {
+		t.Fatal(err)
+	}
+	_, chunkPath := repo.store.AbsPath(file.Chunks[0])
+	encoded, err := os.ReadFile(chunkPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded[len(encoded)-1] ^= 1
+	if err = os.WriteFile(chunkPath, encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(repo.absPath(file.Path), []byte("current content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = repo.Checkout(latest.ID, nil); err == nil {
+		t.Fatal("cache fallback bypassed snapshot authentication")
+	}
+	if content, readErr := os.ReadFile(repo.absPath(file.Path)); readErr != nil || string(content) != "current content" {
+		t.Fatalf("authentication failure changed current content: %q %v", content, readErr)
+	}
+	if content, readErr := os.ReadFile(chunkPath); readErr != nil || !bytes.Equal(content, encoded) {
+		t.Fatalf("authentication failure changed original ciphertext: %v", readErr)
 	}
 }
 
