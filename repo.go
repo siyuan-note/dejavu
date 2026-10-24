@@ -531,12 +531,17 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 	return
 }
 
-// Index 将数据文件索引到仓库；fullCheck 为 true 时校验所有已落盘文件的内容。
-func (repo *Repo) Index(memo string, checkChunks bool, context map[string]interface{}, fullCheck ...bool) (ret *entity.Index, err error) {
+// Index 将数据文件索引到仓库，复用本机已确认的文件属性。
+func (repo *Repo) Index(memo string, checkChunks bool, context map[string]interface{}) (ret *entity.Index, err error) {
+	return repo.IndexWithOptions(memo, checkChunks, context, IndexOptions{})
+}
+
+// IndexWithOptions 根据选项索引文件；完整校验读取所有已落盘文件，不主动下载资源。
+func (repo *Repo) IndexWithOptions(memo string, checkChunks bool, context map[string]interface{}, options IndexOptions) (ret *entity.Index, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	ret, err = repo.index(memo, checkChunks, context, fullCheck...)
+	ret, err = repo.index(memo, checkChunks, context, options.FullCheck)
 	return
 }
 

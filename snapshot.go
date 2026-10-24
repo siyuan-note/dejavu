@@ -10,15 +10,25 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 )
 
-// IndexWithResult 在索引锁内判断是否创建了新快照；fullCheck 校验所有已落盘文件。
-func (repo *Repo) IndexWithResult(memo string, checkChunks bool, context map[string]interface{}, fullCheck ...bool) (*entity.Index, bool, error) {
+// IndexOptions 指定本次索引的本机内容校验策略。
+type IndexOptions struct {
+	FullCheck bool
+}
+
+// IndexWithResult 在索引锁内判断是否创建了新快照。
+func (repo *Repo) IndexWithResult(memo string, checkChunks bool, context map[string]interface{}) (*entity.Index, bool, error) {
+	return repo.IndexWithResultOptions(memo, checkChunks, context, IndexOptions{})
+}
+
+// IndexWithResultOptions 根据选项索引文件，并在同一锁内返回是否创建了新快照。
+func (repo *Repo) IndexWithResultOptions(memo string, checkChunks bool, context map[string]interface{}, options IndexOptions) (*entity.Index, bool, error) {
 	lock.Lock()
 	defer lock.Unlock()
 	latest, err := repo.Latest()
 	if err != nil && !errors.Is(err, ErrNotFoundIndex) {
 		return nil, false, err
 	}
-	index, err := repo.index(memo, checkChunks, context, fullCheck...)
+	index, err := repo.index(memo, checkChunks, context, options.FullCheck)
 	if err != nil {
 		return nil, false, err
 	}

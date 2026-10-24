@@ -13,6 +13,12 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 )
 
+// 原有方法签名仍可满足调用方的接口声明。
+var _ interface {
+	Index(string, bool, map[string]interface{}) (*entity.Index, error)
+	IndexWithResult(string, bool, map[string]interface{}) (*entity.Index, bool, error)
+} = (*Repo)(nil)
+
 func writeFileStateTest(t *testing.T, repo *Repo, p, content string, stamp time.Time) {
 	t.Helper()
 	abs := repo.absPath(p)
@@ -110,11 +116,11 @@ func TestFileStateFullCheckAndKnownWrites(t *testing.T) {
 					t.Fatalf("fast path unexpectedly read unchanged attributes: %v", err)
 				}
 			}
-			after, created, err := repo.IndexWithResult("verified", true, nil, !knownWrite)
+			after, created, err := repo.IndexWithResultOptions("verified", true, nil, IndexOptions{FullCheck: !knownWrite})
 			if err != nil || !created || after.ID == before.ID || snapshotFileStateContent(t, repo, after, p) != "AFTER!" {
 				t.Fatalf("content change not detected: %v", err)
 			}
-			stable, created, err := repo.IndexWithResult("unchanged full", true, nil, true)
+			stable, created, err := repo.IndexWithResultOptions("unchanged full", true, nil, IndexOptions{FullCheck: true})
 			if err != nil || created || stable.ID != after.ID {
 				t.Fatalf("unchanged full check made a version: %v", err)
 			}
