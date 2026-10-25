@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -177,8 +178,8 @@ func (repo *Repo) matchesObservedContent(file *entity.File, stamp fileStamp) (bo
 	if err != nil {
 		return false, err
 	}
-	if stampFile(abs, info) != stamp {
-		return false, ErrIndexFileChanged
+	if actual := stampFile(abs, info); actual != stamp {
+		return false, indexFileStampChanged(file.Path, stamp, actual)
 	}
 	matched, err := repo.matchesAssetFile(file)
 	if err != nil {
@@ -191,8 +192,8 @@ func (repo *Repo) matchesObservedContent(file *entity.File, stamp fileStamp) (bo
 	if err != nil {
 		return false, err
 	}
-	if stampFile(abs, info) != stamp {
-		return false, ErrIndexFileChanged
+	if actual := stampFile(abs, info); actual != stamp {
+		return false, indexFileStampChanged(file.Path, stamp, actual)
 	}
 	if matched {
 		repo.rememberFile(file, stamp)
@@ -235,12 +236,45 @@ func (repo *Repo) diffLocalFiles(files, previous []*entity.File, stamps map[stri
 		}
 		upserts = append(upserts, file)
 	}
+	ignoreMatcher := repo.ignoreMatcher()
 	for _, file := range previous {
 		if physical[file.Path] == nil {
+			if !ignoreMatcher.MatchesPath(file.Path) {
+				if err = repo.verifySnapshotRemoval(file); err != nil {
+					return
+				}
+			}
 			removes = append(removes, file)
 		}
 	}
 	return
+}
+
+// verifySnapshotRemoval distinguishes intentional exclusions and real deletions
+// from incomplete enumeration. An existing tracked source must not disappear
+// from a published snapshot merely because a directory scan omitted its name.
+func (repo *Repo) verifySnapshotRemoval(file *entity.File) error {
+	if err := repo.checkoutCanceled(); err != nil {
+		return err
+	}
+	abs := repo.absPath(file.Path)
+	info, err := os.Lstat(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("verify snapshot removal [%s]: %w", file.Path, err)
+	}
+	if ignored, filterErr := repo.builtInIgnore(info, abs); ignored || filterErr != nil {
+		return filterErr
+	}
+	return fmt.Errorf("%w: scan omitted existing source [%s], size [%d], modifiedNS [%d]",
+		ErrIndexFileChanged, file.Path, info.Size(), info.ModTime().UnixNano())
+}
+
+func indexFileStampChanged(path string, before, after fileStamp) error {
+	return fmt.Errorf("%w: [%s], size [%d -> %d], modifiedNS [%d -> %d], writeVersion [%d -> %d]",
+		ErrIndexFileChanged, path, before.Size, after.Size, before.Modified, after.Modified, before.writeVersion, after.writeVersion)
 }
 
 func (repo *Repo) diffCheckoutFiles(target, files []*entity.File, stamps map[string]fileStamp) (upserts, removes []*entity.File, err error) {

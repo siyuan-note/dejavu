@@ -1,10 +1,10 @@
 module github.com/siyuan-note/dejavu
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/88250/go-humanize v0.0.0-20240424102817-4f78fac47ea7
-	github.com/88250/gulu v1.2.3-0.20260409163331-8c1dab1828ba
+	github.com/88250/gulu v1.2.3-0.20261021101108-2de4ad3e7cc0
 	github.com/88250/lute v1.7.7
 	github.com/aws/aws-sdk-go-v2 v1.43.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.36
@@ -23,13 +23,13 @@ require (
 	github.com/siyuan-note/dataparser v0.0.0-20260115084335-b57cb8bc7c17
 	github.com/siyuan-note/encryption v0.0.0-20260715062728-9cb8e9548044
 	github.com/siyuan-note/eventbus v0.0.0-20260530125927-d77c74260dce
-	github.com/siyuan-note/filelock v0.0.0-20260411141728-bf44452627c0
+	github.com/siyuan-note/filelock v0.0.0-20261025032826-1ff24a81dda9
 	github.com/siyuan-note/httpclient v0.0.0-20260813083704-4643a83d05de
 	github.com/siyuan-note/logging v0.0.0-20260513050044-06b8e04d5490
 	github.com/studio-b12/gowebdav v0.13.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	golang.org/x/crypto v0.55.0
-	golang.org/x/net v0.58.0
+	golang.org/x/crypto v0.57.0
+	golang.org/x/net v0.59.0
 )
 
 require (
@@ -72,11 +72,11 @@ require (
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	modernc.org/fileutil v1.4.0 // indirect
 )
 

@@ -1291,11 +1291,9 @@ func (repo *Repo) putFileChunks(file *entity.File, stamp fileStamp, context map[
 			return
 		}
 
-		newSize := newInfo.Size()
-		newUpdated := newInfo.ModTime().Unix()
-		if stamp != stampFile(absPath, newInfo) {
-			logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.SecUpdated(), newUpdated)
-			err = ErrIndexFileChanged
+		if actual := stampFile(absPath, newInfo); stamp != actual {
+			err = indexFileStampChanged(file.Path, stamp, actual)
+			logging.LogErrorf("%s", err)
 			return
 		}
 
@@ -1358,11 +1356,9 @@ func (repo *Repo) putFileChunks(file *entity.File, stamp fileStamp, context map[
 		return
 	}
 
-	newSize := newInfo.Size()
-	newUpdated := newInfo.ModTime().Unix()
-	if stamp != stampFile(absPath, newInfo) {
-		logging.LogErrorf("file changed [%s], size [%d -> %d], updated [%d -> %d]", absPath, file.Size, newSize, file.Updated, newUpdated)
-		err = ErrIndexFileChanged
+	if actual := stampFile(absPath, newInfo); stamp != actual {
+		err = indexFileStampChanged(file.Path, stamp, actual)
+		logging.LogErrorf("%s", err)
 		return
 	}
 
@@ -1721,9 +1717,7 @@ func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*en
 		}
 		if nil != err {
 			if isNoSuchFileOrDirErr(err) {
-				// 扫描期间消失的文件由下一次索引处理。
-				logging.LogInfof("ignore not exist err [%s]", err)
-				return nil
+				return fmt.Errorf("%w: scan path disappeared [%s]: %v", ErrIndexFileChanged, path, err)
 			}
 			logging.LogErrorf("walk data failed: %s", err)
 			return err
@@ -1731,6 +1725,9 @@ func (repo *Repo) walkSnapshotFiles(context map[string]interface{}) (files []*en
 
 		info, err := d.Info()
 		if nil != err {
+			if isNoSuchFileOrDirErr(err) {
+				return fmt.Errorf("%w: scan attributes disappeared [%s]: %v", ErrIndexFileChanged, path, err)
+			}
 			logging.LogErrorf("walk data failed: %s", err)
 			return err
 		}
