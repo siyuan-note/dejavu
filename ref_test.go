@@ -17,8 +17,70 @@
 package dejavu
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
+
+func TestTagSerializesWithPurge(t *testing.T) {
+	base := t.TempDir()
+	repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "tag-purge", false)
+	old, err := repo.Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAssetTestFile(t, repo, "/seed.txt", "new contents", 2)
+	if _, err := repo.Index("new", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Hold the same lock as Repo.Purge and stop just before its mark/sweep.
+	lock.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			lock.Unlock()
+		}
+	}()
+	started, done := make(chan struct{}), make(chan error, 1)
+	go func() { close(started); done <- repo.AddTag(old.ID, "retained") }()
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("tag publication bypassed purge lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := repo.store.Purge(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	lock.Unlock()
+	locked = false
+	if err := <-done; err == nil {
+		t.Fatal("tagging a purged snapshot must fail")
+	}
+	if _, err := os.Stat(filepath.Join(repo.Path, "refs", "tags", "retained")); !os.IsNotExist(err) {
+		t.Fatalf("purged snapshot received a dangling tag: %v", err)
+	}
+
+	latest, err := repo.Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AddTag(latest.ID, "retained"); err != nil {
+		t.Fatal(err)
+	}
+	writeAssetTestFile(t, repo, "/seed.txt", "another version", 3)
+	if _, err := repo.Index("newer", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Purge(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.GetIndex(latest.ID); err != nil {
+		t.Fatalf("published tag did not retain snapshot: %v", err)
+	}
+}
 
 func TestTag(t *testing.T) {
 	clearTestdata(t)

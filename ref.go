@@ -181,6 +181,11 @@ func (repo *Repo) GetTag(tag string) (id string, err error) {
 }
 
 func (repo *Repo) AddTag(id, tag string) (err error) {
+	// Index validation and publishing the retention root must be indivisible
+	// with respect to repository purge.
+	lock.Lock()
+	defer lock.Unlock()
+
 	if !gulu.File.IsValidFilename(tag) {
 		return errors.New("invalid tag name")
 	}
