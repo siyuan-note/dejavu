@@ -548,12 +548,15 @@ func (s3 *S3) getNotFound(keys []string) (ret []string, err error) {
 	}
 
 	waitGroup := &sync.WaitGroup{}
+	var resultLock sync.Mutex
 	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
 		defer waitGroup.Done()
 		key := arg.(string)
 		info, statErr := s3.statFile(key)
 		if nil == info || nil != statErr {
+			resultLock.Lock()
 			ret = append(ret, key)
+			resultLock.Unlock()
 		}
 	})
 

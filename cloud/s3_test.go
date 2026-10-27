@@ -20,12 +20,54 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	as3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	as3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
+
+func TestS3GetNotFoundConcurrentResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "present") {
+			w.Header().Set("Content-Length", "1")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	s3 := NewS3(&BaseCloud{Conf: &Conf{S3: &ConfS3{Endpoint: server.URL, Bucket: "bucket",
+		Region: "test", AccessKey: "test", SecretKey: "test", PathStyle: true, Timeout: 5, ConcurrentReqs: 16}}}, server.Client())
+	keys := []string{"present"}
+	for i := 0; i < 256; i++ {
+		keys = append(keys, fmt.Sprintf("missing-%d", i))
+	}
+	for iteration := 0; iteration < 3; iteration++ {
+		missing, err := s3.getNotFound(keys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := map[string]bool{}
+		for _, key := range missing {
+			if key == "present" || found[key] {
+				t.Fatalf("unexpected missing key: %s", key)
+			}
+			found[key] = true
+		}
+		if len(found) != len(keys)-1 {
+			t.Fatalf("missing results: got %d, want %d", len(found), len(keys)-1)
+		}
+		for _, key := range keys[1:] {
+			if !found[key] {
+				t.Fatalf("lost missing key: %s", key)
+			}
+		}
+	}
+}
 
 type listObjectsStub struct {
 	pages   []*as3.ListObjectsOutput
