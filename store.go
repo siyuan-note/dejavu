@@ -18,6 +18,7 @@ package dejavu
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -300,7 +301,7 @@ func (store *Store) readRefs() (ret map[string]bool, err error) {
 
 		if 42 < info.Size() {
 			logging.LogWarnf("ref file [%s] is invalid", path)
-			return nil
+			return errors.New("invalid ref file [" + path + "]")
 		}
 
 		data, err := os.ReadFile(path)
@@ -311,7 +312,10 @@ func (store *Store) readRefs() (ret map[string]bool, err error) {
 		content := strings.TrimSpace(string(data))
 		if 40 != len(content) {
 			logging.LogWarnf("ref file [%s] is invalid", path)
-			return nil
+			return errors.New("invalid ref file [" + path + "]")
+		}
+		if _, err := hex.DecodeString(content); err != nil {
+			return errors.New("invalid ref file [" + path + "]")
 		}
 
 		ret[content] = true
