@@ -21,7 +21,7 @@ type Options struct {
 	HiddenDirectoryNames []string
 	// PathFilter 返回是否忽略当前条目，目录剪枝通过 filepath.SkipDir 表示。
 	PathFilter func(os.FileInfo, string) (bool, error)
-	// OnCloudIndexList 接收 refs/ 列举结果，nil 表示成功（含空列表），不改变同步的回退行为。
+	// OnCloudIndexList 接收 refs/ 列举及 S3 面板清单读取结果，nil 表示成功（含空列表），不改变同步的回退行为。
 	// 回调可能并发执行，且可能晚于获取最新索引返回；实现不得重入仓库操作。
 	OnCloudIndexList func(error)
 }

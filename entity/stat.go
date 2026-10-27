@@ -16,9 +16,13 @@
 
 package entity
 
+import "time"
+
 type ObjectInfo struct {
-	Path string
-	Size int64
+	Path         string
+	Size         int64
+	ETag         string
+	LastModified time.Time
 }
 
 type PurgeStat struct {

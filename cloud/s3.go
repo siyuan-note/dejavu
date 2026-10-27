@@ -348,6 +348,10 @@ func (s3 *S3) ListObjects(pathPrefix string) (ret map[string]*entity.ObjectInfo,
 		ret[filePath] = &entity.ObjectInfo{
 			Path: filePath,
 			Size: size,
+			ETag: aws.ToString(entry.ETag),
+		}
+		if entry.LastModified != nil {
+			ret[filePath].LastModified = *entry.LastModified
 		}
 	}
 	return
