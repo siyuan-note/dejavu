@@ -515,7 +515,9 @@ func (webdav *WebDAV) mkdirAll(folder string) (err error) {
 		return nil
 	}
 
-	info, err := webdav.Client.Stat(folder)
+	// Collection URLs require a trailing slash on some servers. A 301/302 can
+	// otherwise turn PROPFIND into GET and return an HTML directory listing.
+	info, err := webdav.Client.Stat(strings.TrimRight(folder, "/") + "/")
 	if nil == err {
 		if err = webDAVDirectoryError(info, folder); err != nil {
 			return err

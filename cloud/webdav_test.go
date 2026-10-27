@@ -28,6 +28,33 @@ type webDAVFixture struct {
 	writes    int
 }
 
+func TestWebDAVDirectoryCanonicalSlash(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "main", "siyuan", "repo"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	handler := &dav.Handler{FileSystem: dav.Dir(root), LockSystem: dav.NewMemLS()}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PROPFIND" && !strings.HasSuffix(r.URL.Path, "/") {
+			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+			return
+		}
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte("<html>directory listing</html>"))
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	client := NewWebDAV(&BaseCloud{Conf: &Conf{Dir: "main", WebDAV: &ConfWebDAV{}}}, gowebdav.NewClient(server.URL, "", ""))
+	if _, err := client.UploadBytes("lock-sync", []byte("lock"), true); err != nil {
+		t.Fatalf("canonical collection redirect prevented lock upload: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "main", "siyuan", "repo", "lock-sync")); err != nil || string(data) != "lock" {
+		t.Fatalf("lock was not uploaded: %q, %v", data, err)
+	}
+}
+
 func TestWebDAVDirectoryCreation(t *testing.T) {
 	for _, mode := range []string{"first failure", "405 absent", "405 existing", "file parent", "file parent after 404", "file target", "new client", "expired", "failed write", "remove"} {
 		t.Run(mode, func(t *testing.T) {
