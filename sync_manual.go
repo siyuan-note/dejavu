@@ -179,7 +179,12 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 			mergeResult.Upserts = append(mergeResult.Upserts, cloudFile)
 		default:
 			// 两端都修改了同一个文件
-			if merged := repo.mergeStructuredSyncFile(base, local, cloudFile, now, context); nil != merged {
+			merged, mergeErr := repo.mergeStructuredSyncFile(base, local, cloudFile, now, context)
+			if nil != mergeErr {
+				err = mergeErr
+				return
+			}
+			if nil != merged {
 				mergeResult.Upserts = append(mergeResult.Upserts, merged)
 				mergeResult.MergedPaths = append(mergeResult.MergedPaths, local.Path)
 				logging.LogInfof("sync download structured merge [%s, %s]", merged.ID, merged.Path)

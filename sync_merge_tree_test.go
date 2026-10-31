@@ -17,8 +17,10 @@
 package dejavu
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,8 +29,10 @@ import (
 
 	"github.com/88250/lute"
 	"github.com/88250/lute/ast"
+	"github.com/restic/chunker"
 	"github.com/siyuan-note/dataparser"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 )
 
 func syPara(id, text, updated string) string {
@@ -410,8 +414,9 @@ func TestIndexMergedFileSameSecond(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	absPath := filepath.Join(dataPath, "doc.sy")
-	sameSecond := time.Now().Truncate(time.Second)
+	relPath := "/" + filepath.Base(filepath.Dir(tempDir)) + ".sy"
+	absPath := filepath.Join(dataPath, relPath)
+	sameSecond := time.Now().Add(time.Hour).Truncate(time.Second)
 	localData := []byte("local content")
 	if err = os.WriteFile(absPath, localData, 0644); nil != err {
 		t.Fatal(err)
@@ -432,19 +437,13 @@ func TestIndexMergedFileSameSecond(t *testing.T) {
 	}
 	local := files[0]
 
-	// 合并结果在同一秒写回，大小也相同
+	// 合并结果与本地修改发生在同一秒时必须有不同的 ID。
 	mergedData := []byte("merged content")
-	if err = os.WriteFile(absPath, mergedData, 0644); nil != err {
-		t.Fatal(err)
-	}
-	if err = os.Chtimes(absPath, sameSecond.Add(300*time.Millisecond), sameSecond.Add(300*time.Millisecond)); nil != err {
-		t.Fatal(err)
-	}
 	if entity.NewFile(local.Path, int64(len(mergedData)), sameSecond.Add(300*time.Millisecond).UnixMilli()).ID != local.ID {
 		t.Fatalf("test setup must reproduce the same-second ID collision")
 	}
 
-	merged, err := repo.indexMergedFile(local.Path, []*entity.File{local}, map[string]interface{}{})
+	merged, err := repo.indexMergedFileData(local.Path, mergedData, []*entity.File{local})
 	if nil != err {
 		t.Fatal(err)
 	}
@@ -477,7 +476,13 @@ func TestIndexMergedFileSameSecond(t *testing.T) {
 		t.Fatalf("existing local version was changed: %q", got)
 	}
 
-	// 重新扫描数据目录必须得到同一个合并版本
+	// 暂存不会提前覆盖本地文件；正常 checkout 后重新扫描得到同一个合并版本。
+	if data, readErr := os.ReadFile(absPath); nil != readErr || !bytes.Equal(data, localData) {
+		t.Fatalf("staging changed local data: %q (%v)", data, readErr)
+	}
+	if err = repo.checkoutFile(merged, dataPath, 1, 1, nil, local); nil != err {
+		t.Fatal(err)
+	}
 	reindexed, err := repo.Index("rescan", false, map[string]interface{}{})
 	if nil != err {
 		t.Fatal(err)
@@ -504,5 +509,397 @@ func TestMergeSyDocumentsRejectsSpec4TableCellRich(t *testing.T) {
 	merged, ok, err := mergeSyDocuments(base, local, cloud, lute.New())
 	if !errors.Is(err, errSyUnsupportedSpec) || ok || nil != merged {
 		t.Fatalf("expected unsupported spec rejection, got ok=%v err=%v", ok, err)
+	}
+}
+
+// 候选 ID 对应的对象存在但已损坏时，不能把它误判成"ID 不存在"：
+// 那样入库会失败，合并结果会丢失。必须换用下一个未占用的时间。
+func TestIndexMergedFileSkipsCorruptObject(t *testing.T) {
+	tempDir := t.TempDir()
+	dataPath := filepath.Join(tempDir, "data")
+	if err := os.MkdirAll(dataPath, 0755); nil != err {
+		t.Fatal(err)
+	}
+	repo, err := NewRepo(dataPath, filepath.Join(tempDir, "repo"), filepath.Join(tempDir, "history"), filepath.Join(tempDir, "temp"),
+		"device", "Device", "linux", []byte("0123456789abcdef0123456789abcdef"), nil, nil)
+	if nil != err {
+		t.Fatal(err)
+	}
+
+	relPath := "/" + filepath.Base(filepath.Dir(tempDir)) + ".sy"
+	absPath := filepath.Join(dataPath, relPath)
+	sameSecond := time.Now().Add(time.Hour).Truncate(time.Second)
+	localData := []byte("local content")
+	if err = os.WriteFile(absPath, localData, 0644); nil != err {
+		t.Fatal(err)
+	}
+	if err = os.Chtimes(absPath, sameSecond, sameSecond); nil != err {
+		t.Fatal(err)
+	}
+	if _, err = repo.Index("local edit", false, map[string]interface{}{}); nil != err {
+		t.Fatal(err)
+	}
+	latest, err := repo.Latest()
+	if nil != err {
+		t.Fatal(err)
+	}
+	files, err := repo.GetFiles(latest)
+	if nil != err || 1 != len(files) {
+		t.Fatalf("expected one indexed file, got %d (%v)", len(files), err)
+	}
+	local := files[0]
+
+	mergedData := []byte("merged content")
+
+	// 第一个候选 ID 上放一个损坏的对象
+	candidate := entity.NewFile(local.Path, int64(len(mergedData)), (local.Updated/1000+1)*1000)
+	corruptDir, corruptFile := repo.store.AbsPath(candidate.ID)
+	if err = os.MkdirAll(corruptDir, 0755); nil != err {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(corruptFile, []byte("corrupted object"), 0644); nil != err {
+		t.Fatal(err)
+	}
+	merged, err := repo.indexMergedFileData(local.Path, mergedData, []*entity.File{local})
+	if nil != err {
+		t.Fatalf("indexing must skip the corrupted candidate: %s", err)
+	}
+	if merged.ID == candidate.ID {
+		t.Fatalf("merged version reused the corrupted candidate ID [%s]", candidate.ID)
+	}
+	corruptData, err := os.ReadFile(corruptFile)
+	if nil != err || string(corruptData) != "corrupted object" {
+		t.Fatalf("corrupt object was changed: %q (%v)", corruptData, err)
+	}
+	if merged.SecUpdated() <= local.SecUpdated() {
+		t.Fatalf("merged version updated [%d] must be later than local [%d]", merged.SecUpdated(), local.SecUpdated())
+	}
+
+	stored, err := repo.store.GetFile(merged.ID)
+	if nil != err {
+		t.Fatal(err)
+	}
+	var buf []byte
+	for _, id := range stored.Chunks {
+		chunk, chunkErr := repo.store.GetChunk(id)
+		if nil != chunkErr {
+			t.Fatal(chunkErr)
+		}
+		buf = append(buf, chunk.Data...)
+	}
+	if string(buf) != string(mergedData) {
+		t.Fatalf("merged version content = %q, want %q", buf, mergedData)
+	}
+}
+
+// 大文档暂存使用与普通索引相同的分块方式，checkout 后重新索引仍引用同一版本。
+func TestStagedMergedFileUsesIndexChunking(t *testing.T) {
+	dir := t.TempDir()
+	dataPath := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := NewRepo(dataPath, filepath.Join(dir, "repo"), filepath.Join(dir, "history"), filepath.Join(dir, "temp"),
+		"device", "Device", "linux", []byte("0123456789abcdef0123456789abcdef"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	relPath := "/" + filepath.Base(filepath.Dir(dir)) + ".sy"
+	absPath := repo.absPath(relPath)
+	if err = os.WriteFile(absPath, []byte("local"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repo.Index("local", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	localIndex, err := repo.Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := repo.GetFiles(localIndex)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("expected local version: %v (%v)", files, err)
+	}
+	data := make([]byte, 2*chunker.MinSize+123)
+	for i := range data {
+		data[i] = byte((i*37 + i/251) % 256)
+	}
+	merged, err := repo.indexMergedFileData(relPath, data, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.checkoutFile(merged, dataPath, 1, 1, nil, files[0]); err != nil {
+		t.Fatal(err)
+	}
+	indexed, err := repo.Index("rescan", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err = repo.GetFiles(indexed)
+	if err != nil || len(files) != 1 || files[0].ID != merged.ID {
+		t.Fatalf("rescan did not reuse staged version: %v (%v)", files, err)
+	}
+	got, err := repo.openFile(files[0])
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("reindexed data differs: %v", err)
+	}
+}
+
+// 合并结果入库失败时必须向上传递错误，且数据目录保持原样。
+func TestMergeStructuredSyncFileIndexFailurePreservesLocal(t *testing.T) {
+	tempDir := t.TempDir()
+	dataPath := filepath.Join(tempDir, "data")
+	if err := os.MkdirAll(dataPath, 0755); nil != err {
+		t.Fatal(err)
+	}
+	repo, err := NewRepo(dataPath, filepath.Join(tempDir, "repo"), filepath.Join(tempDir, "history"), filepath.Join(tempDir, "temp"),
+		"device", "Device", "linux", []byte("0123456789abcdef0123456789abcdef"), nil, nil)
+	if nil != err {
+		t.Fatal(err)
+	}
+
+	base := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "second", "20240101000000"))
+	local := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "second changed", "20240102000000"))
+	relPath := "/" + filepath.Base(filepath.Dir(tempDir)) + ".sy"
+	putVersion := func(data []byte, updated int64) *entity.File {
+		chunkID := util.Hash(data)
+		if err = repo.store.PutChunk(&entity.Chunk{ID: chunkID, Data: data}); nil != err {
+			t.Fatal(err)
+		}
+		file := entity.NewFile(relPath, int64(len(data)), updated)
+		file.Chunks = []string{chunkID}
+		if err = repo.store.PutFile(file); nil != err {
+			t.Fatal(err)
+		}
+		return file
+	}
+	baseFile := putVersion(base, time.Now().Add(-3*time.Second).UnixMilli())
+	localFile := putVersion(local, time.Now().Add(-2*time.Second).UnixMilli())
+	cloudUpdated := time.Now().Add(-time.Second).UnixMilli()
+	// 避免故障注入目录碰巧包含已有的输入版本对象。
+	var cloud []byte
+	var chunkDir string
+	for i := 0; i < 1024; i++ {
+		cloud = syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "second", "20240101000000"), syPara(p3, fmt.Sprintf("cloud %d", i), "20240103000000"))
+		mergedData := mustMerge(t, base, local, cloud)
+		chunkDir, _ = repo.store.AbsPath(util.Hash(mergedData))
+		cloudChunkDir, _ := repo.store.AbsPath(util.Hash(cloud))
+		cloudFileDir, _ := repo.store.AbsPath(entity.NewFile(relPath, int64(len(cloud)), cloudUpdated).ID)
+		if _, statErr := os.Stat(chunkDir); errors.Is(statErr, os.ErrNotExist) && chunkDir != cloudChunkDir && chunkDir != cloudFileDir {
+			break
+		}
+		chunkDir = ""
+	}
+	if "" == chunkDir {
+		t.Fatal("could not find an unused chunk directory")
+	}
+	cloudFile := putVersion(cloud, cloudUpdated)
+
+	absPath := filepath.Join(dataPath, relPath)
+	if err = os.WriteFile(absPath, local, 0644); nil != err {
+		t.Fatal(err)
+	}
+	localTime := time.UnixMilli(localFile.Updated)
+	if err = os.Chtimes(absPath, localTime, localTime); nil != err {
+		t.Fatal(err)
+	}
+
+	// 让合并结果的分块无法入库。把分块目录位置成普通文件，
+	// 比目录权限更稳定，也不依赖测试进程是否以 root 运行。
+	if err = os.MkdirAll(filepath.Dir(chunkDir), 0755); nil != err {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(chunkDir, []byte("blocking file"), 0644); nil != err {
+		t.Fatal(err)
+	}
+	defer os.Remove(chunkDir)
+
+	mergedFile, err := repo.mergeStructuredSyncFile(baseFile, localFile, cloudFile, "20240101000000-000000", map[string]interface{}{})
+	if nil == err {
+		t.Fatalf("expected the indexing failure to be propagated, got merged file [%v]", mergedFile)
+	}
+	if nil != mergedFile {
+		t.Fatalf("no merged file must be returned on failure, got [%s]", mergedFile.ID)
+	}
+
+	// 数据目录和时间戳始终不变。
+	data, err := os.ReadFile(absPath)
+	if nil != err {
+		t.Fatal(err)
+	}
+	if string(data) != string(local) {
+		t.Fatalf("data directory changed:\n%s", data)
+	}
+	info, err := os.Stat(absPath)
+	if nil != err || info.ModTime().UnixMilli() != localFile.Updated {
+		t.Fatalf("local timestamp changed: %v (%v)", info, err)
+	}
+}
+
+// 按需下载同步入库失败时必须中止；清除故障后重试能上传、下载完整合并结果。
+func TestAssetSyncStructuredMergeIndexFailure(t *testing.T) {
+	baseDir := t.TempDir()
+	remote := filepath.Join(baseDir, "cloud")
+	full := newAssetTestRepo(t, baseDir, remote, "full", false)
+	partial := newAssetTestRepo(t, baseDir, remote, "partial", true)
+	path := "/" + filepath.Base(filepath.Dir(baseDir)) + ".sy"
+	base := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "second", "20240101000000"))
+	local := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "local", "20240102000000"))
+	writeAssetTestFile(t, full, path, string(base), 10)
+	syncAssetTestRepo(t, full)
+	syncAssetTestRepo(t, partial)
+	writeAssetTestFile(t, partial, path, string(local), 12)
+	if _, err := partial.Index("local", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	localSnapshot := assetTestFile(t, partial, path)
+
+	var cloud, merged []byte
+	var chunkDir string
+	cloudUpdated := time.Unix(1700000013, 0).UnixMilli()
+	for i := 0; i < 1024; i++ {
+		cloud = syDoc(syPara(p1, fmt.Sprintf("cloud %d", i), "20240103000000"), syPara(p2, "second", "20240101000000"))
+		merged = mustMerge(t, base, local, cloud)
+		chunkDir, _ = partial.store.AbsPath(util.Hash(merged))
+		cloudChunkDir, _ := partial.store.AbsPath(util.Hash(cloud))
+		cloudFileDir, _ := partial.store.AbsPath(entity.NewFile(path, int64(len(cloud)), cloudUpdated).ID)
+		if _, statErr := os.Stat(chunkDir); errors.Is(statErr, os.ErrNotExist) && chunkDir != cloudChunkDir && chunkDir != cloudFileDir {
+			break
+		}
+		chunkDir = ""
+	}
+	if chunkDir == "" {
+		t.Fatal("could not find an unused chunk directory")
+	}
+	writeAssetTestFile(t, full, path, string(cloud), 13)
+	syncAssetTestRepo(t, full)
+	cloudBefore, err := full.GetCloudLatest(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(chunkDir, []byte("blocking file"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = partial.Sync(nil); err == nil || !strings.Contains(err.Error(), "index structured merge result") {
+		t.Fatalf("expected merge indexing error, got %v", err)
+	}
+	got, err := os.ReadFile(partial.absPath(path))
+	if err != nil || !bytes.Equal(got, local) {
+		t.Fatalf("local data not restored: %q (%v)", got, err)
+	}
+	info, err := os.Stat(partial.absPath(path))
+	if err != nil || info.ModTime().UnixMilli() != localSnapshot.Updated {
+		t.Fatalf("local timestamp not restored: %v (%v)", info, err)
+	}
+	cloudAfter, err := full.GetCloudLatest(nil)
+	if err != nil || cloudAfter.ID != cloudBefore.ID {
+		t.Fatalf("failed sync advanced cloud: %v (%v)", cloudAfter, err)
+	}
+	if err = os.Remove(chunkDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = partial.Sync(nil); err != nil {
+		t.Fatalf("retry failed: %v", err)
+	}
+	got, err = os.ReadFile(partial.absPath(path))
+	if err != nil || !bytes.Equal(got, merged) {
+		t.Fatalf("retry did not write merged data: %q (%v)", got, err)
+	}
+	syncAssetTestRepo(t, full)
+	got, err = os.ReadFile(full.absPath(path))
+	if err != nil || !bytes.Equal(got, merged) {
+		t.Fatalf("other device did not receive merged data: %q (%v)", got, err)
+	}
+}
+
+func TestStructuredMergeRespectsCheckoutPreflight(t *testing.T) {
+	for _, onDemand := range []bool{false, true} {
+		t.Run(fmt.Sprintf("on-demand-%v", onDemand), func(t *testing.T) {
+			baseDir := t.TempDir()
+			remote := filepath.Join(baseDir, "cloud")
+			source := newAssetTestRepo(t, baseDir, remote, "source", false)
+			target := newAssetTestRepo(t, baseDir, remote, "target", onDemand)
+			if !onDemand {
+				target.assetDownloads = nil
+			}
+			path := "/" + filepath.Base(filepath.Dir(baseDir)) + ".sy"
+			base := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "second", "20240101000000"))
+			local := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "local", "20240102000000"))
+			cloud := syDoc(syPara(p1, "cloud", "20240103000000"), syPara(p2, "second", "20240101000000"))
+			merged := mustMerge(t, base, local, cloud)
+			writeAssetTestFile(t, source, path, string(base), 10)
+			syncAssetTestRepo(t, source)
+			syncAssetTestRepo(t, target)
+			writeAssetTestFile(t, target, path, string(local), 12)
+			if _, err := target.Index("local", true, nil); err != nil {
+				t.Fatal(err)
+			}
+			writeAssetTestFile(t, source, path, string(cloud), 13)
+			syncAssetTestRepo(t, source)
+
+			rejected := errors.New("preflight rejected")
+			called := false
+			target.SetCheckoutHooks(CheckoutHooks{Preflight: func(plan *CheckoutPlan) error {
+				called = true
+				if data, err := plan.ReadFile(path); err != nil || !bytes.Equal(data, merged) {
+					t.Errorf("preflight received incorrect merged contents: %v", err)
+				}
+				if data, err := os.ReadFile(target.absPath(path)); err != nil || !bytes.Equal(data, local) {
+					t.Errorf("local file changed before preflight: %v", err)
+				}
+				return rejected
+			}})
+			if _, _, err := target.Sync(nil); !errors.Is(err, rejected) {
+				t.Fatalf("preflight rejection not returned: %v", err)
+			}
+			if !called {
+				t.Fatal("preflight was not called")
+			}
+			if data, err := os.ReadFile(target.absPath(path)); err != nil || !bytes.Equal(data, local) {
+				t.Fatalf("rejected merge changed local file: %v", err)
+			}
+		})
+	}
+}
+
+func TestStructuredMergeIncludesEditSavedDuringCheckoutPreparation(t *testing.T) {
+	baseDir := t.TempDir()
+	remote := filepath.Join(baseDir, "cloud")
+	source := newAssetTestRepo(t, baseDir, remote, "source", false)
+	target := newAssetTestRepo(t, baseDir, remote, "target", true)
+	path := "/" + filepath.Base(filepath.Dir(baseDir)) + ".sy"
+	base := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "second", "20240101000000"))
+	local := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "local", "20240102000000"))
+	late := syDoc(syPara(p1, "first", "20240101000000"), syPara(p2, "saved during preparation", "20240104000000"))
+	cloud := syDoc(syPara(p1, "cloud", "20240103000000"), syPara(p2, "second", "20240101000000"))
+	writeAssetTestFile(t, source, path, string(base), 10)
+	syncAssetTestRepo(t, source)
+	syncAssetTestRepo(t, target)
+	writeAssetTestFile(t, target, path, string(local), 12)
+	if _, err := target.Index("local", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	writeAssetTestFile(t, source, path, string(cloud), 13)
+	syncAssetTestRepo(t, source)
+	prepared := false
+	target.SetCheckoutHooks(CheckoutHooks{Apply: func() error {
+		if !prepared {
+			prepared = true
+			if data, err := os.ReadFile(target.absPath(path)); err != nil || !bytes.Equal(data, local) {
+				t.Errorf("merge was written before saving edits: %v", err)
+			}
+			writeAssetTestFile(t, target, path, string(late), 14)
+		}
+		return nil
+	}})
+	if _, _, err := target.Sync(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !prepared {
+		t.Fatal("checkout preparation was not called")
+	}
+	want := mustMerge(t, base, late, cloud)
+	if got, err := os.ReadFile(target.absPath(path)); err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("saved edit and cloud changes not merged: %v", err)
 	}
 }

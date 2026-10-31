@@ -437,8 +437,14 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 			decision = syncFileDecision{Winner: syncFileWinnerCloud, HistoryFile: versions.Local}
 		}
 		if ConflictTypeLocalUpsertCloudUpsert == decision.ConflictType {
-			if merged := repo.mergeStructuredSyncFile(versions.Base, versions.Local, versions.Cloud, nowStr, context); nil != merged {
-				// 两端修改了同一 .sy 文档的不同块，已按块完成三方合并并写入数据目录：
+			merged, mergeErr := repo.mergeStructuredSyncFile(versions.Base, versions.Local, versions.Cloud, nowStr, context)
+			if nil != mergeErr {
+				// 合并结果入库失败不能当作普通冲突继续同步
+				logging.LogErrorf("sync merge structured [%s] failed: %s", versions.Path, mergeErr)
+				return mergeErr
+			}
+			if nil != merged {
+				// 两端修改了同一 .sy 文档的不同块，已按块完成三方合并并入库：
 				// 合并结果作为 upsert 对外暴露（内核据此重新加载文档），本地作为胜出方把它发布到云端，云端版本照旧进入同步历史兜底
 				decision = syncFileDecision{Winner: syncFileWinnerLocal, HistoryFile: versions.Cloud, PublishLocal: true}
 				mergeResult.Upserts = append(mergeResult.Upserts, merged)

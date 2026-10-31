@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -31,9 +33,10 @@ import (
 	"github.com/88250/lute/ast"
 	"github.com/88250/lute/parse"
 	"github.com/88250/lute/render"
+	"github.com/restic/chunker"
 	"github.com/siyuan-note/dataparser"
 	"github.com/siyuan-note/dejavu/entity"
-	"github.com/siyuan-note/filelock"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/logging"
 )
 
@@ -540,11 +543,13 @@ func equalStrings(left, right []string) bool {
 }
 
 // mergeStructuredSyncFile 尝试对同一 .sy 文件的本地修改和云端修改做结构化合并。
-// 合并成功时把结果写入数据目录并立即入库索引，返回合并后的文件版本：调用方应把它作为 upsert 对外暴露，
-// 这样内核会像处理普通云端更新一样重新加载它，按需下载模式的上传快照也会包含它。失败时返回 nil，由调用方按文件级冲突处理。
-func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now string, context map[string]interface{}) *entity.File {
+// 合并成功时把结果直接写入仓库对象并作为 upsert 返回，数据目录由调用方的统一 checkout 流程落盘：
+// 这样内核会像处理普通云端更新一样重新加载它，按需下载模式的上传快照也会包含它。
+// 不支持合并或内容冲突时返回 (nil, nil)，由调用方按文件级冲突处理；
+// 入库失败时返回错误，调用方必须向上传递错误并中止同步，不能当作普通冲突继续。
+func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now string, context map[string]interface{}) (*entity.File, error) {
 	if nil == base || nil == local || nil == cloud || !strings.HasSuffix(local.Path, ".sy") {
-		return nil
+		return nil, nil
 	}
 
 	temp := filepath.Join(repo.TempPath, "repo", "sync", "merges", now, strings.TrimPrefix(local.Path, "/"))
@@ -552,75 +557,149 @@ func (repo *Repo) mergeStructuredSyncFile(base, local, cloud *entity.File, now s
 
 	baseData, err := repo.readFileVersion(base, filepath.Join(temp, "base"), context)
 	if nil != err {
-		return nil
+		if canceled := repo.checkoutCanceled(); nil != canceled {
+			return nil, canceled
+		}
+		// 读取版本内容失败时数据目录没有被改动，退回文件级冲突是安全的
+		logging.LogWarnf("structured merge [%s] skipped: read base version failed: %s", local.Path, err)
+		return nil, nil
 	}
 	localData, err := repo.readFileVersion(local, filepath.Join(temp, "local"), context)
 	if nil != err {
-		return nil
+		if canceled := repo.checkoutCanceled(); nil != canceled {
+			return nil, canceled
+		}
+		logging.LogWarnf("structured merge [%s] skipped: read local version failed: %s", local.Path, err)
+		return nil, nil
 	}
 	cloudData, err := repo.readFileVersion(cloud, filepath.Join(temp, "cloud"), context)
 	if nil != err {
-		return nil
+		if canceled := repo.checkoutCanceled(); nil != canceled {
+			return nil, canceled
+		}
+		logging.LogWarnf("structured merge [%s] skipped: read cloud version failed: %s", local.Path, err)
+		return nil, nil
 	}
 
 	merged, ok, err := mergeSyDocuments(baseData, localData, cloudData, lute.New())
 	if nil != err {
 		logging.LogWarnf("structured merge [%s] skipped: %s", local.Path, err)
-		return nil
+		return nil, nil
 	}
 	if !ok {
 		logging.LogInfof("structured merge [%s] found conflicting block changes, fallback to file conflict", local.Path)
-		return nil
+		return nil, nil
 	}
 
-	absPath := repo.absPath(local.Path)
-	if err = filelock.WriteFile(absPath, merged); nil != err {
-		logging.LogErrorf("write structured merge result [%s] failed: %s", local.Path, err)
-		return nil
-	}
-	mergedFile, err := repo.indexMergedFile(local.Path, []*entity.File{base, local, cloud}, context)
+	mergedFile, err := repo.indexMergedFileData(local.Path, merged, []*entity.File{base, local, cloud})
 	if nil != err {
 		logging.LogErrorf("index structured merge result [%s] failed: %s", local.Path, err)
-		return nil
+		return nil, fmt.Errorf("index structured merge result [%s]: %w", local.Path, err)
 	}
 	logging.LogInfof("structured merged [%s] -> [%s]", local.Path, mergedFile.ID)
-	return mergedFile
+	return mergedFile, nil
 }
 
-// indexMergedFile 把结构化合并写回数据目录的文件入库，返回合并后的文件版本。
-//
-// 文件版本 ID 由路径和秒级修改时间计算，合并往往和本地修改发生在同一秒，直接按磁盘时间入库会得到和已有版本相同的 ID，
-// 而仓库中已存在的对象不会被覆盖，合并内容就会丢失。因此这里把合并结果的修改时间调整到一个仓库中尚未使用的秒上：
-// 不早于参与合并的各版本，已有版本（快照引用的对象）保持不变，后续重新扫描数据目录时也会得到同一个 ID。
-func (repo *Repo) indexMergedFile(relPath string, versions []*entity.File, context map[string]interface{}) (ret *entity.File, err error) {
-	absPath := repo.absPath(relPath)
-	info, err := os.Stat(absPath)
-	if nil != err {
-		return
+// indexMergedFileData 把不在数据目录中的结构化合并结果直接写入仓库对象。
+// 数据目录要经过 restoreFiles/finishAssetSync 的统一预检后才落盘，避免合并绕过编辑保护。
+func (repo *Repo) indexMergedFileData(relPath string, data []byte, versions []*entity.File) (*entity.File, error) {
+	file := &entity.File{Path: relPath, Size: int64(len(data))}
+	if err := repo.putMergedFileChunks(file, data); nil != err {
+		return nil, err
 	}
+	updated, err := repo.nextMergedUpdated(relPath, int64(len(data)), time.Now().Truncate(time.Second).UnixMilli(), versions)
+	if nil != err {
+		return nil, err
+	}
+	newFile := entity.NewFile(relPath, int64(len(data)), updated)
+	newFile.Chunks = file.Chunks
+	if err = repo.store.PutFile(newFile); nil != err {
+		return nil, err
+	}
+	// 不通过跨仓库共享的 fileCache 校验，读取刚才写入的实际对象。
+	_, objectPath := repo.store.AbsPath(newFile.ID)
+	object, err := os.ReadFile(objectPath)
+	if nil != err {
+		return nil, err
+	}
+	object, err = repo.store.decodeData(object)
+	if nil != err {
+		return nil, err
+	}
+	var storedFile entity.File
+	if err = json.Unmarshal(object, &storedFile); nil != err {
+		return nil, err
+	}
+	if storedFile.ID != newFile.ID || storedFile.Path != newFile.Path || storedFile.Size != newFile.Size || storedFile.Updated != newFile.Updated ||
+		!reflect.DeepEqual(storedFile.Chunks, newFile.Chunks) {
+		return nil, fmt.Errorf("%w: merged file ID was reused", ErrRepoFatal)
+	}
+	return newFile, nil
+}
 
-	updated := info.ModTime().Truncate(time.Second).UnixMilli()
+// 文件 ID 使用路径和秒级时间；跳过所有已存在的对象（包括已损坏的对象），保留已有快照。
+func (repo *Repo) nextMergedUpdated(relPath string, size, initialUpdated int64, versions []*entity.File) (int64, error) {
+	updated := initialUpdated / 1000 * 1000
 	for _, version := range versions {
 		if nil != version && updated/1000 <= version.Updated/1000 {
 			updated = (version.Updated/1000 + 1) * 1000
 		}
 	}
 	for {
-		if _, getErr := repo.store.GetFile(entity.NewFile(relPath, info.Size(), updated).ID); nil != getErr {
-			break // 该 ID 在仓库中还不存在
+		candidateID := entity.NewFile(relPath, size, updated).ID
+		if _, statErr := repo.store.Stat(candidateID); errors.Is(statErr, os.ErrNotExist) {
+			return updated, nil
+		} else if nil != statErr {
+			return 0, statErr
 		}
 		updated += 1000
 	}
+}
 
-	modTime := time.UnixMilli(updated)
-	if err = os.Chtimes(absPath, modTime, modTime); nil != err {
-		return
+func (repo *Repo) putMergedFileChunks(file *entity.File, data []byte) error {
+	if err := repo.checkoutCanceled(); nil != err {
+		return err
 	}
-	ret = entity.NewFile(relPath, info.Size(), updated)
-	if err = repo.putFileChunks(ret, context, 1, 1); nil != err {
-		ret = nil
+	putChunk := func(content []byte) error {
+		id := util.Hash(content)
+		if err := repo.store.PutChunk(&entity.Chunk{ID: id, Data: content}); nil != err {
+			return err
+		}
+		stored, err := repo.store.GetChunk(id)
+		if nil != err {
+			return err
+		}
+		if !bytes.Equal(stored.Data, content) {
+			return fmt.Errorf("%w: stored merged chunk differs from input", ErrRepoFatal)
+		}
+		file.Chunks = append(file.Chunks, id)
+		return nil
 	}
-	return
+	if int64(len(data)) < chunker.MinSize {
+		if err := putChunk(data); nil != err {
+			return err
+		}
+	} else {
+		reader := bytes.NewReader(data)
+		chunkerReader := chunker.NewWithBoundaries(reader, repo.chunkPol, chunker.MinSize, chunker.MaxSize)
+		buf := make([]byte, chunker.MaxSize)
+		for {
+			if err := repo.checkoutCanceled(); nil != err {
+				return err
+			}
+			chunk, err := chunkerReader.Next(buf)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if nil != err {
+				return err
+			}
+			if err = putChunk(chunk.Data); nil != err {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // readFileVersion 把仓库中的某个文件版本检出到临时目录并读取内容。
