@@ -22,6 +22,7 @@ import (
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/filelock"
+	"github.com/siyuan-note/logging"
 )
 
 var ErrAssetDownloadState = errors.New("invalid asset download state")
@@ -517,6 +518,8 @@ func (repo *Repo) ensureFileChunks(file *entity.File, context map[string]interfa
 		size += int64(len(chunk.Data))
 	}
 	if size != file.Size {
+		logging.LogErrorf("resource size mismatch [path=%s, fileID=%s, updated=%d, expectedSize=%d, actualSize=%d, chunkCount=%d]",
+			file.Path, file.ID, file.Updated, file.Size, size, len(file.Chunks))
 		return fmt.Errorf("resource size mismatch: %s", file.Path)
 	}
 	return nil
