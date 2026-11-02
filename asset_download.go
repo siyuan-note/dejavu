@@ -131,22 +131,46 @@ func sameAssetVersion(a, b *entity.File) bool {
 }
 
 func validAssetFile(file *entity.File) bool {
-	if file == nil || file.Size < 0 || len(file.ID) != 40 || len(file.Chunks) == 0 ||
-		!strings.HasPrefix(file.Path, "/") || path.Clean(file.Path) != file.Path || strings.ContainsAny(file.Path, "\\:\x00") {
-		return false
+	return assetFileProblem(file) == ""
+
+}
+
+func assetFileProblem(file *entity.File) string {
+	if file == nil {
+		return "missing file"
+	}
+	if !strings.HasPrefix(file.Path, "/") || path.Clean(file.Path) != file.Path || strings.ContainsAny(file.Path, "\\:\x00") {
+		return "invalid path"
+	}
+	if file.Size < 0 {
+		return "negative size"
+	}
+	if len(file.ID) != 40 {
+		return "invalid file ID length"
 	}
 	if _, err := hex.DecodeString(file.ID); err != nil {
-		return false
+		return "invalid file ID"
+	}
+	if len(file.Chunks) == 0 {
+		return "missing chunks"
 	}
 	for _, id := range file.Chunks {
 		if len(id) != 40 {
-			return false
+			return "invalid chunk ID length"
 		}
 		if _, err := hex.DecodeString(id); err != nil {
-			return false
+			return "invalid chunk ID"
 		}
 	}
-	return true
+	return ""
+}
+
+func invalidAssetFileError(stage string, file *entity.File) error {
+	if file == nil {
+		return fmt.Errorf("%w: %s: nil file entry", ErrAssetDownloadState, stage)
+	}
+	return fmt.Errorf("%w: %s: invalid file entry [path=%q, id=%q, size=%d, chunks=%d, reason=%s]",
+		ErrAssetDownloadState, stage, file.Path, file.ID, file.Size, len(file.Chunks), assetFileProblem(file))
 }
 
 func (repo *Repo) assetStateMarker() string {
@@ -158,20 +182,23 @@ func (repo *Repo) ConfigureAssetDownloads(onDemand bool, statePath, scope string
 	lock.Lock()
 	defer lock.Unlock()
 	if statePath == "" || scope == "" {
-		return ErrAssetDownloadState
+		return fmt.Errorf("%w: configure: state path or source is empty", ErrAssetDownloadState)
 	}
 	state := assetDownloadState{Version: 1, Scope: scope, Deferred: map[string]*entity.File{}}
 	data, err := readAssetStateFile(statePath)
 	if err == nil {
 		if len(data) < 28 {
-			return ErrAssetDownloadState
+			return fmt.Errorf("%w: configure: truncated state [bytes=%d]", ErrAssetDownloadState, len(data))
 		}
 		data, err = repo.store.decodeData(data)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrAssetDownloadState, err)
 		}
-		if err = json.Unmarshal(data, &state); err != nil || state.Version != 1 || state.Deferred == nil {
-			return ErrAssetDownloadState
+		if err = json.Unmarshal(data, &state); err != nil {
+			return fmt.Errorf("%w: configure: decode state: %v", ErrAssetDownloadState, err)
+		}
+		if state.Version != 1 || state.Deferred == nil {
+			return fmt.Errorf("%w: configure: invalid state [version=%d, deferredMissing=%t]", ErrAssetDownloadState, state.Version, state.Deferred == nil)
 		}
 		if state.Scope != scope {
 			if len(state.Deferred) != 0 || state.Pending != nil || state.Recovery != nil {
@@ -200,7 +227,7 @@ func (repo *Repo) ConfigureAssetDownloads(onDemand bool, statePath, scope string
 	}
 	for p, f := range state.Deferred {
 		if !validAssetFile(f) || p != f.Path || !isStoredAssetDownloadPath(p) {
-			return ErrAssetDownloadState
+			return fmt.Errorf("configure deferred entry %q: %w", p, invalidAssetFileError("deferred path or metadata", f))
 		}
 		stored, getErr := repo.store.GetFile(f.ID)
 		if getErr != nil || !sameAssetVersion(stored, f) {
@@ -440,9 +467,12 @@ func (repo *Repo) reloadAssetState() error {
 			return fmt.Errorf("%w: %v", ErrAssetDownloadState, err)
 		}
 		state := assetDownloadState{}
-		if err = json.Unmarshal(data, &state); err != nil || state.Version != 1 || state.Deferred == nil ||
-			state.Scope != repo.assetDownloads.state.Scope {
-			return ErrAssetDownloadState
+		if err = json.Unmarshal(data, &state); err != nil {
+			return fmt.Errorf("%w: reload: decode state: %v", ErrAssetDownloadState, err)
+		}
+		if state.Version != 1 || state.Deferred == nil || state.Scope != repo.assetDownloads.state.Scope {
+			return fmt.Errorf("%w: reload: state mismatch [version=%d, deferredMissing=%t, sourceChanged=%t]",
+				ErrAssetDownloadState, state.Version, state.Deferred == nil, state.Scope != repo.assetDownloads.state.Scope)
 		}
 		repo.assetDownloads.state = state
 		return nil
@@ -481,7 +511,7 @@ func (repo *Repo) EnsureFileChunks(file *entity.File, context map[string]interfa
 
 func (repo *Repo) ensureFileChunks(file *entity.File, context map[string]interface{}) error {
 	if !validAssetFile(file) {
-		return ErrAssetDownloadState
+		return invalidAssetFileError("ensure chunks", file)
 	}
 	missing, err := repo.localNotFoundChunks(file.Chunks)
 	if err != nil {
@@ -896,16 +926,17 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		return nil
 	}
 	if pending.Index == nil || pending.Base == nil || pending.Deferred == nil || pending.Before == nil {
-		return ErrAssetDownloadState
+		return fmt.Errorf("%w: recover apply: incomplete pending record [indexMissing=%t, baseMissing=%t, deferredMissing=%t, beforeMissing=%t]",
+			ErrAssetDownloadState, pending.Index == nil, pending.Base == nil, pending.Deferred == nil, pending.Before == nil)
 	}
 	for p, f := range pending.Deferred {
 		if !validAssetFile(f) || p != f.Path || !isStoredAssetDownloadPath(p) {
-			return ErrAssetDownloadState
+			return fmt.Errorf("recover apply deferred entry %q: %w", p, invalidAssetFileError("deferred path or metadata", f))
 		}
 	}
 	for _, f := range append(append([]*entity.File{}, pending.Upserts...), pending.Removes...) {
 		if !validAssetFile(f) || (pending.Before[f.Path] != nil && !validAssetFile(pending.Before[f.Path])) {
-			return ErrAssetDownloadState
+			return invalidAssetFileError("recover apply current or previous entry", f)
 		}
 	}
 	if err := repo.preflightCheckout(pending.Upserts, pending.Removes, context); err != nil {

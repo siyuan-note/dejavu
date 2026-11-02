@@ -432,18 +432,28 @@ var removeEmptyDirExcludes = append(workspaceDataDirs, ".git")
 func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, removes []*entity.File, err error) {
 	lock.Lock()
 	defer lock.Unlock()
+	stage, mayHaveApplied := "asset state", false
+	defer func() {
+		if err != nil {
+			err = &CheckoutError{Stage: stage, MayHaveApplied: mayHaveApplied, Err: err}
+		}
+	}()
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
+	stage = "current assets"
+	mayHaveApplied = repo.assetDownloads != nil && len(repo.assetDownloads.state.Deferred) != 0
 	if err = repo.ensureAllAssets(context); err != nil {
 		return
 	}
 
+	stage = "target index"
 	index, err := repo.store.GetIndex(id)
 	if nil != err {
 		return
 	}
 	if repo.assetDownloads != nil {
+		stage = "target files"
 		var targetFiles []*entity.File
 		if targetFiles, err = repo.getFiles(index.Files); err != nil {
 			return
@@ -455,6 +465,7 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		}
 	}
 
+	stage = "workspace scan"
 	if err = os.MkdirAll(repo.DataPath, 0755); nil != err {
 		return
 	}
@@ -508,11 +519,13 @@ func (repo *Repo) Checkout(id string, context map[string]interface{}) (upserts, 
 		err = repo.saveFileState(index)
 		return
 	}
+	stage = "preflight"
 	if err = repo.preflightCheckout(upserts, removes, context); err != nil {
 		return
 	}
 	defer gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
 
+	stage, mayHaveApplied = "apply files", true
 	err = repo.checkoutFiles(upserts, context)
 	if nil != err {
 		return
