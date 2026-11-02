@@ -32,6 +32,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	defer repo.normalizeCheckoutError(&err)
 	lock.Lock()
 	defer lock.Unlock()
+	defer repo.finishSyncSource(&err)
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -67,12 +68,15 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += length
 	trafficStat.APIGet++
+	if err = checkSyncSourcePreview(context, latest.ID, cloudLatest.ID); err != nil {
+		return
+	}
 
 	if cloudLatest.ID == latest.ID || "" == cloudLatest.ID {
 		// 数据一致或者云端为空，直接返回
-		if repo.assetDownloads != nil && cloudLatest.ID == latest.ID {
+		if (repo.assetDownloads != nil || repo.syncSource != "") && cloudLatest.ID == latest.ID {
 			err = repo.UpdateLatestSync(latest)
-			if err == nil && !repo.assetDownloads.onDemand {
+			if err == nil && repo.assetDownloads != nil && !repo.assetDownloads.onDemand {
 				err = repo.ensureAllAssets(context)
 			}
 		}
@@ -259,6 +263,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	defer repo.normalizeCheckoutError(&err)
 	lock.Lock()
 	defer lock.Unlock()
+	defer repo.finishSyncSource(&err)
 	if err = repo.checkAssetState(); err != nil {
 		return
 	}
@@ -292,9 +297,15 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	trafficStat.DownloadFileCount++
 	trafficStat.DownloadBytes += length
 	trafficStat.APIPut++
+	if err = checkSyncSourcePreview(context, latest.ID, cloudLatest.ID); err != nil {
+		return
+	}
 
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
+		if repo.syncSource != "" {
+			err = repo.UpdateLatestSync(latest)
+		}
 		return
 	}
 

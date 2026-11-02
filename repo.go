@@ -61,6 +61,7 @@ type Repo struct {
 	pathFilter       func(os.FileInfo, string) (bool, error)
 	onCloudIndexList func(error)
 	checkoutHooks    CheckoutHooks
+	syncSource       string
 	fileStateMu      sync.Mutex
 	fileState        *localFileState
 
