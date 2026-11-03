@@ -300,11 +300,11 @@ func TestGroupDiscoveryTargets(t *testing.T) {
 	ethernetIP := net.ParseIP("10.0.0.2")
 	targets := groupDiscoveryTargets([]net.IP{wlanIP, ethernetIP}, []networkInterface{
 		{
-			iface: net.Interface{Index: 1, Name: "wlan", Flags: net.FlagUp},
+			iface: net.Interface{Index: 1, Name: "wlan", Flags: net.FlagUp | net.FlagRunning | net.FlagMulticast},
 			addrs: []net.Addr{&net.IPNet{IP: wlanIP, Mask: net.CIDRMask(24, 32)}},
 		},
 		{
-			iface: net.Interface{Index: 2, Name: "ethernet", Flags: net.FlagUp},
+			iface: net.Interface{Index: 2, Name: "ethernet", Flags: net.FlagUp | net.FlagRunning | net.FlagMulticast},
 			addrs: []net.Addr{&net.IPNet{IP: ethernetIP, Mask: net.CIDRMask(24, 32)}},
 		},
 	})

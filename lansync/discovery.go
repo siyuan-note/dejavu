@@ -179,14 +179,21 @@ func (manager *Manager) browseOnce() {
 
 func (manager *Manager) browseInterface(iface *net.Interface) {
 	entries := make(chan *mdns.ServiceEntry, 32)
+	hosts := map[string][]*mdns.ServiceEntry{}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for entry := range entries {
-			manager.addDiscoveredPeer(entry)
+			accepted := manager.addDiscoveredPeer(entry)
+			if accepted && validDiscoveryHost(entry.Host) && len(hosts) < 32 {
+				host := strings.ToLower(entry.Host)
+				if len(hosts[host]) < 16 {
+					hosts[host] = append(hosts[host], entry)
+				}
+			}
 		}
 	}()
-	err := mdns.Query(&mdns.QueryParam{
+	err := mdns.QueryContext(manager.ctx, &mdns.QueryParam{
 		Service:             ServiceName,
 		Domain:              "local",
 		Timeout:             2 * time.Second,
@@ -198,6 +205,8 @@ func (manager *Manager) browseInterface(iface *net.Interface) {
 	})
 	close(entries)
 	<-done
+	// 服务发现只保存一个 A 记录；按主机补查全部地址，分别认证，避免虚拟网卡覆盖可达地址。
+	manager.resolveDiscoveryHosts(iface, hosts)
 	if nil != err && nil == manager.ctx.Err() {
 		logging.LogDebugf("browse LAN sync peers failed: %s", err)
 	}
@@ -209,8 +218,9 @@ type discoveryTarget struct {
 }
 
 type networkInterface struct {
-	iface net.Interface
-	addrs []net.Addr
+	iface       net.Interface
+	addrs       []net.Addr
+	unavailable bool
 }
 
 func discoveryTargets(ips []net.IP) []discoveryTarget {
@@ -221,21 +231,25 @@ func discoveryTargets(ips []net.IP) []discoveryTarget {
 	candidates := make([]networkInterface, 0, len(interfaces))
 	for _, current := range interfaces {
 		addresses, addressErr := current.Addrs()
-		if nil == addressErr {
-			candidates = append(candidates, networkInterface{iface: current, addrs: addresses})
-		}
+		candidates = append(candidates, networkInterface{iface: current, addrs: addresses, unavailable: addressErr != nil})
 	}
 	return groupDiscoveryTargets(ips, candidates)
 }
 
 func groupDiscoveryTargets(ips []net.IP, interfaces []networkInterface) (ret []discoveryTarget) {
 	targetIndexes := map[int]int{}
+	unknown := []net.IP{}
 	for _, ip := range ips {
+		matched := false
+		unavailable := len(interfaces) == 0
 		for i := range interfaces {
 			current := &interfaces[i]
-			if 0 == current.iface.Flags&net.FlagUp || 0 != current.iface.Flags&net.FlagLoopback {
+			matched = matched || interfaceHasIP(current.addrs, ip)
+			if current.iface.Flags&(net.FlagUp|net.FlagRunning|net.FlagMulticast) != net.FlagUp|net.FlagRunning|net.FlagMulticast ||
+				current.iface.Flags&(net.FlagLoopback|net.FlagPointToPoint) != 0 {
 				continue
 			}
+			unavailable = unavailable || current.unavailable
 			if !interfaceHasIP(current.addrs, ip) {
 				continue
 			}
@@ -248,9 +262,13 @@ func groupDiscoveryTargets(ips []net.IP, interfaces []networkInterface) (ret []d
 			ret[targetIndex].ips = append(ret[targetIndex].ips, ip)
 			break
 		}
+		if !matched && unavailable {
+			unknown = append(unknown, ip)
+		}
 	}
-	if 0 == len(ret) {
-		ret = append(ret, discoveryTarget{ips: ips})
+	// 移动系统可能禁止枚举接口；只有缺少接口信息时才使用原生容器提供的已过滤地址。
+	if 0 < len(unknown) {
+		ret = append(ret, discoveryTarget{ips: unknown})
 	}
 	return
 }
@@ -281,9 +299,9 @@ func (manager *Manager) stopAdvertisements() {
 	manager.mdnsIPs = ""
 }
 
-func (manager *Manager) addDiscoveredPeer(entry *mdns.ServiceEntry) {
+func (manager *Manager) addDiscoveredPeer(entry *mdns.ServiceEntry) bool {
 	if nil == entry || strings.HasPrefix(entry.Name, manager.instance+".") || entry.Port < 1 {
-		return
+		return false
 	}
 	fields := map[string]string{}
 	for _, field := range entry.InfoFields {
@@ -300,7 +318,7 @@ func (manager *Manager) addDiscoveredPeer(entry *mdns.ServiceEntry) {
 	} else if nil != entry.AddrV6 {
 		addressString = entry.AddrV6.String()
 	}
-	manager.addDiscoveredPeerInfo(entry.Name, addressString, entry.Port, fields)
+	return manager.addDiscoveredPeerInfo(entry.Name, addressString, entry.Port, fields)
 }
 
 func (manager *Manager) addDiscoveredPeerInfo(instance, address string, port int, fields map[string]string) bool {
