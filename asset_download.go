@@ -75,6 +75,7 @@ type assetDownloadState struct {
 
 // assetApply 在修改工作空间前保存目标和前置版本，恢复时保留额外的本地修改。
 type assetApply struct {
+	Source   string                  `json:"source,omitempty"`
 	Index    *entity.Index           `json:"index"`
 	Base     *entity.Index           `json:"base"`
 	Deferred map[string]*entity.File `json:"deferred"`
@@ -867,7 +868,8 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 			target.Count = len(target.Files)
 		}
 	}
-	pending := &assetApply{Index: target, Base: cloudLatest, Deferred: map[string]*entity.File{}, Before: map[string]*entity.File{}}
+	pending := &assetApply{Source: repo.syncSource, Index: target, Base: cloudLatest,
+		Deferred: map[string]*entity.File{}, Before: map[string]*entity.File{}}
 	for p, f := range logical {
 		if repo.shouldDeferAsset(f) || (repo.deferredVersion(f) && !repo.assetDownloads.onDemand) {
 			pending.Deferred[p] = f
@@ -911,7 +913,7 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 			return err
 		}
 	}
-	if err = repo.UpdateLatestSync(target); err != nil {
+	if err = repo.updateLatestSyncSource(target); err != nil {
 		return err
 	}
 	if !repo.assetDownloads.onDemand {
@@ -928,6 +930,15 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 	if pending.Index == nil || pending.Base == nil || pending.Deferred == nil || pending.Before == nil {
 		return fmt.Errorf("%w: recover apply: incomplete pending record [indexMissing=%t, baseMissing=%t, deferredMissing=%t, beforeMissing=%t]",
 			ErrAssetDownloadState, pending.Index == nil, pending.Base == nil, pending.Deferred == nil, pending.Before == nil)
+	}
+	// 旧日志没有来源字段，沿用已认证资源范围；新日志绑定其创建时已选定的来源。
+	if pending.Source != "" && pending.Source != repo.syncSource {
+		return ErrSyncSourceChanged
+	}
+	if repo.syncSource != "" {
+		if _, err := repo.readSyncSource(); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	for p, f := range pending.Deferred {
 		if !validAssetFile(f) || p != f.Path || !isStoredAssetDownloadPath(p) {
@@ -1023,7 +1034,8 @@ func (repo *Repo) recoverAssetApply(context map[string]interface{}) error {
 		return err
 	}
 	if pending.Base.ID != "" {
-		if err := repo.UpdateLatestSync(pending.Base); err != nil {
+		// 来源与同步基点一起完成持久化，失败时保留日志以便重试。
+		if err := repo.updateLatestSyncSource(pending.Base); err != nil {
 			return err
 		}
 	}

@@ -299,7 +299,7 @@ func TestAssetDownloadPath(t *testing.T) {
 }
 
 func TestAssetDownloadsRecoverApply(t *testing.T) {
-	for _, stage := range []string{"prepared", "files-written", "refs-written", "local-edited"} {
+	for _, stage := range []string{"prepared", "files-written", "refs-written", "source-written", "source-changed", "legacy", "local-edited"} {
 		t.Run(stage, func(t *testing.T) {
 			base := t.TempDir()
 			remote := filepath.Join(base, "cloud")
@@ -308,6 +308,9 @@ func TestAssetDownloadsRecoverApply(t *testing.T) {
 			writeAssetTestFile(t, full, "/document.txt", "document before", 40)
 			syncAssetTestRepo(t, full)
 			partial := newAssetTestRepo(t, base, remote, "partial", true)
+			if err := partial.ConfigureSyncSource("test-source"); err != nil {
+				t.Fatal(err)
+			}
 			syncAssetTestRepo(t, partial)
 			beforeDoc := assetTestFile(t, partial, "/document.txt")
 			writeAssetTestFile(t, full, "/assets/test.bin", "asset after", 41)
@@ -322,19 +325,30 @@ func TestAssetDownloadsRecoverApply(t *testing.T) {
 			}
 			afterDoc := assetTestFile(t, full, "/document.txt")
 			afterAsset := assetTestFile(t, full, "/assets/test.bin")
-			partial.assetDownloads.state.Pending = &assetApply{Index: target, Base: target,
+			partial.assetDownloads.state.Pending = &assetApply{Source: "test-source", Index: target, Base: target,
 				Deferred: map[string]*entity.File{afterAsset.Path: afterAsset}, Upserts: []*entity.File{afterDoc},
 				Before: map[string]*entity.File{beforeDoc.Path: beforeDoc}}
+			if stage == "legacy" {
+				partial.assetDownloads.state.Pending.Source = ""
+			}
 			if err = partial.saveAssetState(); err != nil {
 				t.Fatal(err)
 			}
-			if stage == "files-written" || stage == "refs-written" {
+			if stage == "files-written" || stage == "refs-written" || stage == "source-written" {
 				if err = partial.checkoutFile(afterDoc, partial.DataPath, 1, 1, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if stage == "refs-written" {
+			if stage == "refs-written" || stage == "source-written" {
 				if err = partial.UpdateLatest(target); err != nil {
+					t.Fatal(err)
+				}
+				if err = partial.UpdateLatestSync(target); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if stage == "source-written" {
+				if err = partial.writeSyncSource(); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -344,7 +358,28 @@ func TestAssetDownloadsRecoverApply(t *testing.T) {
 			if err = partial.ConfigureAssetDownloads(true, partial.assetDownloads.path, "test-scope"); err != nil {
 				t.Fatal(err)
 			}
+			if stage == "source-changed" {
+				if err = partial.ConfigureSyncSource("other-source"); err != nil {
+					t.Fatal(err)
+				}
+				if _, _, err = partial.RecoverAssetDownloads(nil); !errors.Is(err, ErrSyncSourceChanged) {
+					t.Fatalf("recovery accepted a different sync source: %v", err)
+				}
+				if data, readErr := os.ReadFile(partial.absPath("/document.txt")); readErr != nil || string(data) != "document before" {
+					t.Fatalf("rejected recovery changed document source: %q %v", data, readErr)
+				}
+				binding, readErr := partial.readSyncSource()
+				if readErr != nil || binding.Source != "test-source" || partial.assetDownloads.state.Pending == nil {
+					t.Fatalf("rejected recovery changed its source binding or pending journal: %+v %v", binding, readErr)
+				}
+				if err = partial.ConfigureSyncSource("test-source"); err != nil {
+					t.Fatal(err)
+				}
+			}
 			_, _, err = partial.RecoverAssetDownloads(nil)
+			if changed, sourceErr := partial.SyncSourceChanged(); sourceErr != nil || changed {
+				t.Fatalf("recovery left a mismatched sync source: %t %v", changed, sourceErr)
+			}
 			if stage == "local-edited" {
 				if !errors.Is(err, ErrIndexFileChanged) {
 					t.Fatalf("local edit lost during recovery: %v", err)

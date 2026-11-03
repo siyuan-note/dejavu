@@ -75,7 +75,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	if cloudLatest.ID == latest.ID || "" == cloudLatest.ID {
 		// 数据一致或者云端为空，直接返回
 		if (repo.assetDownloads != nil || repo.syncSource != "") && cloudLatest.ID == latest.ID {
-			err = repo.UpdateLatestSync(latest)
+			err = repo.updateLatestSyncSource(latest)
 			if err == nil && repo.assetDownloads != nil && !repo.assetDownloads.onDemand {
 				err = repo.ensureAllAssets(context)
 			}
@@ -304,7 +304,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	if cloudLatest.ID == latest.ID {
 		// 数据一致，直接返回
 		if repo.syncSource != "" {
-			err = repo.UpdateLatestSync(latest)
+			err = repo.updateLatestSyncSource(latest)
 		}
 		return
 	}
@@ -374,7 +374,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	}
 
 	// 更新本地同步点
-	err = repo.UpdateLatestSync(latest)
+	err = repo.updateLatestSyncSource(latest)
 	if nil != err {
 		logging.LogErrorf("update latest sync failed: %s", err)
 		return

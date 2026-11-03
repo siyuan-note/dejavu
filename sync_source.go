@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/88250/gulu"
+	"github.com/siyuan-note/dejavu/entity"
 )
 
 var ErrSyncSourceChanged = errors.New("sync source changed; choose a one-way sync")
@@ -74,6 +75,14 @@ func (repo *Repo) writeSyncSource() error {
 		return err
 	}
 	return gulu.File.WriteFileSafer(filepath.Join(repo.Path, "refs", "latest-sync-source"), data, 0600)
+}
+
+// 调用方确认同步来源后一起推进基点与绑定，后续资源补齐失败不会使已提交基点失配。
+func (repo *Repo) updateLatestSyncSource(index *entity.Index) error {
+	if err := repo.UpdateLatestSync(index); err != nil {
+		return err
+	}
+	return repo.writeSyncSource()
 }
 
 func validSyncBaseline(id string) bool {
