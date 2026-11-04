@@ -1,0 +1,69 @@
+{
+	"ID": "20240101120000-doc0001",
+	"Spec": "1",
+	"Type": "NodeDocument",
+	"Properties": {
+		"id": "20240101120000-doc0001",
+		"title": "Merge Demo",
+		"type": "doc",
+		"updated": "20240102120000"
+	},
+	"Children": [
+		{
+			"ID": "20240101120001-para001",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240101120001-para001",
+				"updated": "20240101120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "first"
+				}
+			]
+		},
+		{
+			"ID": "20240101120004-para004",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240101120004-para004",
+				"updated": "20240103120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "inserted by a"
+				}
+			]
+		},
+		{
+			"ID": "20240101120002-para002",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240101120002-para002",
+				"updated": "20240102120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "second changed by b"
+				}
+			]
+		},
+		{
+			"ID": "20240101120003-para003",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240101120003-para003",
+				"updated": "20240103120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "third from a"
+				}
+			]
+		}
+	]
+}

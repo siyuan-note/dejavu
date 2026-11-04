@@ -1,0 +1,127 @@
+{
+	"ID": "20240301120000-doc0004",
+	"Spec": "4",
+	"Type": "NodeDocument",
+	"Properties": {
+		"id": "20240301120000-doc0004",
+		"title": "Spec 4 Demo",
+		"type": "doc",
+		"updated": "20240302120000"
+	},
+	"Children": [
+		{
+			"ID": "20240301120001-para001",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240301120001-para001",
+				"updated": "20240302120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "intro edited by b"
+				}
+			]
+		},
+		{
+			"ID": "20240301120002-tabl001",
+			"Type": "NodeTable",
+			"TableAligns": [
+				0,
+				0
+			],
+			"Properties": {
+				"id": "20240301120002-tabl001",
+				"updated": "20240301120000",
+				"colgroup": "|",
+				"custom-sy-table-rich": "1"
+			},
+			"Children": [
+				{
+					"Type": "NodeTableHead",
+					"Data": "thead",
+					"Children": [
+						{
+							"Type": "NodeTableRow",
+							"Data": "tr",
+							"Children": [
+								{
+									"Type": "NodeTableCell",
+									"Data": "th",
+									"Children": [
+										{
+											"Type": "NodeText",
+											"Data": "Item"
+										}
+									]
+								},
+								{
+									"Type": "NodeTableCell",
+									"Data": "th",
+									"Children": [
+										{
+											"Type": "NodeText",
+											"Data": "Details"
+										}
+									]
+								}
+							]
+						}
+					]
+				},
+				{
+					"Type": "NodeTableRow",
+					"Data": "tr",
+					"Children": [
+						{
+							"Type": "NodeTableCell",
+							"Data": "td",
+							"Children": [
+								{
+									"Type": "NodeText",
+									"Data": "plain"
+								}
+							]
+						},
+						{
+							"Type": "NodeTableCell",
+							"Data": "td",
+							"TableCellRich": {
+								"spec": 1,
+								"format": "kramdown",
+								"content": "- first\n- second"
+							},
+							"Children": [
+								{
+									"Type": "NodeText",
+									"Data": "- first"
+								},
+								{
+									"Type": "NodeBr"
+								},
+								{
+									"Type": "NodeText",
+									"Data": "- second"
+								}
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"ID": "20240301120003-para002",
+			"Type": "NodeParagraph",
+			"Properties": {
+				"id": "20240301120003-para002",
+				"updated": "20240301120000"
+			},
+			"Children": [
+				{
+					"Type": "NodeText",
+					"Data": "outro"
+				}
+			]
+		}
+	]
+}
