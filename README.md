@@ -107,10 +107,6 @@ The repo folder layout is as follows:
             v1.0.1
 ```
 
-Files under `refs/` contain only a 40-character hexadecimal snapshot ID, optionally followed by a line ending. Purging stops on malformed references to avoid deleting snapshots whose retention roots cannot be read.
-
-`sync-source.json` stores the local sync source identity and baseline as versioned JSON. It is not uploaded. Early SiYuan 3.8.10 builds stored this record at `refs/latest-sync-source`; reading the binding or purging validates and migrates that record before removing the old file. Interrupted migrations with matching records can be retried. Invalid, unsupported, or conflicting records are preserved and reported as errors.
-
 ## 📄 License
 
 DejaVu uses the [GNU AFFERO GENERAL PUBLIC LICENSE, Version 3](https://www.gnu.org/licenses/agpl-3.0.txt) open source license.
