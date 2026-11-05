@@ -58,14 +58,14 @@ func TestAssetDownloadsRecoverDirectedSourceSwitch(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !legacy {
-				before, readErr := os.ReadFile(filepath.Join(a.Path, "refs", "latest-sync-source"))
+				before, readErr := os.ReadFile(filepath.Join(a.Path, "sync-source.json"))
 				if readErr != nil {
 					t.Fatal(readErr)
 				}
 				if _, _, err = reopened.RecoverAssetDownloads(nil); !errors.Is(err, ErrSyncSourceChanged) {
 					t.Fatalf("recovery without the journal source was accepted: %v", err)
 				}
-				after, readErr := os.ReadFile(filepath.Join(a.Path, "refs", "latest-sync-source"))
+				after, readErr := os.ReadFile(filepath.Join(a.Path, "sync-source.json"))
 				if readErr != nil || !bytes.Equal(before, after) || reopened.assetDownloads.state.Pending == nil {
 					t.Fatal("rejected recovery changed binding or discarded its journal")
 				}

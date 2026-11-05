@@ -42,18 +42,54 @@ func (repo *Repo) ConfigureSyncSource(source string) error {
 }
 
 func (repo *Repo) readSyncSource() (*syncSourceBinding, error) {
-	data, err := os.ReadFile(filepath.Join(repo.Path, "refs", "latest-sync-source"))
-	if err != nil {
+	return readSyncSourceBinding(repo.Path)
+}
+
+func readSyncSourceBinding(repoPath string) (*syncSourceBinding, error) {
+	path := filepath.Join(repoPath, "sync-source.json")
+	binding, _, err := readSyncSourceBindingFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
+	}
+
+	// 3.8.10 早期版本将绑定 JSON 放在 refs 中；校验并安全写入新位置后才能移除旧文件。
+	legacyPath := filepath.Join(repoPath, "refs", "latest-sync-source")
+	legacy, data, legacyErr := readSyncSourceBindingFile(legacyPath)
+	if errors.Is(legacyErr, os.ErrNotExist) {
+		return binding, err
+	}
+	if legacyErr != nil {
+		return nil, legacyErr
+	}
+	if binding != nil && *binding != *legacy {
+		return nil, errors.New("conflicting sync source bindings")
+	}
+	if binding == nil {
+		if err = gulu.File.WriteFileSafer(path, data, 0600); err != nil {
+			return nil, err
+		}
+		binding = legacy
+	}
+	// 写入后中断可能留下两份相同记录，重试时仅清理已核对一致的旧记录。
+	if err = os.Remove(legacyPath); err != nil {
+		return nil, err
+	}
+	return binding, nil
+}
+
+func readSyncSourceBindingFile(path string) (*syncSourceBinding, []byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
 	}
 	binding := &syncSourceBinding{}
 	if err = json.Unmarshal(data, binding); err != nil {
-		return nil, fmt.Errorf("invalid sync source binding: %w", err)
+		return nil, nil, fmt.Errorf("invalid sync source binding [%s]: %w", path, err)
 	}
 	if binding.Version != 1 || binding.Source == "" || !validSyncBaseline(binding.Baseline) {
-		return nil, errors.New("unsupported or incomplete sync source binding")
+		return nil, nil, fmt.Errorf("unsupported or incomplete sync source binding [%s]", path)
 	}
-	return binding, nil
+	return binding, data, nil
 }
 
 func (repo *Repo) writeSyncSource() error {
@@ -74,7 +110,7 @@ func (repo *Repo) writeSyncSource() error {
 	if err != nil {
 		return err
 	}
-	return gulu.File.WriteFileSafer(filepath.Join(repo.Path, "refs", "latest-sync-source"), data, 0600)
+	return gulu.File.WriteFileSafer(filepath.Join(repo.Path, "sync-source.json"), data, 0600)
 }
 
 // 调用方确认同步来源后一起推进基点与绑定，后续资源补齐失败不会使已提交基点失配。

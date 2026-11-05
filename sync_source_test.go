@@ -24,7 +24,7 @@ func TestSyncSourceSwitchRequiresDirection(t *testing.T) {
 			writeAssetTestFile(t, a, "/new.txt", "must survive automatic merge", 20)
 			writeAssetTestFile(t, a, "/seed.txt", "new local seed", 21)
 			syncAssetTestRepo(t, a)
-			bindingPath := filepath.Join(a.Path, "refs", "latest-sync-source")
+			bindingPath := filepath.Join(a.Path, "sync-source.json")
 			before, err := os.ReadFile(bindingPath)
 			if err != nil {
 				t.Fatal(err)
@@ -121,7 +121,7 @@ func TestSyncSourceLegacyAndInterruptedBinding(t *testing.T) {
 	if changed, err := repo.SyncSourceChanged(); err != nil || !changed {
 		t.Fatalf("interrupted pair accepted: %v %v", changed, err)
 	}
-	path := filepath.Join(repo.Path, "refs", "latest-sync-source")
+	path := filepath.Join(repo.Path, "sync-source.json")
 	unknown := []byte(`{"version":2,"source":"old","baseline":"unknown"}`)
 	if err := os.WriteFile(path, unknown, 0600); err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestSyncSourceFailedUploadDoesNotConfirm(t *testing.T) {
 	if err := a.ConfigureSyncSource("B"); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(a.Path, "refs", "latest-sync-source")
+	path := filepath.Join(a.Path, "sync-source.json")
 	before, _ := os.ReadFile(path)
 	if _, err := a.SyncUpload(nil); err == nil {
 		t.Fatal("upload should fail")

@@ -53,6 +53,8 @@ Design reference from [ArtiVC](https://github.com/InfuseAI/ArtiVC).
 The repo folder layout is as follows:
 
 ```text
+│  sync-source.json
+│
 ├─indexes
 │      0531732dca85404e716abd6bb896319a41fa372b
 │      19fc2c2e5317b86f9e048f8d8da2e4ed8300d8af
@@ -104,6 +106,10 @@ The repo folder layout is as follows:
             v1.0.0
             v1.0.1
 ```
+
+Files under `refs/` contain only a 40-character hexadecimal snapshot ID, optionally followed by a line ending. Purging stops on malformed references to avoid deleting snapshots whose retention roots cannot be read.
+
+`sync-source.json` stores the local sync source identity and baseline as versioned JSON. It is not uploaded. Early SiYuan 3.8.10 builds stored this record at `refs/latest-sync-source`; reading the binding or purging validates and migrates that record before removing the old file. Interrupted migrations with matching records can be retried. Invalid, unsupported, or conflicting records are preserved and reported as errors.
 
 ## 📄 License
 

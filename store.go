@@ -285,6 +285,10 @@ func (store *Store) Purge(ctx context.Context, retentionIndexIDs ...string) (ret
 
 func (store *Store) readRefs() (ret map[string]bool, err error) {
 	ret = map[string]bool{}
+	if _, err = readSyncSourceBinding(store.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	err = nil
 	refsDir := filepath.Join(store.Path, "refs")
 	if !gulu.File.IsDir(refsDir) {
 		return
