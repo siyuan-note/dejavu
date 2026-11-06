@@ -91,11 +91,33 @@ func (manager *Manager) privateNetworkOnly(next http.Handler) http.Handler {
 	})
 }
 
-func (manager *Manager) handleIdentity(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, map[string]interface{}{
-		"protocolVersion": ProtocolVersion,
-		"objectFormat":    ObjectFormatVersion,
-	})
+func (manager *Manager) handleIdentity(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	response := &identityResponse{ProtocolVersion: ProtocolVersion, ObjectFormat: ObjectFormatVersion}
+
+	// 客户端提供 nonce 时先证明服务端持有仓库密钥，客户端验证通过后才会发送会话元数据。
+	clientNonceText := strings.TrimSpace(request.Header.Get(peerNonceHeader))
+	if "" != clientNonceText {
+		clientNonce, err := base64.RawURLEncoding.DecodeString(clientNonceText)
+		if nil != err || 32 != len(clientNonce) {
+			http.Error(writer, "invalid nonce", http.StatusBadRequest)
+			return
+		}
+		if nil == request.TLS || 1 != len(request.TLS.PeerCertificates) {
+			http.Error(writer, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		serverNonce := make([]byte, 32)
+		if _, err = rand.Read(serverNonce); nil != err {
+			http.Error(writer, "internal error", http.StatusInternalServerError)
+			return
+		}
+		clientCertHash := sha256.Sum256(request.TLS.PeerCertificates[0].Raw)
+		response.Nonce = base64.RawURLEncoding.EncodeToString(serverNonce)
+		response.Proof = calculateProof(manager.authKey, identityProofRole, manager.scopeID, clientNonce, serverNonce,
+			clientCertHash[:], manager.identity.certHash)
+	}
+	writeJSON(writer, http.StatusOK, response)
 }
 
 func (manager *Manager) handleSessionOpen(writer http.ResponseWriter, request *http.Request) {

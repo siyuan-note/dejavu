@@ -264,29 +264,53 @@ func (manager *Manager) ensureSession(current *peer) (err error) {
 	address, port := current.address, current.port
 	current.mu.Unlock()
 
+	clientNonce := make([]byte, 32)
+	if _, err = rand.Read(clientNonce); nil != err {
+		return err
+	}
+
 	client := manager.newPeerHTTPClient()
 	baseURL := peerURL(address, port)
 	identityRequest, err := http.NewRequestWithContext(manager.ctx, http.MethodGet, baseURL+"/peer-sync/v1/identity", nil)
 	if nil != err {
 		return err
 	}
-	identityResponse, err := client.Do(identityRequest)
+	identityRequest.Header.Set(peerNonceHeader, base64.RawURLEncoding.EncodeToString(clientNonce))
+	identityHTTPResponse, err := client.Do(identityRequest)
 	if nil != err {
 		return err
 	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(identityResponse.Body, 16*1024))
-	identityResponse.Body.Close()
-	if http.StatusOK != identityResponse.StatusCode || nil == identityResponse.TLS || 1 > len(identityResponse.TLS.PeerCertificates) {
+	if http.StatusOK != identityHTTPResponse.StatusCode || nil == identityHTTPResponse.TLS || 1 > len(identityHTTPResponse.TLS.PeerCertificates) {
+		identityHTTPResponse.Body.Close()
 		return errors.New("invalid LAN peer identity response")
 	}
-	serverCertHash := sha256.Sum256(identityResponse.TLS.PeerCertificates[0].Raw)
-	serverDeviceID, err := deviceIDFromCertificate(identityResponse.TLS.PeerCertificates[0])
+	serverCertHash := sha256.Sum256(identityHTTPResponse.TLS.PeerCertificates[0].Raw)
+	serverDeviceID, err := deviceIDFromCertificate(identityHTTPResponse.TLS.PeerCertificates[0])
 	if nil != err {
+		identityHTTPResponse.Body.Close()
 		return err
 	}
-	clientNonce := make([]byte, 32)
-	if _, err = rand.Read(clientNonce); nil != err {
-		return err
+	peerIdentity := &identityResponse{}
+	if err = json.NewDecoder(io.LimitReader(identityHTTPResponse.Body, 16*1024)).Decode(peerIdentity); nil != err {
+		identityHTTPResponse.Body.Close()
+		return errors.New("invalid LAN peer identity response")
+	}
+	identityHTTPResponse.Body.Close()
+	if ProtocolVersion != peerIdentity.ProtocolVersion || ObjectFormatVersion != peerIdentity.ObjectFormat {
+		return errors.New("incompatible LAN peer identity response")
+	}
+	// 必须在发送 scope、设备名等元数据前验证服务端持有仓库密钥，避免被重放发现标签的伪造对端收集。
+	// https://github.com/siyuan-note/siyuan/security/advisories/GHSA-x5cg-xgq2-x369
+	serverIdentityNonce, err := base64.RawURLEncoding.DecodeString(peerIdentity.Nonce)
+	if nil != err || 32 != len(serverIdentityNonce) {
+		return errors.New("invalid LAN peer identity nonce")
+	}
+	expectedIdentityProof := calculateProof(manager.authKey, identityProofRole, manager.scopeID, clientNonce, serverIdentityNonce,
+		manager.identity.certHash, serverCertHash[:])
+	providedIdentityProof, err := base64.RawURLEncoding.DecodeString(peerIdentity.Proof)
+	expectedIdentityProofBytes, _ := base64.RawURLEncoding.DecodeString(expectedIdentityProof)
+	if nil != err || !hmac.Equal(providedIdentityProof, expectedIdentityProofBytes) {
+		return errors.New("invalid LAN peer identity proof")
 	}
 	proof := calculateProof(manager.authKey, "client", manager.scopeID, clientNonce, nil, manager.identity.certHash,
 		serverCertHash[:])

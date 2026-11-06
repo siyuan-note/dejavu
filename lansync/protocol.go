@@ -35,12 +35,23 @@ const (
 	ObjectFormatVersion = 1
 	ServiceName         = "_siyuan-sync._tcp"
 
+	peerNonceHeader   = "X-Peer-Nonce"
+	identityProofRole = "server-identity"
+
 	discoveryWindow = 5 * time.Minute
 	sessionLifetime = 10 * time.Minute
 	maxHasChunks    = 4096
 	maxChunkSize    = 128 * 1024 * 1024
 	maxSessions     = 4096
 )
+
+// identityResponse 在客户端提供 nonce 时携带服务端证明，客户端验证通过后才发送会话元数据。
+type identityResponse struct {
+	ProtocolVersion int    `json:"protocolVersion"`
+	ObjectFormat    int    `json:"objectFormat"`
+	Nonce           string `json:"nonce"`
+	Proof           string `json:"proof"`
+}
 
 type sessionOpenRequest struct {
 	ProtocolVersion int    `json:"protocolVersion"`
