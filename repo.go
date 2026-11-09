@@ -115,7 +115,8 @@ var (
 	ErrEmptyIndex = errors.New("empty index")
 	// ErrIndexFileChanged indicates that the file has changed during the index process.
 	// Improve data snapshot and sync robustness https://github.com/siyuan-note/siyuan/issues/9941
-	ErrIndexFileChanged = errors.New("file changed")
+	ErrIndexFileChanged       = errors.New("file changed")
+	ErrSnapshotScanIncomplete = errors.New("snapshot scan incomplete")
 )
 
 var lock = sync.Mutex{} // 仓库锁，Checkout、Index 和 Sync 等不能同时执行
@@ -946,9 +947,13 @@ func (repo *Repo) removeCloudObjects(objects []string) (err error) {
 }
 
 func (repo *Repo) index(memo string, checkChunks bool, context map[string]interface{}, fullCheck ...bool) (ret *entity.Index, err error) {
+	var previousOmission *snapshotScanOmission
 	for i := 0; i < 7; i++ {
 		ret, err = repo.index0(memo, checkChunks, context, len(fullCheck) > 0 && fullCheck[0])
 		if nil == err {
+			return
+		}
+		if stopSnapshotScanRetry(err, &previousOmission) {
 			return
 		}
 

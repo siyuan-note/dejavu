@@ -268,8 +268,41 @@ func (repo *Repo) verifySnapshotRemoval(file *entity.File) error {
 	if ignored, filterErr := repo.builtInIgnore(info, abs); ignored || filterErr != nil {
 		return filterErr
 	}
-	return fmt.Errorf("%w: scan omitted existing source [%s], size [%d], modifiedNS [%d]",
-		ErrIndexFileChanged, file.Path, info.Size(), info.ModTime().UnixNano())
+	detail, deterministic := repo.snapshotScanDiagnostic(file.Path, info)
+	return &snapshotScanOmission{path: file.Path, size: info.Size(), modified: info.ModTime().UnixNano(),
+		detail: detail, retryable: !deterministic}
+}
+
+type snapshotScanOmission struct {
+	path      string
+	size      int64
+	modified  int64
+	detail    string
+	retryable bool
+}
+
+func (e *snapshotScanOmission) Error() string {
+	return fmt.Sprintf("%s: scan omitted existing source [%s], size [%d], modifiedNS [%d], %s",
+		ErrSnapshotScanIncomplete, e.path, e.size, e.modified, e.detail)
+}
+
+func (e *snapshotScanOmission) Is(target error) bool {
+	return target == ErrSnapshotScanIncomplete || (target == ErrIndexFileChanged && e.retryable)
+}
+
+func stopSnapshotScanRetry(err error, previous **snapshotScanOmission) bool {
+	var omission *snapshotScanOmission
+	if !errors.As(err, &omission) {
+		*previous = nil
+		return false
+	}
+	if last := *previous; last != nil && last.path == omission.path && last.size == omission.size &&
+		last.modified == omission.modified && last.detail == omission.detail {
+		// 相同遗漏连续出现时停止全量扫描，保留现有快照供诊断和恢复。
+		omission.retryable = false
+	}
+	*previous = omission
+	return !omission.retryable
 }
 
 func indexFileStampChanged(path string, before, after fileStamp) error {
