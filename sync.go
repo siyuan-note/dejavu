@@ -2067,6 +2067,11 @@ func (repo *Repo) decodeDownloadedData(key string, data []byte) (ret []byte, err
 }
 
 func (repo *Repo) downloadCloudIndex(id string, context map[string]interface{}) (downloadBytes int64, index *entity.Index, err error) {
+	if !util.IsValidID(id) {
+		err = errInvalidIndexID
+		logging.LogErrorf("got invalid index ID [%s]", id)
+		return
+	}
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadIndex, context, id)
 	index = &entity.Index{}
 
@@ -2149,6 +2154,11 @@ func (repo *Repo) downloadCloudLatest0(context map[string]interface{}, reuseLoca
 		logging.LogWarnf("got empty cloud latest")
 		return
 	}
+	if !util.IsValidID(latestID) {
+		err = errInvalidIndexID
+		logging.LogErrorf("got invalid cloud latest [%s]", latestID)
+		return
+	}
 
 	if isS3OrSiYuan && nil == seqNumLatestIDCh {
 		startGetSeqNumLatest()
@@ -2213,6 +2223,10 @@ func (repo *Repo) getSeqNumLatest() (id string, maxSeqNum int, seqNumLatests []s
 		parts := strings.Split(p, "-")
 		if 2 > len(parts) {
 			repo.cloud.RemoveObject("refs/" + ref.Path)
+			continue
+		}
+		if !util.IsValidID(parts[1]) {
+			logging.LogWarnf("ignore invalid seq num latest [%s]", ref.Path)
 			continue
 		}
 

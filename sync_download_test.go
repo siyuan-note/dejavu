@@ -19,6 +19,11 @@ type indexDownloadReply struct {
 	err  error
 }
 
+const (
+	expectedIndexID = "0123456789abcdef0123456789abcdef01234567"
+	otherIndexID    = "fedcba9876543210fedcba9876543210fedcba98"
+)
+
 type indexDownloadCloud struct {
 	cloud.Cloud
 	replies   []indexDownloadReply
@@ -66,19 +71,19 @@ func TestCloudIndexDownloadRetry(t *testing.T) {
 			c := &indexDownloadCloud{}
 			repo := newIndexDownloadRepo(t, c)
 			encode := func(s string) []byte { return repo.store.compressEncoder.EncodeAll([]byte(s), nil) }
-			good := encode(`{"id":"expected","files":[]}`)
+			good := encode(fmt.Sprintf(`{"id":"%s","files":[]}`, expectedIndexID))
 			invalid := []byte("not zstd")
 			switch bad {
 			case "json":
 				invalid = encode("{\"id\":\"\x04\"}")
 			case "id":
-				invalid = encode(`{"id":"other"}`)
+				invalid = encode(fmt.Sprintf(`{"id":"%s"}`, otherIndexID))
 			case "partial":
-				invalid = encode(`{"id":"expected","systemName":"stale",`)
+				invalid = encode(fmt.Sprintf(`{"id":"%s","systemName":"stale",`, expectedIndexID))
 			}
 			c.replies = []indexDownloadReply{{data: invalid}, {data: good}}
-			n, index, err := repo.downloadCloudIndex("expected", nil)
-			if nil != err || "expected" != index.ID || "" != index.SystemName || 2 != c.downloads {
+			n, index, err := repo.downloadCloudIndex(expectedIndexID, nil)
+			if nil != err || expectedIndexID != index.ID || "" != index.SystemName || 2 != c.downloads {
 				t.Fatalf("unexpected retry result: index=%+v, downloads=%d, err=%v", index, c.downloads, err)
 			}
 			if n != int64(len(invalid)+len(good)) || 0 != c.uploads || 0 != c.removes {
@@ -97,7 +102,7 @@ func TestCloudIndexDownloadDoesNotRetryAuthentication(t *testing.T) {
 			c.replies = []indexDownloadReply{{err: want}}
 			if !transport {
 				want = cloud.ErrDecryptFailed
-				index := &entity.Index{ID: "expected"}
+				index := &entity.Index{ID: expectedIndexID}
 				index.InitAESKeyVerifyVal([]byte("fedcba9876543210"))
 				data, err := gulu.JSON.MarshalJSON(index)
 				if nil != err {
@@ -105,11 +110,36 @@ func TestCloudIndexDownloadDoesNotRetryAuthentication(t *testing.T) {
 				}
 				c.replies = []indexDownloadReply{{data: repo.store.compressEncoder.EncodeAll(data, nil)}}
 			}
-			_, _, err := repo.downloadCloudIndex("expected", nil)
+			_, _, err := repo.downloadCloudIndex(expectedIndexID, nil)
 			if !errors.Is(err, want) || 1 != c.downloads || 0 != c.uploads || 0 != c.removes {
 				t.Fatalf("unexpected authentication result: cloud=%+v, err=%v", c, err)
 			}
 		})
+	}
+}
+
+func TestCloudTraversalIndexIDIsRejected(t *testing.T) {
+	traversalID := "..//../././././data/notebook/document.sy"
+	if 40 != len(traversalID) {
+		t.Fatalf("test ID is not 40 bytes: %d", len(traversalID))
+	}
+
+	latestCloud := &indexDownloadCloud{replies: []indexDownloadReply{{data: []byte(traversalID)}}}
+	latestRepo := newIndexDownloadRepo(t, latestCloud)
+	if _, _, err := latestRepo.downloadCloudLatest(nil); !errors.Is(err, errInvalidIndexID) {
+		t.Fatalf("download accepted traversal latest ID: %v", err)
+	}
+	if 1 != latestCloud.downloads {
+		t.Fatalf("invalid latest ID still requested the index: %d", latestCloud.downloads)
+	}
+
+	indexCloud := &indexDownloadCloud{}
+	indexRepo := newIndexDownloadRepo(t, indexCloud)
+	if _, _, err := indexRepo.downloadCloudIndex(traversalID, nil); !errors.Is(err, errInvalidIndexID) {
+		t.Fatalf("download accepted traversal index ID: %v", err)
+	}
+	if 0 != indexCloud.downloads {
+		t.Fatalf("invalid index ID still reached the cloud: %d", indexCloud.downloads)
 	}
 }
 

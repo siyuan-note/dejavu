@@ -12,6 +12,7 @@ import (
 
 	"github.com/siyuan-note/dejavu/cloud"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -150,7 +151,7 @@ func (repo *Repo) refreshCloudSnapshotView(s3 *cloud.S3, state *cloudSnapshotSta
 				return nil, errors.New("invalid cloud snapshot list")
 			}
 			for _, item := range parsed.Indexes {
-				if item == nil || !validSnapshotID(item.ID) {
+				if item == nil || !util.IsValidID(item.ID) {
 					return nil, errors.New("invalid cloud snapshot list entry")
 				}
 			}
@@ -316,7 +317,7 @@ func (repo *Repo) cachedCloudSnapshotTags(s3 *cloud.S3, state *cloudSnapshotStat
 				return nil, readErr
 			}
 			id := string(data)
-			if !validSnapshotID(id) {
+			if !util.IsValidID(id) {
 				return nil, errors.New("invalid cloud snapshot tag reference")
 			}
 			ref = cachedCloudSnapshotRef{stamp: stamp, id: id}

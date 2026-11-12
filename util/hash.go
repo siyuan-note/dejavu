@@ -19,6 +19,7 @@ package util
 import (
 	"crypto/rand"
 	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/88250/gulu"
@@ -27,6 +28,15 @@ import (
 
 func Hash(data []byte) string {
 	return fmt.Sprintf("%x", sha1.Sum(data))
+}
+
+// IsValidID 校验 ID 是否为 40 位十六进制哈希，索引 ID 参与本地路径拼接前必须通过该校验。
+func IsValidID(id string) bool {
+	if 40 != len(id) {
+		return false
+	}
+	_, err := hex.DecodeString(id)
+	return nil == err
 }
 
 func RandHash() string {

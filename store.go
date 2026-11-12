@@ -29,12 +29,15 @@ import (
 	"github.com/dgraph-io/ristretto"
 	"github.com/klauspost/compress/zstd"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/encryption"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 )
 
 var ErrNotFoundObject = errors.New("not found object")
+
+var errInvalidIndexID = errors.New("invalid index ID")
 
 // Store 描述了存储库。
 type Store struct {
@@ -329,10 +332,10 @@ func (store *Store) readRefs() (ret map[string]bool, err error) {
 }
 
 func (store *Store) PutIndex(index *entity.Index) (err error) {
-	if "" == index.ID {
-		return errors.New("invalid id")
+	dir, file, err := store.indexAbsPath(index.ID)
+	if nil != err {
+		return
 	}
-	dir, file := store.IndexAbsPath(index.ID)
 	if err = os.MkdirAll(dir, 0755); nil != err {
 		return errors.New("put index failed: " + err.Error())
 	}
@@ -360,13 +363,17 @@ func (store *Store) PutIndex(index *entity.Index) (err error) {
 }
 
 func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
+	_, file, err := store.indexAbsPath(id)
+	if nil != err {
+		return
+	}
+
 	cached, _ := indexCache.Get(id)
 	if nil != cached {
 		ret = cached.(*entity.Index)
 		return
 	}
 
-	_, file := store.IndexAbsPath(id)
 	var data []byte
 	data, err = os.ReadFile(file)
 	if nil != err {
@@ -496,9 +503,24 @@ func (store *Store) Stat(id string) (stat os.FileInfo, err error) {
 	return
 }
 
+// IndexAbsPath 返回索引文件路径，调用方需保证 id 通过 util.IsValidID。
 func (store *Store) IndexAbsPath(id string) (dir, file string) {
 	dir = filepath.Join(store.Path, "indexes")
 	file = filepath.Join(dir, id)
+	return
+}
+
+// indexAbsPath 校验索引 ID 并保证结果仍在 indexes 目录内，索引 ID 可能来自远端。
+func (store *Store) indexAbsPath(id string) (dir, file string, err error) {
+	if !util.IsValidID(id) {
+		err = errInvalidIndexID
+		return
+	}
+	dir, file = store.IndexAbsPath(id)
+	if filepath.Dir(file) != dir {
+		err = errInvalidIndexID
+		return
+	}
 	return
 }
 

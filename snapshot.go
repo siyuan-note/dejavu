@@ -1,13 +1,13 @@
 package dejavu
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 )
 
 // IndexOptions 指定本次索引的本机内容校验策略。
@@ -67,7 +67,7 @@ func (repo *Repo) CheckSnapshot() (bool, error) {
 		return false, err
 	}
 	id := string(data)
-	if !validSnapshotID(id) {
+	if !util.IsValidID(id) {
 		return false, fmt.Errorf("%w: invalid latest index ID", ErrRepoFatal)
 	}
 	latest, err := repo.store.GetIndex(id)
@@ -92,19 +92,11 @@ func (repo *Repo) CheckSnapshot() (bool, error) {
 	return len(upserts) != 0 || len(removes) != 0, nil
 }
 
-func validSnapshotID(id string) bool {
-	if len(id) != 40 {
-		return false
-	}
-	_, err := hex.DecodeString(id)
-	return err == nil
-}
-
 // SetSnapshotMemo 仅更新本地索引；复制缓存对象，写入失败时保留原备注。
 func (repo *Repo) SetSnapshotMemo(id, memo string) error {
 	lock.Lock()
 	defer lock.Unlock()
-	if !validSnapshotID(id) {
+	if !util.IsValidID(id) {
 		return errors.New("invalid snapshot ID")
 	}
 	index, err := repo.store.GetIndex(id)
