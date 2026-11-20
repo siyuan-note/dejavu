@@ -253,7 +253,7 @@ func (local *Local) GetIndexes(page int) (indexes []*entity.Index, pageCount, to
 		return
 	}
 
-	data, err = compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if err != nil {
 		return
 	}
@@ -453,7 +453,7 @@ func (local *Local) repoIndex(id string) (index *entity.Index, err error) {
 		return
 	}
 
-	data, err = compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if err != nil {
 		return
 	}

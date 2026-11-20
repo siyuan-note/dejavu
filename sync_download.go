@@ -31,6 +31,10 @@ func (repo *Repo) downloadCloudIndexData(key string, validate func([]byte) error
 		decoded, decodeErr := util.DecodeCloudMetadata(data)
 		stage := "decompress"
 		err = decodeErr
+		if errors.Is(err, util.ErrCloudMetadataTooLarge) {
+			// 体积超限是确定性错误，重试只会重复下载和解码
+			return downloadBytes, err
+		}
 		if nil == err {
 			stage = "parse"
 			err = validate(decoded)

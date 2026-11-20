@@ -139,7 +139,7 @@ func (repo *Repo) refreshCloudSnapshotView(s3 *cloud.S3, state *cloudSnapshotSta
 			}
 		}
 		if !unchanged {
-			decoded, decodeErr := repo.store.compressDecoder.DecodeAll(data, nil)
+			decoded, decodeErr := util.DecodeCloudMetadata(data)
 			if decodeErr != nil {
 				return nil, decodeErr
 			}
@@ -226,7 +226,7 @@ func (repo *Repo) cachedCloudSnapshotIndex(s3 *cloud.S3, state *cloudSnapshotSta
 		if readErr != nil {
 			return nil, readErr
 		}
-		decoded, readErr := repo.store.compressDecoder.DecodeAll(data, nil)
+		decoded, readErr := util.DecodeCloudMetadata(data)
 		if readErr != nil {
 			return nil, readErr
 		}

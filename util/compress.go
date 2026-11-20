@@ -17,6 +17,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/klauspost/compress/zstd"
@@ -26,8 +27,11 @@ const (
 	// MaxCloudMetadataCompressedBytes 限制云端元数据对象的压缩体积
 	MaxCloudMetadataCompressedBytes = 64 << 20
 	// MaxCloudMetadataDecodedBytes 限制云端元数据解压后的体积，避免高压缩比对象在解析前耗尽内存
-	MaxCloudMetadataDecodedBytes = 256 << 20
+	MaxCloudMetadataDecodedBytes = 64 << 20
 )
+
+// ErrCloudMetadataTooLarge 表示云端元数据超过体积上限，重试不会改变结果。
+var ErrCloudMetadataTooLarge = errors.New("cloud metadata exceeds size limit")
 
 // DecodeCloudMetadata 解压云端元数据并限制压缩前后体积，避免不可信对象在解析前耗尽内存。
 func DecodeCloudMetadata(data []byte) ([]byte, error) {
@@ -37,7 +41,7 @@ func DecodeCloudMetadata(data []byte) ([]byte, error) {
 // DecodeBoundedZstd 解压 zstd 数据并限制压缩前后体积。
 func DecodeBoundedZstd(data []byte, maxCompressed, maxDecoded int) ([]byte, error) {
 	if len(data) > maxCompressed {
-		return nil, fmt.Errorf("compressed data exceeds %d bytes", maxCompressed)
+		return nil, fmt.Errorf("%w: compressed data exceeds %d bytes", ErrCloudMetadataTooLarge, maxCompressed)
 	}
 	decoder, err := zstd.NewReader(nil, zstd.WithDecoderMaxMemory(uint64(maxDecoded)))
 	if err != nil {
@@ -46,10 +50,13 @@ func DecodeBoundedZstd(data []byte, maxCompressed, maxDecoded int) ([]byte, erro
 	defer decoder.Close()
 	decoded, err := decoder.DecodeAll(data, nil)
 	if err != nil {
+		if errors.Is(err, zstd.ErrDecoderSizeExceeded) {
+			return nil, fmt.Errorf("%w: decoded data exceeds %d bytes", ErrCloudMetadataTooLarge, maxDecoded)
+		}
 		return nil, err
 	}
 	if len(decoded) > maxDecoded {
-		return nil, fmt.Errorf("decoded data exceeds %d bytes", maxDecoded)
+		return nil, fmt.Errorf("%w: decoded data exceeds %d bytes", ErrCloudMetadataTooLarge, maxDecoded)
 	}
 	return decoded, nil
 }

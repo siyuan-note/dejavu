@@ -18,6 +18,7 @@ package util
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 
@@ -42,13 +43,13 @@ func encodeRepeat(t *testing.T, size int) []byte {
 }
 
 func TestDecodeBoundedZstdRejectsOversizedData(t *testing.T) {
-	if _, err := DecodeBoundedZstd(make([]byte, 2048), 1024, 1<<20); err == nil {
-		t.Fatal("compressed size limit was not enforced")
+	if _, err := DecodeBoundedZstd(make([]byte, 2048), 1024, 1<<20); !errors.Is(err, ErrCloudMetadataTooLarge) {
+		t.Fatalf("compressed size limit was not reported as a size error: %v", err)
 	}
 
 	encoded := encodeRepeat(t, 1<<20)
-	if _, err := DecodeBoundedZstd(encoded, 1<<20, 64<<10); err == nil {
-		t.Fatal("decoded size limit was not enforced")
+	if _, err := DecodeBoundedZstd(encoded, 1<<20, 64<<10); !errors.Is(err, ErrCloudMetadataTooLarge) {
+		t.Fatalf("decoded size limit was not reported as a size error: %v", err)
 	}
 
 	decoded, err := DecodeBoundedZstd(encoded, 1<<20, 2<<20)

@@ -44,6 +44,7 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/panjf2000/ants/v2"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/logging"
 )
 
@@ -193,7 +194,7 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 		return
 	}
 
-	data, err = compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if nil != err {
 		return
 	}
@@ -375,7 +376,7 @@ func (s3 *S3) repoIndex(id string) (ret *entity.Index, err error) {
 		logging.LogErrorf("download index [%s] failed: %s", id, err)
 		return
 	}
-	data, err = compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if nil != err {
 		logging.LogErrorf("decompress index [%s] failed: %s", id, err)
 		return

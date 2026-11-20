@@ -14,7 +14,7 @@ require (
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/hashicorp/mdns v1.0.7
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.19.2
+	github.com/klauspost/compress v1.20.4
 	github.com/miekg/dns v1.1.72
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/qiniu/go-sdk/v7 v7.27.0
