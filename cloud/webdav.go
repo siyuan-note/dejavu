@@ -33,6 +33,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/siyuan-note/dejavu/entity"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/logging"
 	"github.com/studio-b12/gowebdav"
 )
@@ -158,7 +159,7 @@ func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {
 				}
 				return
 			}
-			indexesData, readErr = compressDecoder.DecodeAll(indexesData, nil)
+			indexesData, readErr = util.DecodeCloudMetadata(indexesData)
 			if nil != readErr {
 				err = readErr
 				return
@@ -220,7 +221,7 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 		return
 	}
 
-	data, err = compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if nil != err {
 		return
 	}
@@ -465,7 +466,7 @@ func (webdav *WebDAV) repoIndex(repoDir, id string) (ret *entity.Index, err erro
 	if nil != err {
 		return
 	}
-	data, err = compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if nil != err {
 		return
 	}

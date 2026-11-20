@@ -1359,7 +1359,7 @@ func (repo *Repo) uploadCloudMissingObjects(trafficStat *TrafficStat, context ma
 	trafficStat.APIGet++
 	trafficStat.m.Unlock()
 
-	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if nil != err {
 		logging.LogErrorf("decompress check report failed: %s", err)
 		return
@@ -2057,7 +2057,7 @@ func (repo *Repo) decodeDownloadedData(key string, data []byte) (ret []byte, err
 			return
 		}
 	} else if strings.Contains(key, "indexes") {
-		ret, err = repo.store.compressDecoder.DecodeAll(ret, nil)
+		ret, err = util.DecodeCloudMetadata(ret)
 	}
 	if nil != err {
 		logging.LogErrorf("decode downloaded data [%s] failed: %s", key, err)

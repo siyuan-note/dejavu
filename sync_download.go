@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/siyuan-note/dejavu/cloud"
+	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/logging"
 )
 
@@ -27,7 +28,7 @@ func (repo *Repo) downloadCloudIndexData(key string, validate func([]byte) error
 			return downloadBytes, downloadErr
 		}
 
-		decoded, decodeErr := repo.store.compressDecoder.DecodeAll(data, nil)
+		decoded, decodeErr := util.DecodeCloudMetadata(data)
 		stage := "decompress"
 		err = decodeErr
 		if nil == err {

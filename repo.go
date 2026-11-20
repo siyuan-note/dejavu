@@ -379,7 +379,7 @@ func (repo *Repo) purgeIndexesV2(refIndexIDs map[string]bool) (err error) {
 		return
 	}
 
-	data, err = repo.store.compressDecoder.DecodeAll(data, nil)
+	data, err = util.DecodeCloudMetadata(data)
 	if nil != err {
 		return
 	}
