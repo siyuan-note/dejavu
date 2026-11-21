@@ -33,6 +33,10 @@ import (
 
 var mdnsQueryLogger = log.New(io.Discard, "", 0)
 
+type mdnsAdvertisement interface {
+	Shutdown() error
+}
+
 func (manager *Manager) refreshAdvertisement() (err error) {
 	manager.mdnsMu.Lock()
 	defer manager.mdnsMu.Unlock()
@@ -62,7 +66,7 @@ func (manager *Manager) refreshAdvertisement() (err error) {
 			lastErr = serviceErr
 			continue
 		}
-		server, serverErr := mdns.NewServer(&mdns.Config{Zone: service, Iface: target.iface})
+		server, serverErr := startMDNSAdvertisement(service, target.iface)
 		if nil != serverErr {
 			lastErr = serverErr
 			continue

@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/mdns"
 	"github.com/siyuan-note/dejavu"
 	"github.com/siyuan-note/logging"
 )
@@ -73,7 +72,7 @@ type Manager struct {
 	listener    net.Listener
 	httpServer  *http.Server
 	mdnsMu      sync.Mutex
-	mdnsServers []*mdns.Server
+	mdnsServers []mdnsAdvertisement
 	mdnsIPs     string
 
 	peerMu sync.RWMutex
