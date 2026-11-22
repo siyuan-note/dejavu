@@ -170,6 +170,10 @@ func (store *Store) Purge(ctx context.Context, retentionIndexIDs ...string) (ret
 		}
 
 		for _, fileID := range index.Files {
+			if isCancelled(ctx) {
+				logging.LogWarnf("purging data repo [%s] cancelled while scanning files in a retained index", store.Path)
+				return
+			}
 			referencedObjIDs[fileID] = true
 			file, getFileErr := store.GetFile(fileID)
 			if nil != getFileErr {

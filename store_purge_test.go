@@ -58,6 +58,44 @@ func TestPurgePreservesDataWithMalformedRefs(t *testing.T) {
 	}
 }
 
+type purgeCancelOnCheck struct {
+	context.Context
+	cancel    context.CancelFunc
+	remaining int
+}
+
+func (c *purgeCancelOnCheck) Done() <-chan struct{} {
+	c.remaining--
+	if c.remaining == 0 {
+		c.cancel()
+	}
+	return c.Context.Done()
+}
+
+func TestPurgeStopsScanningFilesInRetainedIndexOnCancellation(t *testing.T) {
+	base := t.TempDir()
+	repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "purge-cancel", false)
+	index, err := repo.Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	index.Files = append(index.Files, strings.Repeat("0", 40))
+	if err := repo.PutIndex(index); err != nil {
+		t.Fatal(err)
+	}
+	before := purgeRepoFiles(t, repo)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// 在已检查对象目录、索引目录、保留索引和第一个文件后取消，第二个文件不存在。
+	scan := &purgeCancelOnCheck{Context: ctx, cancel: cancel, remaining: 5}
+	if _, err := repo.Purge(scan); err != nil || ctx.Err() != context.Canceled {
+		t.Fatalf("purge did not stop before reading the second file: %v, context error: %v", err, ctx.Err())
+	}
+	if !reflect.DeepEqual(purgeRepoFiles(t, repo), before) {
+		t.Fatal("canceled purge modified the repository")
+	}
+}
+
 func TestReadRefsAcceptsExistingLineEndings(t *testing.T) {
 	base := t.TempDir()
 	repo := newAssetTestRepo(t, base, filepath.Join(base, "cloud"), "ref-lines", false)
