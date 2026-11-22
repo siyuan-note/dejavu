@@ -146,12 +146,19 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
+	linked, err := repo.syncLinkedPaths(latestFiles, cloudLatestFiles, latestSyncFiles)
+	if err != nil {
+		return
+	}
+	links := buildSyncLinkView(cloudLatestFiles, linked)
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
+	localUpserts, localRemoves = links.unlinked(localUpserts), links.unlinked(localRemoves)
 	localChanged := 0 < len(localUpserts) || 0 < len(localRemoves)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
 	// 在单向同步的情况下该结果可直接作为合并结果
 	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
+	mergeResult.Upserts, mergeResult.Removes = links.unlinked(mergeResult.Upserts), links.unlinked(mergeResult.Removes)
 	var ignoredAssets map[string]bool
 	if repo.usesAssetDownloads() {
 		matcher, matcherErr := repo.cloudAssetIgnoreMatcher(cloudLatestFiles, context)
@@ -228,7 +235,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 
 	// 数据变更后还原文件
 	if repo.usesAssetDownloads() {
-		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
+		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: trafficStat.DownloadBytes, APIGet: trafficStat.APIGet})
 			gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
@@ -242,7 +249,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 处理合并
-	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context)
+	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("merge sync failed: %s", err)
 		return
@@ -315,16 +322,35 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 		return
 	}
 
+	missing, err := repo.localNotFoundFiles(cloudLatest.Files)
+	if err != nil {
+		return
+	}
+	downloaded, _, err := repo.downloadCloudFilesPut(missing, context)
+	if err != nil {
+		return
+	}
+	trafficStat.DownloadBytes += downloaded.CloudBytes
+	trafficStat.DownloadFileCount += len(missing)
+	trafficStat.APIGet += len(missing)
+	cloudFiles, err := repo.getFiles(cloudLatest.Files)
+	if err != nil {
+		return
+	}
+	localFiles, err := repo.getFiles(latest.Files)
+	if err != nil {
+		return
+	}
+	linked, err := repo.syncLinkedPaths(localFiles, cloudFiles)
+	if err != nil {
+		return
+	}
+	links := buildSyncLinkView(cloudFiles, linked)
+
 	// 计算云端缺失的文件
 	var uploadFiles []*entity.File
-	for _, localFileID := range latest.Files {
-		if !gulu.Str.Contains(localFileID, cloudLatest.Files) {
-			var uploadFile *entity.File
-			uploadFile, err = repo.store.GetFile(localFileID)
-			if nil != err {
-				logging.LogErrorf("get file failed: %s", err)
-				return
-			}
+	for _, uploadFile := range links.unlinked(localFiles) {
+		if !gulu.Str.Contains(uploadFile.ID, cloudLatest.Files) {
 			uploadFiles = append(uploadFiles, uploadFile)
 		}
 	}
@@ -367,7 +393,7 @@ func (repo *Repo) SyncUpload(context map[string]interface{}) (trafficStat *Traff
 	trafficStat.APIPut += trafficStat.UploadChunkCount
 
 	// 更新云端索引信息
-	err = repo.updateCloudIndexes(latest, trafficStat, context)
+	err = repo.updateCloudIndexes(latest, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("update cloud indexes failed: %s", err)
 		return

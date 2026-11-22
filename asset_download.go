@@ -836,7 +836,7 @@ func (repo *Repo) matchesAssetFile(expected *entity.File) (bool, error) {
 }
 
 func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool, latest, cloudLatest *entity.Index,
-	cloudChunks []string, traffic *TrafficStat, context map[string]interface{}, ignoredAssets map[string]bool) error {
+	cloudChunks []string, traffic *TrafficStat, context map[string]interface{}, ignoredAssets map[string]bool, links syncLinkView) error {
 	files, err := repo.getFiles(latest.Files)
 	if err != nil {
 		return err
@@ -855,7 +855,7 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 	}
 	target := latest
 	if merge.DataChanged() || len(ignoredAssets) != 0 {
-		if !localChanged {
+		if !localChanged && len(links.cloud) == 0 {
 			target = cloudLatest
 		} else {
 			target = &entity.Index{ID: util.RandHash(), Created: time.Now().UnixMilli(), Memo: "[Sync] Cloud sync merge",
@@ -909,7 +909,7 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 		if err = repo.uploadCloud(context, target, cloudLatest, cloudChunks, traffic); err != nil {
 			return err
 		}
-		if err = repo.updateCloudIndexes(target, traffic, context); err != nil {
+		if err = repo.updateCloudIndexes(target, traffic, context, links); err != nil {
 			return err
 		}
 	}

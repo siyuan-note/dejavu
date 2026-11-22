@@ -395,6 +395,11 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
+	linked, err := repo.syncLinkedPaths(latestFiles, cloudLatestFiles, latestSyncFiles)
+	if err != nil {
+		return err
+	}
+	links := buildSyncLinkView(cloudLatestFiles, linked)
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
@@ -428,6 +433,9 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	var historyFiles []*entity.File
 	var cloudUpsertIgnore *entity.File
 	for _, versions := range versionsList {
+		if links.paths[versions.Path] {
+			continue
+		}
 		if syncFileUnchanged != versions.LocalDelta {
 			localChanged = true
 		}
@@ -589,7 +597,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 
 	// 数据变更后还原文件
 	if repo.usesAssetDownloads() {
-		err = repo.finishAssetSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets)
+		err = repo.finishAssetSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{UploadBytes: trafficStat.UploadBytes, DownloadBytes: trafficStat.DownloadBytes,
 				APIGet: trafficStat.APIGet, APIPut: trafficStat.APIPut})
@@ -604,7 +612,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	// 处理合并
-	err = repo.mergeSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context)
+	err = repo.mergeSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("merge sync failed: %s", err)
 		return
@@ -785,9 +793,9 @@ func (repo *Repo) restoreFiles(mergeResult *MergeResult, context map[string]inte
 	return repo.checkoutCanceled()
 }
 
-func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}, links syncLinkView) (err error) {
 	if mergeResult.DataChanged() {
-		if localChanged { // 如果云端和本地都改变了，则需要创建合并索引并再次同步
+		if localChanged || len(links.cloud) > 0 {
 			logging.LogInfof("creating merge index [%s]", latest.ID)
 			mergeStart := time.Now()
 			mergedLatest, mergeIndexErr := repo.index("[Sync] Cloud sync merge", false, context)
@@ -838,7 +846,7 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 	}
 
 	if (localChanged && needSyncCloud) || "" == cloudLatest.ID {
-		err = repo.updateCloudIndexes(latest, trafficStat, context)
+		err = repo.updateCloudIndexes(latest, trafficStat, context, links)
 		if nil != err {
 			logging.LogErrorf("update cloud indexes failed: %s", err)
 			return
@@ -854,7 +862,7 @@ func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncClou
 	return
 }
 
-func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}) (err error) {
+func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficStat, context map[string]interface{}, links syncLinkView) (err error) {
 	// 生成校验索引
 	files, getErr := repo.getFiles(latest.Files)
 	if nil != getErr {
@@ -863,6 +871,9 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		return
 	}
 
+	// 云端索引保留本机联接路径下已有的云端文件，本地快照仍只描述可扫描内容。
+	local := latest
+	latest, files = links.publishedIndex(local, files)
 	checkIndex := &entity.CheckIndex{ID: util.RandHash(), IndexID: latest.ID}
 	for _, file := range files {
 		checkIndex.Files = append(checkIndex.Files, &entity.CheckIndexFile{ID: file.ID, Chunks: file.Chunks})
@@ -904,7 +915,12 @@ func (repo *Repo) updateCloudIndexes(latest *entity.Index, trafficStat *TrafficS
 		trafficStat.m.Unlock()
 
 		// 更新 refs/latest
-		length, uploadErr = repo.updateCloudRef("refs/latest", context)
+		if local == latest {
+			length, uploadErr = repo.updateCloudRef("refs/latest", context)
+		} else {
+			eventbus.Publish(eventbus.EvtCloudBeforeUploadRef, context, "refs/latest")
+			length, uploadErr = repo.cloud.UploadBytes("refs/latest", []byte(latest.ID), true)
+		}
 		if nil != uploadErr {
 			logging.LogErrorf("update cloud [refs/latest] failed: %s", uploadErr)
 			errLock.Lock()

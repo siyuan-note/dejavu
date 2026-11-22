@@ -29,6 +29,12 @@ func (repo *Repo) PreviewSyncSource(remote *entity.Index, context map[string]int
 		return ret, err
 	}
 	ret.LocalID, ret.LocalFiles = local.ID, len(localFiles)
+	linked, err := repo.syncLinkedPaths(localFiles, remoteFiles)
+	if err != nil {
+		return ret, err
+	}
+	links := syncLinkView{paths: linked}
+	localFiles, remoteFiles = links.unlinked(localFiles), links.unlinked(remoteFiles)
 	remoteIDs := map[string]bool{}
 	for _, f := range remoteFiles {
 		remoteIDs[f.ID] = true

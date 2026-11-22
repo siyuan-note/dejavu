@@ -1428,6 +1428,9 @@ func (repo *Repo) removeFiles(files []*entity.File, context map[string]interface
 			return err
 		}
 		absPath := repo.absPath(file.Path)
+		if err = repo.rejectWorkspaceLink(file.Path); err != nil {
+			return
+		}
 		if len(before) > 0 {
 			if _, statErr := os.Stat(absPath); errors.Is(statErr, os.ErrNotExist) {
 				continue
@@ -1566,6 +1569,9 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 			}
 		}
 		repo.reportCheckout(file, 0, count, total)
+		if err = repo.rejectWorkspaceLink(file.Path); err != nil {
+			return
+		}
 	}
 	absPath := filepath.Join(checkoutDir, file.Path)
 	dir, _ := filepath.Split(absPath)
@@ -1626,6 +1632,11 @@ func (repo *Repo) checkoutFile(file *entity.File, checkoutDir string, count, tot
 
 	filelock.Lock(absPath)
 	defer filelock.Unlock(absPath)
+	if active {
+		if err = repo.rejectWorkspaceLink(file.Path); err != nil {
+			return
+		}
+	}
 	if len(before) != 0 {
 		if matches, matchErr := repo.alignMatchingFileTime(file); matchErr != nil {
 			return matchErr

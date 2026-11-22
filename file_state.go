@@ -237,10 +237,11 @@ func (repo *Repo) diffLocalFiles(files, previous []*entity.File, stamps map[stri
 		upserts = append(upserts, file)
 	}
 	ignoreMatcher := repo.ignoreMatcher()
+	links := repo.newWorkspaceLinkProbe()
 	for _, file := range previous {
 		if physical[file.Path] == nil {
 			if !ignoreMatcher.MatchesPath(file.Path) {
-				if err = repo.verifySnapshotRemoval(file); err != nil {
+				if err = repo.verifySnapshotRemoval(file, links); err != nil {
 					return
 				}
 			}
@@ -253,11 +254,14 @@ func (repo *Repo) diffLocalFiles(files, previous []*entity.File, stamps map[stri
 // verifySnapshotRemoval distinguishes intentional exclusions and real deletions
 // from incomplete enumeration. An existing tracked source must not disappear
 // from a published snapshot merely because a directory scan omitted its name.
-func (repo *Repo) verifySnapshotRemoval(file *entity.File) error {
+func (repo *Repo) verifySnapshotRemoval(file *entity.File, links *workspaceLinkProbe) error {
 	if err := repo.checkoutCanceled(); err != nil {
 		return err
 	}
 	abs := repo.absPath(file.Path)
+	if linked, err := links.ancestor(abs); linked || err != nil {
+		return err
+	}
 	info, err := os.Lstat(abs)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

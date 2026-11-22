@@ -24,7 +24,7 @@ func (repo *Repo) snapshotScanDiagnostic(path string, info os.FileInfo) (detail 
 		if statErr != nil {
 			return fmt.Sprintf("diagnostic lstat [%s]: %v", current, statErr), false
 		}
-		if i < len(parts)-1 && observed.Mode()&os.ModeSymlink != 0 {
+		if i < len(parts)-1 && (observed.Mode()&os.ModeSymlink != 0 || isDirectoryReparsePoint(observed)) {
 			return fmt.Sprintf("ancestor link [%s], mode [%s]; directory links are not traversed by the scan", current, observed.Mode()), true
 		}
 		entries, readErr := os.ReadDir(parent)
