@@ -612,7 +612,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	// 处理合并
-	err = repo.mergeSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, links)
+	err = repo.mergeSync(mergeResult, localChanged, true, latest, cloudLatest, nil, cloudChunkIDs, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("merge sync failed: %s", err)
 		return
@@ -793,8 +793,36 @@ func (repo *Repo) restoreFiles(mergeResult *MergeResult, context map[string]inte
 	return repo.checkoutCanceled()
 }
 
-func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}, links syncLinkView) (err error) {
-	if mergeResult.DataChanged() {
+func appliedSyncFiles(files []*entity.File, merge *MergeResult) map[string]*entity.File {
+	logical := filesByPath(files)
+	for _, file := range merge.Removes {
+		delete(logical, file.Path)
+	}
+	for _, file := range merge.Upserts {
+		logical[file.Path] = file
+	}
+	return logical
+}
+
+func (repo *Repo) newSyncMergeIndex(files map[string]*entity.File) *entity.Index {
+	index := &entity.Index{ID: util.RandHash(), Created: time.Now().UnixMilli(), Memo: "[Sync] Cloud sync merge",
+		SystemID: repo.DeviceID, SystemName: repo.DeviceName, SystemOS: repo.DeviceOS}
+	index.InitAESKeyVerifyVal(repo.store.AesKey)
+	for _, file := range files {
+		index.Files = append(index.Files, file.ID)
+		index.Size += file.Size
+	}
+	index.Count = len(index.Files)
+	return index
+}
+
+func (repo *Repo) mergeSync(mergeResult *MergeResult, localChanged, needSyncCloud bool, latest, cloudLatest, applied *entity.Index, cloudChunkIDs []string, trafficStat *TrafficStat, context map[string]interface{}, links syncLinkView) (err error) {
+	if applied != nil {
+		latest = applied
+		if err = repo.store.PutIndex(latest); err != nil {
+			return
+		}
+	} else if mergeResult.DataChanged() {
 		if localChanged || len(links.cloud) > 0 {
 			logging.LogInfof("creating merge index [%s]", latest.ID)
 			mergeStart := time.Now()

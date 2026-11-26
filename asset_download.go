@@ -793,7 +793,11 @@ func (repo *Repo) matchesAssetFile(expected *entity.File) (bool, error) {
 	if expected == nil {
 		return false, nil
 	}
-	f, err := os.Open(repo.absPath(expected.Path))
+	return repo.matchesFileAt(repo.absPath(expected.Path), expected)
+}
+
+func (repo *Repo) matchesFileAt(absPath string, expected *entity.File) (bool, error) {
+	f, err := os.Open(absPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
@@ -841,14 +845,8 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 	if err != nil {
 		return err
 	}
-	logical := filesByPath(files)
+	logical := appliedSyncFiles(files, merge)
 	before := filesByPath(files)
-	for _, f := range merge.Removes {
-		delete(logical, f.Path)
-	}
-	for _, f := range merge.Upserts {
-		logical[f.Path] = f
-	}
 	for p := range ignoredAssets {
 		delete(logical, p)
 		localChanged = true
@@ -858,14 +856,7 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 		if !localChanged && len(links.cloud) == 0 {
 			target = cloudLatest
 		} else {
-			target = &entity.Index{ID: util.RandHash(), Created: time.Now().UnixMilli(), Memo: "[Sync] Cloud sync merge",
-				SystemID: repo.DeviceID, SystemName: repo.DeviceName, SystemOS: repo.DeviceOS}
-			target.InitAESKeyVerifyVal(repo.store.AesKey)
-			for _, f := range logical {
-				target.Files = append(target.Files, f.ID)
-				target.Size += f.Size
-			}
-			target.Count = len(target.Files)
+			target = repo.newSyncMergeIndex(logical)
 		}
 	}
 	pending := &assetApply{Source: repo.syncSource, Index: target, Base: cloudLatest,

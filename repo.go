@@ -65,6 +65,8 @@ type Repo struct {
 	fileStateMu      sync.Mutex
 	fileState        *localFileState
 
+	repairWidgetPathsOnDownload bool
+
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值
 	cloud    cloud.Cloud // 云端存储服务

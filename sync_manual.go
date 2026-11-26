@@ -113,6 +113,11 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
 
+	widgetPaths, err := repo.planWidgetDownload(cloudLatestFiles)
+	if err != nil {
+		return
+	}
+
 	// 计算本地缺失的分块
 	fetchChunkIDs, err := repo.localNotFoundChunks(repo.getChunks(repo.downloadedCloudFiles(cloudLatestFiles)))
 	if nil != err {
@@ -133,6 +138,8 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	trafficStat.PeerDownloadBytes += downloadStat.PeerBytes
 	trafficStat.PeerDownloadChunkCount += downloadStat.PeerCount
 	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
+
+	cloudLatestFiles = widgetPaths.files
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -159,6 +166,12 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 在单向同步的情况下该结果可直接作为合并结果
 	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
 	mergeResult.Upserts, mergeResult.Removes = links.unlinked(mergeResult.Upserts), links.unlinked(mergeResult.Removes)
+	localWidgetFiles, err := widgetPaths.applyDownloadDiff(mergeResult, latestFiles, links)
+	if err != nil {
+		return
+	}
+	// 本地同步点必须对应实际落盘路径，不能直接用原始云端索引。
+	localChanged = localChanged || len(widgetPaths.targets) > 0
 	var ignoredAssets map[string]bool
 	if repo.usesAssetDownloads() {
 		matcher, matcherErr := repo.cloudAssetIgnoreMatcher(cloudLatestFiles, context)
@@ -203,8 +216,14 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 			logging.LogInfof("sync download conflict [%s, %s, %s]", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
 	}
+	for _, file := range localWidgetFiles {
+		mergeResult.Conflicts = appendUniqueSyncFile(mergeResult.Conflicts, file)
+	}
 
 	// 冲突文件复制到数据历史文件夹
+	if err = repo.archiveDiscardedWidgetPaths(widgetPaths.discarded, mergeResult, context); err != nil {
+		return
+	}
 	if 0 < len(mergeResult.Conflicts) {
 		now := mergeResult.Time.Format("2006-01-02-150405")
 		temp := filepath.Join(repo.TempPath, "repo", "sync", "conflicts", now)
@@ -249,7 +268,12 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 处理合并
-	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, links)
+	var applied *entity.Index
+	if len(widgetPaths.targets) > 0 && mergeResult.DataChanged() {
+		// 已完成的写入使用计划中认证过的对象，避免同大小、同时间的旧文件命中索引缓存。
+		applied = repo.newSyncMergeIndex(appliedSyncFiles(latestFiles, mergeResult))
+	}
+	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, applied, cloudChunkIDs, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("merge sync failed: %s", err)
 		return

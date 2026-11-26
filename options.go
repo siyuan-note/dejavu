@@ -24,6 +24,8 @@ type Options struct {
 	// OnCloudIndexList 接收 refs/ 列举及 S3 面板清单读取结果，nil 表示成功（含空列表），不改变同步的回退行为。
 	// 回调可能并发执行，且可能晚于获取最新索引返回；实现不得重入仓库操作。
 	OnCloudIndexList func(error)
+	// RepairWidgetPathsOnDownload 兼容仅下载时云端快照中带反斜杠的挂件文件路径。
+	RepairWidgetPathsOnDownload bool
 }
 
 // NewRepoWithOptions 创建使用显式应用策略的仓库，NewRepo 保留旧调用方的忽略行为。
@@ -39,6 +41,7 @@ func NewRepoWithOptions(options Options) (*Repo, error) {
 		return nil, err
 	}
 	repo.onCloudIndexList = options.OnCloudIndexList
+	repo.repairWidgetPathsOnDownload = options.RepairWidgetPathsOnDownload
 	repo.ignoreRulePath = ""
 	if rulePath != "" {
 		repo.ignoreRulePath = "/" + rulePath
