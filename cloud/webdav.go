@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"math"
 	"net/http"
 	"os"
 	"path"
@@ -232,19 +231,13 @@ func (webdav *WebDAV) GetIndexes(page int) (ret []*entity.Index, pageCount, tota
 	}
 
 	totalCount = len(indexesJSON.Indexes)
-	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
-
-	start := (page - 1) * pageSize
-	end := page * pageSize
-	if end > totalCount {
-		end = totalCount
-	}
+	entries, pageCount := indexesJSON.page(page)
 
 	repoKey := path.Join(webdav.Dir, "siyuan", "repo")
-	for i := start; i < end; i++ {
-		index, getErr := webdav.repoIndex(repoKey, indexesJSON.Indexes[i].ID)
+	for _, entry := range entries {
+		index, getErr := webdav.repoIndex(repoKey, entry.ID)
 		if nil != getErr {
-			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
+			logging.LogWarnf("get index [%s] failed: %s", entry.ID, getErr)
 			err = webdav.parseErr(getErr)
 			ret = nil
 			return

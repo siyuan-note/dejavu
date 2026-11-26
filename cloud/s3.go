@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"path"
@@ -182,8 +181,6 @@ func (s3 *S3) GetTags() (tags []*Ref, err error) {
 	return
 }
 
-const pageSize = 32
-
 func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount int, err error) {
 	ret = []*entity.Index{}
 	data, err := s3.DownloadObject("indexes-v2.json")
@@ -205,18 +202,12 @@ func (s3 *S3) GetIndexes(page int) (ret []*entity.Index, pageCount, totalCount i
 	}
 
 	totalCount = len(indexesJSON.Indexes)
-	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
+	entries, pageCount := indexesJSON.page(page)
 
-	start := (page - 1) * pageSize
-	end := page * pageSize
-	if end > totalCount {
-		end = totalCount
-	}
-
-	for i := start; i < end; i++ {
-		index, getErr := s3.repoIndex(indexesJSON.Indexes[i].ID)
+	for _, entry := range entries {
+		index, getErr := s3.repoIndex(entry.ID)
 		if nil != getErr {
-			logging.LogWarnf("get index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
+			logging.LogWarnf("get index [%s] failed: %s", entry.ID, getErr)
 			continue
 		}
 		if nil == index {

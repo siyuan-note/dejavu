@@ -17,7 +17,6 @@
 package cloud
 
 import (
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -264,17 +263,12 @@ func (local *Local) GetIndexes(page int) (indexes []*entity.Index, pageCount, to
 	}
 
 	totalCount = len(indexesJSON.Indexes)
-	pageCount = int(math.Ceil(float64(totalCount) / float64(pageSize)))
-	start := (page - 1) * pageSize
-	end := page * pageSize
-	if end > totalCount {
-		end = totalCount
-	}
+	entries, pageCount := indexesJSON.page(page)
 
-	for i := start; i < end; i++ {
-		index, getErr := local.repoIndex(indexesJSON.Indexes[i].ID)
+	for _, entry := range entries {
+		index, getErr := local.repoIndex(entry.ID)
 		if getErr != nil {
-			logging.LogWarnf("get repo index [%s] failed: %s", indexesJSON.Indexes[i], getErr)
+			logging.LogWarnf("get repo index [%s] failed: %s", entry.ID, getErr)
 			continue
 		}
 

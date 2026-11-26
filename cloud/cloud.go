@@ -192,6 +192,21 @@ type Indexes struct {
 	Indexes []*Index `json:"indexes"`
 }
 
+const pageSize = 32
+
+func (indexes *Indexes) page(page int) (entries []*Index, pageCount int) {
+	total := len(indexes.Indexes)
+	if total == 0 {
+		return nil, 0
+	}
+	pageCount = (total-1)/pageSize + 1
+	if page < 1 || page > pageCount {
+		return nil, pageCount
+	}
+	start := (page - 1) * pageSize
+	return indexes.Indexes[start : start+min(pageSize, total-start)], pageCount
+}
+
 // Index 描述了云端索引。
 type Index struct {
 	ID         string `json:"id"`
