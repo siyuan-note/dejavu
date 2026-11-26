@@ -2079,9 +2079,19 @@ func (repo *Repo) downloadCloudFile(id string, count, total int, context map[str
 		return
 	}
 	length = int64(len(data))
-	ret = &entity.File{}
-	err = gulu.JSON.UnmarshalJSON(data, ret)
+	ret, err = decodeCloudFile(id, data)
 	return
+}
+
+func decodeCloudFile(id string, data []byte) (*entity.File, error) {
+	file := &entity.File{}
+	if err := gulu.JSON.UnmarshalJSON(data, file); err != nil {
+		return nil, err
+	}
+	if file.ID != id {
+		return nil, fmt.Errorf("%w: cloud file [%s] ID mismatch", ErrRepoFatal, id)
+	}
+	return file, nil
 }
 
 func (repo *Repo) downloadCloudObject(filePath string) (ret []byte, err error) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -78,6 +79,27 @@ func TestCloudObjectDownloadValidatesID(t *testing.T) {
 	}
 	if backend.downloads != 0 {
 		t.Fatalf("invalid IDs reached the backend %d times", backend.downloads)
+	}
+}
+
+func TestCloudFileMetadataID(t *testing.T) {
+	const fileID = "0123456789abcdef0123456789abcdef01234567"
+	const otherFileID = "fedcba9876543210fedcba9876543210fedcba98"
+	want := &entity.File{ID: fileID, Path: "/example.sy", Size: 27, Chunks: []string{otherFileID, fileID}}
+	data, err := gulu.JSON.MarshalJSON(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := decodeCloudFile(fileID, data)
+	if err != nil || got == nil || got.ID != want.ID || got.Size != want.Size || !slices.Equal(got.Chunks, want.Chunks) {
+		t.Fatalf("matching ID returned file %+v and error %v", got, err)
+	}
+	if got, err := decodeCloudFile(otherFileID, data); got != nil || !errors.Is(err, ErrRepoFatal) {
+		t.Fatalf("different ID returned file %+v and error %v", got, err)
+	}
+	if got, err := decodeCloudFile(fileID, []byte(`{}`)); got != nil || !errors.Is(err, ErrRepoFatal) {
+		t.Fatalf("missing ID returned file %+v and error %v", got, err)
 	}
 }
 
