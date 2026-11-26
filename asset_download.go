@@ -840,7 +840,8 @@ func (repo *Repo) matchesFileAt(absPath string, expected *entity.File) (bool, er
 }
 
 func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool, latest, cloudLatest *entity.Index,
-	cloudChunks []string, traffic *TrafficStat, context map[string]interface{}, ignoredAssets map[string]bool, links syncLinkView) error {
+	cloudChunks []string, traffic *TrafficStat, context map[string]interface{}, ignoredAssets map[string]bool,
+	links syncLinkView, repairedWidgetPaths bool) error {
 	files, err := repo.getFiles(latest.Files)
 	if err != nil {
 		return err
@@ -853,7 +854,7 @@ func (repo *Repo) finishAssetSync(merge *MergeResult, localChanged, publish bool
 	}
 	target := latest
 	if merge.DataChanged() || len(ignoredAssets) != 0 {
-		if !localChanged && len(links.cloud) == 0 {
+		if !localChanged && len(links.cloud) == 0 && !repairedWidgetPaths {
 			target = cloudLatest
 		} else {
 			target = repo.newSyncMergeIndex(logical)

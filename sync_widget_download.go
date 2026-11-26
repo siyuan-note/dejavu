@@ -20,9 +20,10 @@ const widgetPathPrefix = "/widgets/"
 const widgetPathConflictPrefix = widgetPathPrefix + ".siyuan-path-conflicts/"
 
 type widgetDownloadPlan struct {
-	files     []*entity.File
-	targets   map[string]*entity.File
-	discarded []*entity.File
+	files         []*entity.File
+	targets       map[string]*entity.File
+	legacyTargets map[string]string
+	discarded     []*entity.File
 }
 
 func (repo *Repo) planWidgetDownload(files []*entity.File) (widgetDownloadPlan, error) {
@@ -47,6 +48,7 @@ func (repo *Repo) planWidgetDownload(files []*entity.File) (widgetDownloadPlan, 
 
 	plan.files = make([]*entity.File, 0, len(files))
 	plan.targets = make(map[string]*entity.File, len(aliases))
+	plan.legacyTargets = make(map[string]string, len(aliases))
 	canonical := map[string]*entity.File{}
 	for _, file := range files {
 		if strings.HasPrefix(file.Path, widgetPathPrefix) && strings.Contains(file.Path, "\\") {
@@ -63,6 +65,9 @@ func (repo *Repo) planWidgetDownload(files []*entity.File) (widgetDownloadPlan, 
 	var repairedFiles []*entity.File
 	for _, target := range slices.Sorted(maps.Keys(aliases)) {
 		group := aliases[target]
+		for _, legacy := range group {
+			plan.legacyTargets[legacy.Path] = target
+		}
 		if winner := canonical[target]; winner != nil {
 			plan.targets[target] = winner
 			plan.discarded = append(plan.discarded, group...)
@@ -144,9 +149,27 @@ func (plan widgetDownloadPlan) checkTargetConflicts() error {
 	return nil
 }
 
-func (plan widgetDownloadPlan) applyDownloadDiff(merge *MergeResult, localFiles []*entity.File, links syncLinkView) ([]*entity.File, error) {
+func linkWidgetPathAliases(linked map[string]bool, plans ...widgetDownloadPlan) {
+	// 本地联接遮挡任一拼写时，云端索引需要保留这个路径下的原始对象。
+	for _, plan := range plans {
+		for legacy, target := range plan.legacyTargets {
+			if linked[legacy] {
+				linked[target] = true
+			}
+		}
+	}
+	for _, plan := range plans {
+		for legacy, target := range plan.legacyTargets {
+			if linked[target] {
+				linked[legacy] = true
+			}
+		}
+	}
+}
+
+func (plan widgetDownloadPlan) checkLocalTargets(localFiles []*entity.File, links syncLinkView) error {
 	if len(plan.targets) == 0 {
-		return nil, nil
+		return nil
 	}
 	targets := make(map[string]string, len(plan.targets))
 	for target := range plan.targets {
@@ -155,9 +178,23 @@ func (plan widgetDownloadPlan) applyDownloadDiff(merge *MergeResult, localFiles 
 		}
 	}
 	for _, file := range localFiles {
-		if target := targets[widgetDownloadPathKey(file.Path)]; target != "" && target != file.Path {
-			return nil, fmt.Errorf("widget download path conflict between local %q and cloud %q", file.Path, target)
+		if !strings.HasPrefix(file.Path, widgetPathPrefix) || links.paths[file.Path] {
+			continue
 		}
+		name := widgetDownloadPathKey(strings.ReplaceAll(file.Path, "\\", "/"))
+		if target := targets[name]; target != "" && target != file.Path {
+			return fmt.Errorf("widget download path conflict between local %q and cloud %q", file.Path, target)
+		}
+	}
+	return nil
+}
+
+func (plan widgetDownloadPlan) applyDownloadDiff(merge *MergeResult, localFiles []*entity.File, links syncLinkView) ([]*entity.File, error) {
+	if len(plan.targets) == 0 {
+		return nil, nil
+	}
+	if err := plan.checkLocalTargets(localFiles, links); err != nil {
+		return nil, err
 	}
 	current, upserts := filesByPath(localFiles), filesByPath(merge.Upserts)
 	var conflicts []*entity.File
@@ -174,6 +211,14 @@ func (plan widgetDownloadPlan) applyDownloadDiff(merge *MergeResult, localFiles 
 		}
 	}
 	return conflicts, nil
+}
+
+func (repo *Repo) widgetDownloadIndex(plan widgetDownloadPlan, localFiles []*entity.File, merge *MergeResult) *entity.Index {
+	if len(plan.targets) == 0 || !merge.DataChanged() {
+		return nil
+	}
+	// 使用已落盘的对象固定本地索引，避免同大小、同时间的旧文件命中索引缓存。
+	return repo.newSyncMergeIndex(appliedSyncFiles(localFiles, merge))
 }
 
 func (repo *Repo) archiveDiscardedWidgetPaths(files []*entity.File, merge *MergeResult, context map[string]interface{}) error {

@@ -170,8 +170,6 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	if err != nil {
 		return
 	}
-	// 本地同步点必须对应实际落盘路径，不能直接用原始云端索引。
-	localChanged = localChanged || len(widgetPaths.targets) > 0
 	var ignoredAssets map[string]bool
 	if repo.usesAssetDownloads() {
 		matcher, matcherErr := repo.cloudAssetIgnoreMatcher(cloudLatestFiles, context)
@@ -254,7 +252,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 
 	// 数据变更后还原文件
 	if repo.usesAssetDownloads() {
-		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links)
+		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links, len(widgetPaths.targets) > 0)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: trafficStat.DownloadBytes, APIGet: trafficStat.APIGet})
 			gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
@@ -268,11 +266,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 处理合并
-	var applied *entity.Index
-	if len(widgetPaths.targets) > 0 && mergeResult.DataChanged() {
-		// 已完成的写入使用计划中认证过的对象，避免同大小、同时间的旧文件命中索引缓存。
-		applied = repo.newSyncMergeIndex(appliedSyncFiles(latestFiles, mergeResult))
-	}
+	applied := repo.widgetDownloadIndex(widgetPaths, latestFiles, mergeResult)
 	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, applied, cloudChunkIDs, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("merge sync failed: %s", err)

@@ -91,6 +91,50 @@ func TestWorkspaceJunctionSync(t *testing.T) {
 	}
 }
 
+func TestWidgetSyncPreservesCloudPathUnderJunction(t *testing.T) {
+	base := t.TempDir()
+	remote := filepath.Join(base, "cloud")
+	peer := newAssetTestRepo(t, base, remote, "peer", false)
+	local := newAssetTestRepo(t, base, remote, "local", false)
+	local.repairWidgetPathsOnDownload = true
+	const legacy = "/widgets/example/sub\\script.js"
+	const canonical = "/widgets/example/sub/script.js"
+	uploadWidgetDownloadFixture(t, peer, map[string]string{legacy: "cloud"})
+	target := filepath.Join(base, "external")
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Dir(local.absPath(canonical))
+	if err := os.MkdirAll(filepath.Dir(link), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Fatalf("create junction: %v (%s)", err, output)
+	}
+	t.Cleanup(func() {
+		if err := os.Remove(link); err != nil {
+			t.Error(err)
+		}
+	})
+	writeAssetTestFile(t, local, "/incoming.txt", "upload alongside junction", 2)
+	syncJunctionTestRepo(t, local)
+	if _, err := os.Lstat(filepath.Join(target, "script.js")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("sync wrote through junction: %v", err)
+	}
+	_, latest, err := local.downloadCloudLatest(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := local.GetFiles(latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := filesByPath(files)
+	if paths[legacy] == nil || paths[canonical] != nil || paths["/incoming.txt"] == nil {
+		t.Fatalf("unexpected paths in published snapshot: %v", paths)
+	}
+}
+
 func syncJunctionTestRepo(t *testing.T, repo *Repo) {
 	t.Helper()
 	if repo.usesAssetDownloads() {
