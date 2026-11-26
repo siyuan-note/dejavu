@@ -1944,9 +1944,12 @@ func (repo *Repo) downloadCloudChunk(id string, count, total int, context map[st
 	if err = repo.checkoutCanceled(); err != nil {
 		return
 	}
+	key, err := objectKey(id)
+	if err != nil {
+		return
+	}
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadChunk, context, count, total)
 
-	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		logging.LogErrorf("download cloud chunk [%s] failed: %s", id, err)
@@ -1963,7 +1966,10 @@ func (repo *Repo) downloadCloudChunk(id string, count, total int, context map[st
 }
 
 func (repo *Repo) downloadSourceChunk(id string) (length int64, ret *entity.Chunk, err error) {
-	key := path.Join("objects", id[:2], id[2:])
+	key, err := objectKey(id)
+	if err != nil {
+		return
+	}
 	var decoded []byte
 	validate := func(data []byte) (validateErr error) {
 		decoded, validateErr = repo.decodeDownloadedData(key, data)
@@ -1990,7 +1996,10 @@ func (repo *Repo) downloadSourceFile(id string) (length int64, ret *entity.File,
 		err = errors.New("object source unavailable")
 		return
 	}
-	key := path.Join("objects", id[:2], id[2:])
+	key, err := objectKey(id)
+	if err != nil {
+		return
+	}
 	validate := func(data []byte) (validateErr error) {
 		data, validateErr = repo.decodeDownloadedData(key, data)
 		if nil != validateErr {
@@ -2030,9 +2039,12 @@ func (repo *Repo) downloadCloudFile(id string, count, total int, context map[str
 	if err = repo.checkoutCanceled(); err != nil {
 		return
 	}
+	key, err := objectKey(id)
+	if err != nil {
+		return
+	}
 	eventbus.Publish(eventbus.EvtCloudBeforeDownloadFile, context, count, total)
 
-	key := path.Join("objects", id[:2], id[2:])
 	data, err := repo.downloadCloudObject(key)
 	if nil != err {
 		logging.LogErrorf("download cloud file [%s] failed: %s", id, err)

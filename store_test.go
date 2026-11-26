@@ -18,12 +18,35 @@ package dejavu
 
 import (
 	"bytes"
+	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/siyuan-note/dejavu/entity"
 	"github.com/siyuan-note/dejavu/util"
 	"github.com/siyuan-note/encryption"
 )
+
+func TestStoreObjectPathValidation(t *testing.T) {
+	store := &Store{Path: t.TempDir()}
+	for _, id := range []string{"", "a"} {
+		if dir, file := store.AbsPath(id); dir != "" || file != "" {
+			t.Fatalf("invalid ID %q returned paths %q and %q", id, dir, file)
+		}
+		if _, err := store.Stat(id); !errors.Is(err, errInvalidObjectID) {
+			t.Fatalf("stat invalid ID %q: %v", id, err)
+		}
+		if err := store.Remove(id); !errors.Is(err, errInvalidObjectID) {
+			t.Fatalf("remove invalid ID %q: %v", id, err)
+		}
+	}
+	const id = "c84a0c9b5a0b093d3883fa579c5e08b4a8f16fa4"
+	wantDir := filepath.Join(store.Path, "objects", "c8")
+	wantFile := filepath.Join(wantDir, "4a0c9b5a0b093d3883fa579c5e08b4a8f16fa4")
+	if dir, file := store.AbsPath(id); dir != wantDir || file != wantFile {
+		t.Fatalf("valid ID returned paths %q and %q, want %q and %q", dir, file, wantDir, wantFile)
+	}
+}
 
 func TestPutGet(t *testing.T) {
 	clearTestdata(t)

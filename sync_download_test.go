@@ -65,6 +65,22 @@ func newIndexDownloadRepo(t *testing.T, c *indexDownloadCloud) *Repo {
 	return &Repo{Path: dir, store: store, cloud: c}
 }
 
+func TestCloudObjectDownloadValidatesID(t *testing.T) {
+	backend := &indexDownloadCloud{}
+	repo := &Repo{cloud: backend}
+	for _, id := range []string{"", "a"} {
+		if _, file, err := repo.downloadCloudFile(id, 1, 1, nil); file != nil || !errors.Is(err, errInvalidObjectID) {
+			t.Fatalf("invalid file ID %q returned file %v and error %v", id, file, err)
+		}
+		if _, chunk, err := repo.downloadCloudChunk(id, 1, 1, nil); chunk != nil || !errors.Is(err, errInvalidObjectID) {
+			t.Fatalf("invalid chunk ID %q returned chunk %v and error %v", id, chunk, err)
+		}
+	}
+	if backend.downloads != 0 {
+		t.Fatalf("invalid IDs reached the backend %d times", backend.downloads)
+	}
+}
+
 func TestCloudIndexDownloadRetry(t *testing.T) {
 	for _, bad := range []string{"zstd", "json", "id", "partial"} {
 		t.Run(bad, func(t *testing.T) {

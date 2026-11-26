@@ -38,6 +38,7 @@ import (
 var ErrNotFoundObject = errors.New("not found object")
 
 var errInvalidIndexID = errors.New("invalid index ID")
+var errInvalidObjectID = errors.New("invalid object ID")
 
 // Store 描述了存储库。
 type Store struct {
@@ -399,10 +400,10 @@ func (store *Store) GetIndex(id string) (ret *entity.Index, err error) {
 }
 
 func (store *Store) PutFile(file *entity.File) (err error) {
-	if "" == file.ID {
-		return errors.New("invalid id")
+	dir, f, err := store.objectAbsPath(file.ID)
+	if err != nil {
+		return err
 	}
-	dir, f := store.AbsPath(file.ID)
 	if gulu.File.IsExist(f) {
 		return
 	}
@@ -434,7 +435,10 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 		return
 	}
 
-	_, file := store.AbsPath(id)
+	_, file, err := store.objectAbsPath(id)
+	if err != nil {
+		return
+	}
 	data, err := os.ReadFile(file)
 	if nil != err {
 		return
@@ -454,10 +458,10 @@ func (store *Store) GetFile(id string) (ret *entity.File, err error) {
 }
 
 func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
-	if "" == chunk.ID {
-		return errors.New("invalid id")
+	dir, file, err := store.objectAbsPath(chunk.ID)
+	if err != nil {
+		return err
 	}
-	dir, file := store.AbsPath(chunk.ID)
 	filelock.Lock(file)
 	defer filelock.Unlock(file)
 	if gulu.File.IsExist(file) {
@@ -481,7 +485,10 @@ func (store *Store) PutChunk(chunk *entity.Chunk) (err error) {
 }
 
 func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
-	_, file := store.AbsPath(id)
+	_, file, err := store.objectAbsPath(id)
+	if err != nil {
+		return
+	}
 	filelock.Lock(file)
 	defer filelock.Unlock(file)
 	data, err := os.ReadFile(file)
@@ -496,13 +503,19 @@ func (store *Store) GetChunk(id string) (ret *entity.Chunk, err error) {
 }
 
 func (store *Store) Remove(id string) (err error) {
-	_, file := store.AbsPath(id)
+	_, file, err := store.objectAbsPath(id)
+	if err != nil {
+		return err
+	}
 	err = os.RemoveAll(file)
 	return
 }
 
 func (store *Store) Stat(id string) (stat os.FileInfo, err error) {
-	_, file := store.AbsPath(id)
+	_, file, err := store.objectAbsPath(id)
+	if err != nil {
+		return
+	}
 	stat, err = os.Stat(file)
 	return
 }
@@ -528,11 +541,26 @@ func (store *Store) indexAbsPath(id string) (dir, file string, err error) {
 	return
 }
 
+// AbsPath 返回对象的目录和文件路径，ID 无效时两个路径均为空。
 func (store *Store) AbsPath(id string) (dir, file string) {
-	dir, file = id[0:2], id[2:]
-	dir = filepath.Join(store.Path, "objects", dir)
-	file = filepath.Join(dir, file)
+	dir, file, _ = store.objectAbsPath(id)
 	return
+}
+
+func (store *Store) objectAbsPath(id string) (dir, file string, err error) {
+	key, err := objectKey(id)
+	if err != nil {
+		return "", "", err
+	}
+	file = filepath.Join(store.Path, filepath.FromSlash(key))
+	return filepath.Dir(file), file, nil
+}
+
+func objectKey(id string) (string, error) {
+	if !util.IsValidID(id) {
+		return "", errInvalidObjectID
+	}
+	return "objects/" + id[:2] + "/" + id[2:], nil
 }
 
 func (store *Store) encodeData(data []byte) ([]byte, error) {
