@@ -322,7 +322,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
-	widgetPaths, err := repo.planWidgetDownload(cloudLatestFiles)
+	downloadPaths, err := repo.planDownloadPaths(cloudLatestFiles)
 	if err != nil {
 		return err
 	}
@@ -401,24 +401,24 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 		logging.LogErrorf("get latest sync files failed: %s", err)
 		return
 	}
-	baseWidgetPaths, err := repo.planWidgetDownload(latestSyncFiles)
+	baseDownloadPaths, err := repo.planDownloadPaths(latestSyncFiles)
 	if err != nil {
 		return err
 	}
 	linked, err := repo.syncLinkedPaths(latestFiles, cloudLatestFiles, latestSyncFiles,
-		slices.Collect(maps.Values(widgetPaths.targets)), slices.Collect(maps.Values(baseWidgetPaths.targets)))
+		slices.Collect(maps.Values(downloadPaths.targets)), slices.Collect(maps.Values(baseDownloadPaths.targets)))
 	if err != nil {
 		return err
 	}
-	linkWidgetPathAliases(linked, widgetPaths, baseWidgetPaths)
+	linkDownloadPathAliases(linked, downloadPaths, baseDownloadPaths)
 	links := buildSyncLinkView(cloudLatestFiles, linked)
-	if err = widgetPaths.checkLocalTargets(latestFiles, links); err != nil {
+	if err = downloadPaths.checkLocalTargets(latestFiles, links); err != nil {
 		return err
 	}
-	if err = baseWidgetPaths.checkLocalTargets(latestFiles, links); err != nil {
+	if err = baseDownloadPaths.checkLocalTargets(latestFiles, links); err != nil {
 		return err
 	}
-	cloudLatestFiles, latestSyncFiles = widgetPaths.files, baseWidgetPaths.files
+	cloudLatestFiles, latestSyncFiles = downloadPaths.files, baseDownloadPaths.files
 	localUpserts, localRemoves := repo.diffUpsertRemove(latestFiles, latestSyncFiles, false)
 
 	// 计算云端最新相比本地最新的 upsert 和 remove 差异
@@ -582,7 +582,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	// 被合并策略舍弃的文件复制到数据历史文件夹
-	if err = repo.archiveDiscardedWidgetPaths(widgetPaths.discarded, mergeResult, context); err != nil {
+	if err = repo.archiveDiscardedDownloadPaths(downloadPaths.discarded, mergeResult, context); err != nil {
 		return err
 	}
 	if 0 < len(historyFiles) {
@@ -619,7 +619,7 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 
 	// 数据变更后还原文件
 	if repo.usesAssetDownloads() {
-		err = repo.finishAssetSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links, len(widgetPaths.targets) > 0)
+		err = repo.finishAssetSync(mergeResult, localChanged, true, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links, len(downloadPaths.targets) > 0)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{UploadBytes: trafficStat.UploadBytes, DownloadBytes: trafficStat.DownloadBytes,
 				APIGet: trafficStat.APIGet, APIPut: trafficStat.APIPut})
@@ -634,8 +634,8 @@ func (repo *Repo) sync0(context map[string]interface{}, cloudLatest *entity.Inde
 	}
 
 	// 处理合并
-	applied := repo.widgetDownloadIndex(widgetPaths, latestFiles, mergeResult)
-	if rechecked && localChanged && !mergeResult.DataChanged() && len(widgetPaths.targets) > 0 {
+	applied := repo.downloadPathIndex(downloadPaths, latestFiles, mergeResult)
+	if rechecked && localChanged && !mergeResult.DataChanged() && len(downloadPaths.targets) > 0 {
 		// 复核后改用当前本地版本时，发布前补传编辑期间产生的对象。
 		if err = repo.uploadCloud(context, latest, cloudLatest, cloudChunkIDs, trafficStat); err != nil {
 			return err

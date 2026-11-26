@@ -17,28 +17,35 @@ import (
 )
 
 const widgetPathPrefix = "/widgets/"
-const widgetPathConflictPrefix = widgetPathPrefix + ".siyuan-path-conflicts/"
+const downloadPathConflictPrefix = "/.siyuan-path-conflicts/"
+const widgetPathConflictPrefix = "/widgets" + downloadPathConflictPrefix
 
-type widgetDownloadPlan struct {
+type downloadPathPlan struct {
 	files         []*entity.File
 	targets       map[string]*entity.File
 	legacyTargets map[string]string
 	discarded     []*entity.File
 }
 
-func (repo *Repo) planWidgetDownload(files []*entity.File) (widgetDownloadPlan, error) {
-	plan := widgetDownloadPlan{files: files}
-	if !repo.repairWidgetPathsOnDownload {
+func (repo *Repo) planDownloadPaths(files []*entity.File) (downloadPathPlan, error) {
+	plan := downloadPathPlan{files: files}
+	if !repo.repairWidgetPathsOnDownload && !repo.preferCanonicalPathsOnDownload {
 		return plan, nil
 	}
 	aliases := map[string][]*entity.File{}
+	widgetTargets := map[string]bool{}
 	for _, file := range files {
-		if !strings.HasPrefix(file.Path, widgetPathPrefix) || !strings.Contains(file.Path, "\\") {
+		widget := repo.repairWidgetPathsOnDownload && strings.HasPrefix(file.Path, widgetPathPrefix)
+		if (!widget && !repo.preferCanonicalPathsOnDownload) || !strings.Contains(file.Path, "\\") {
 			continue
 		}
 		target := strings.ReplaceAll(file.Path, "\\", "/")
-		if !validWidgetDownloadPath(target) {
-			return plan, fmt.Errorf("invalid widget download path %q", file.Path)
+		if widget {
+			rel := strings.TrimPrefix(target, widgetPathPrefix)
+			if !strings.Contains(rel, "/") || !validDownloadPath(target) {
+				return plan, fmt.Errorf("invalid download path %q", file.Path)
+			}
+			widgetTargets[target] = true
 		}
 		aliases[target] = append(aliases[target], file)
 	}
@@ -46,47 +53,59 @@ func (repo *Repo) planWidgetDownload(files []*entity.File) (widgetDownloadPlan, 
 		return plan, nil
 	}
 
-	plan.files = make([]*entity.File, 0, len(files))
 	plan.targets = make(map[string]*entity.File, len(aliases))
 	plan.legacyTargets = make(map[string]string, len(aliases))
 	canonical := map[string]*entity.File{}
 	for _, file := range files {
-		if strings.HasPrefix(file.Path, widgetPathPrefix) && strings.Contains(file.Path, "\\") {
-			continue
-		}
 		if _, affected := aliases[file.Path]; affected {
 			if canonical[file.Path] != nil {
-				return plan, fmt.Errorf("widget download path conflict at %q", file.Path)
+				return plan, fmt.Errorf("download path conflict at %q", file.Path)
 			}
 			canonical[file.Path] = file
 		}
-		plan.files = append(plan.files, file)
 	}
 	var repairedFiles []*entity.File
 	for _, target := range slices.Sorted(maps.Keys(aliases)) {
 		group := aliases[target]
+		winner := canonical[target]
+		// 单独的旧路径只有挂件包内路径可以按已知目录结构转换。
+		if winner == nil && !widgetTargets[target] {
+			continue
+		}
+		if !validDownloadPath(target) {
+			return plan, fmt.Errorf("invalid download path %q", group[0].Path)
+		}
 		for _, legacy := range group {
 			plan.legacyTargets[legacy.Path] = target
 		}
-		if winner := canonical[target]; winner != nil {
+		if winner != nil {
 			plan.targets[target] = winner
 			plan.discarded = append(plan.discarded, group...)
 			continue
 		}
 		if len(group) != 1 {
-			return plan, fmt.Errorf("widget download path conflict at %q: multiple legacy entries", target)
+			return plan, fmt.Errorf("download path conflict at %q: multiple legacy entries", target)
 		}
 		repaired := *group[0]
 		repaired.Path = target
 		// 新路径使用独立对象 ID，历史快照仍通过原 ID 读取原始记录。
 		repaired.ID = util.Hash([]byte("widget-download-path\x00" + group[0].ID + "\x00" + target))
 		if problem := assetFileProblem(&repaired); problem != "" {
-			return plan, fmt.Errorf("invalid widget download file %q: %s", target, problem)
+			return plan, fmt.Errorf("invalid download file %q: %s", target, problem)
 		}
 		plan.targets[target] = &repaired
-		plan.files = append(plan.files, &repaired)
 		repairedFiles = append(repairedFiles, &repaired)
 	}
+	if len(plan.targets) == 0 {
+		return plan, nil
+	}
+	plan.files = make([]*entity.File, 0, len(files))
+	for _, file := range files {
+		if plan.legacyTargets[file.Path] == "" {
+			plan.files = append(plan.files, file)
+		}
+	}
+	plan.files = append(plan.files, repairedFiles...)
 	if err := plan.checkTargetConflicts(); err != nil {
 		return plan, err
 	}
@@ -101,9 +120,9 @@ func (repo *Repo) planWidgetDownload(files []*entity.File) (widgetDownloadPlan, 
 	return plan, nil
 }
 
-func validWidgetDownloadPath(target string) bool {
-	rel, isWidget := strings.CutPrefix(target, widgetPathPrefix)
-	if !isWidget || !strings.Contains(rel, "/") || path.Clean(target) != target ||
+func validDownloadPath(target string) bool {
+	rel, absolute := strings.CutPrefix(target, "/")
+	if !absolute || path.Clean(target) != target ||
 		strings.ContainsAny(target, "\\:\x00") || !filepath.IsLocal(filepath.FromSlash(rel)) {
 		return false
 	}
@@ -115,41 +134,38 @@ func validWidgetDownloadPath(target string) bool {
 	return true
 }
 
-func widgetDownloadPathKey(name string) string {
+func downloadPathKey(name string) string {
 	return norm.NFC.String(strings.ToLower(name))
 }
 
-func (plan widgetDownloadPlan) checkTargetConflicts() error {
+func (plan downloadPathPlan) checkTargetConflicts() error {
 	files := map[string]string{}
 	dirs := map[string]bool{}
 	for _, file := range plan.files {
-		if !strings.HasPrefix(file.Path, widgetPathPrefix) {
-			continue
-		}
-		name := widgetDownloadPathKey(file.Path)
+		name := downloadPathKey(file.Path)
 		if previous := files[name]; previous != "" && (plan.targets[previous] != nil || plan.targets[file.Path] != nil) {
-			return fmt.Errorf("widget download path conflict between %q and %q", previous, file.Path)
+			return fmt.Errorf("download path conflict between %q and %q", previous, file.Path)
 		}
 		files[name] = file.Path
-		for dir := path.Dir(name); strings.HasPrefix(dir, widgetPathPrefix); dir = path.Dir(dir) {
+		for dir := path.Dir(name); dir != "/" && dir != "."; dir = path.Dir(dir) {
 			dirs[dir] = true
 		}
 	}
 	for target := range plan.targets {
-		name := widgetDownloadPathKey(target)
+		name := downloadPathKey(target)
 		if dirs[name] {
-			return fmt.Errorf("widget download path conflict at %q: file and directory", target)
+			return fmt.Errorf("download path conflict at %q: file and directory", target)
 		}
-		for dir := path.Dir(name); strings.HasPrefix(dir, widgetPathPrefix); dir = path.Dir(dir) {
+		for dir := path.Dir(name); dir != "/" && dir != "."; dir = path.Dir(dir) {
 			if files[dir] != "" {
-				return fmt.Errorf("widget download path conflict at %q: parent is a file", target)
+				return fmt.Errorf("download path conflict at %q: parent is a file", target)
 			}
 		}
 	}
 	return nil
 }
 
-func linkWidgetPathAliases(linked map[string]bool, plans ...widgetDownloadPlan) {
+func linkDownloadPathAliases(linked map[string]bool, plans ...downloadPathPlan) {
 	// 本地联接遮挡任一拼写时，云端索引需要保留这个路径下的原始对象。
 	for _, plan := range plans {
 		for legacy, target := range plan.legacyTargets {
@@ -167,29 +183,29 @@ func linkWidgetPathAliases(linked map[string]bool, plans ...widgetDownloadPlan) 
 	}
 }
 
-func (plan widgetDownloadPlan) checkLocalTargets(localFiles []*entity.File, links syncLinkView) error {
+func (plan downloadPathPlan) checkLocalTargets(localFiles []*entity.File, links syncLinkView) error {
 	if len(plan.targets) == 0 {
 		return nil
 	}
 	targets := make(map[string]string, len(plan.targets))
 	for target := range plan.targets {
 		if !links.paths[target] {
-			targets[widgetDownloadPathKey(target)] = target
+			targets[downloadPathKey(target)] = target
 		}
 	}
 	for _, file := range localFiles {
-		if !strings.HasPrefix(file.Path, widgetPathPrefix) || links.paths[file.Path] {
+		if links.paths[file.Path] {
 			continue
 		}
-		name := widgetDownloadPathKey(strings.ReplaceAll(file.Path, "\\", "/"))
+		name := downloadPathKey(strings.ReplaceAll(file.Path, "\\", "/"))
 		if target := targets[name]; target != "" && target != file.Path {
-			return fmt.Errorf("widget download path conflict between local %q and cloud %q", file.Path, target)
+			return fmt.Errorf("download path conflict between local %q and cloud %q", file.Path, target)
 		}
 	}
 	return nil
 }
 
-func (plan widgetDownloadPlan) applyDownloadDiff(merge *MergeResult, localFiles []*entity.File, links syncLinkView) ([]*entity.File, error) {
+func (plan downloadPathPlan) applyDownloadDiff(merge *MergeResult, localFiles []*entity.File, links syncLinkView) ([]*entity.File, error) {
 	if len(plan.targets) == 0 {
 		return nil, nil
 	}
@@ -213,7 +229,7 @@ func (plan widgetDownloadPlan) applyDownloadDiff(merge *MergeResult, localFiles 
 	return conflicts, nil
 }
 
-func (repo *Repo) widgetDownloadIndex(plan widgetDownloadPlan, localFiles []*entity.File, merge *MergeResult) *entity.Index {
+func (repo *Repo) downloadPathIndex(plan downloadPathPlan, localFiles []*entity.File, merge *MergeResult) *entity.Index {
 	if len(plan.targets) == 0 || !merge.DataChanged() {
 		return nil
 	}
@@ -221,7 +237,7 @@ func (repo *Repo) widgetDownloadIndex(plan widgetDownloadPlan, localFiles []*ent
 	return repo.newSyncMergeIndex(appliedSyncFiles(localFiles, merge))
 }
 
-func (repo *Repo) archiveDiscardedWidgetPaths(files []*entity.File, merge *MergeResult, context map[string]interface{}) error {
+func (repo *Repo) archiveDiscardedDownloadPaths(files []*entity.File, merge *MergeResult, context map[string]interface{}) error {
 	if len(files) == 0 {
 		return nil
 	}
@@ -233,9 +249,13 @@ func (repo *Repo) archiveDiscardedWidgetPaths(files []*entity.File, merge *Merge
 	for i, file := range files {
 		target := strings.ReplaceAll(file.Path, "\\", "/")
 		copyFile := *file
-		copyFile.Path = widgetPathConflictPrefix + file.ID + "/" + strings.TrimPrefix(target, widgetPathPrefix)
+		if rel, widget := strings.CutPrefix(target, widgetPathPrefix); widget {
+			copyFile.Path = widgetPathConflictPrefix + file.ID + "/" + rel
+		} else {
+			copyFile.Path = downloadPathConflictPrefix + file.ID + target
+		}
 		if problem := assetFileProblem(&copyFile); problem != "" {
-			return fmt.Errorf("invalid widget history file %q: %s", target, problem)
+			return fmt.Errorf("invalid path conflict history file %q: %s", target, problem)
 		}
 		found := false
 		for _, dir := range dirs {
@@ -270,14 +290,19 @@ func (repo *Repo) archiveDiscardedWidgetPaths(files []*entity.File, merge *Merge
 		historyFile := filepath.Join(history, copyFile.Path)
 		if _, err = os.Lstat(historyFile); !errors.Is(err, os.ErrNotExist) {
 			if err == nil {
-				return fmt.Errorf("widget conflict history already exists at %q", historyFile)
+				return fmt.Errorf("path conflict history already exists at %q", historyFile)
 			}
 			return err
+		}
+		if repo.assetDownloads != nil {
+			if err = repo.ensureFileChunks(&copyFile, context); err != nil {
+				return err
+			}
 		}
 		if err = repo.checkoutFile(&copyFile, history, i+1, len(files), context); err != nil {
 			return err
 		}
-		logging.LogInfof("archived legacy widget path [path=%q, history=%q]", file.Path, historyFile)
+		logging.LogInfof("archived legacy download path [path=%q, history=%q]", file.Path, historyFile)
 		merge.HistoryPaths = append(merge.HistoryPaths, copyFile.Path)
 	}
 	return nil

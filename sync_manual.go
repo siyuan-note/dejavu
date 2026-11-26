@@ -113,7 +113,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 从文件列表中得到去重后的分块列表
 	cloudChunkIDs := repo.getChunks(cloudLatestFiles)
 
-	widgetPaths, err := repo.planWidgetDownload(cloudLatestFiles)
+	downloadPaths, err := repo.planDownloadPaths(cloudLatestFiles)
 	if err != nil {
 		return
 	}
@@ -139,7 +139,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	trafficStat.PeerDownloadChunkCount += downloadStat.PeerCount
 	trafficStat.PeerFallbackCount += downloadStat.PeerFallbackCount
 
-	cloudLatestFiles = widgetPaths.files
+	cloudLatestFiles = downloadPaths.files
 
 	// 计算本地相比上一个同步点的 upsert 和 remove 差异
 	latestFiles, err := repo.getFiles(latest.Files)
@@ -166,7 +166,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	// 在单向同步的情况下该结果可直接作为合并结果
 	mergeResult.Upserts, mergeResult.Removes = repo.diffUpsertRemove(cloudLatestFiles, latestFiles, false)
 	mergeResult.Upserts, mergeResult.Removes = links.unlinked(mergeResult.Upserts), links.unlinked(mergeResult.Removes)
-	localWidgetFiles, err := widgetPaths.applyDownloadDiff(mergeResult, latestFiles, links)
+	localPathConflicts, err := downloadPaths.applyDownloadDiff(mergeResult, latestFiles, links)
 	if err != nil {
 		return
 	}
@@ -214,12 +214,12 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 			logging.LogInfof("sync download conflict [%s, %s, %s]", localUpsert.ID, localUpsert.Path, time.UnixMilli(localUpsert.Updated).Format("2006-01-02 15:04:05"))
 		}
 	}
-	for _, file := range localWidgetFiles {
+	for _, file := range localPathConflicts {
 		mergeResult.Conflicts = appendUniqueSyncFile(mergeResult.Conflicts, file)
 	}
 
 	// 冲突文件复制到数据历史文件夹
-	if err = repo.archiveDiscardedWidgetPaths(widgetPaths.discarded, mergeResult, context); err != nil {
+	if err = repo.archiveDiscardedDownloadPaths(downloadPaths.discarded, mergeResult, context); err != nil {
 		return
 	}
 	if 0 < len(mergeResult.Conflicts) {
@@ -252,7 +252,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 
 	// 数据变更后还原文件
 	if repo.usesAssetDownloads() {
-		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links, len(widgetPaths.targets) > 0)
+		err = repo.finishAssetSync(mergeResult, localChanged, false, latest, cloudLatest, cloudChunkIDs, trafficStat, context, ignoredAssets, links, len(downloadPaths.targets) > 0)
 		if err == nil {
 			go repo.cloud.AddTraffic(&cloud.Traffic{DownloadBytes: trafficStat.DownloadBytes, APIGet: trafficStat.APIGet})
 			gulu.File.RemoveEmptyDirs(repo.DataPath, removeEmptyDirExcludes...)
@@ -266,7 +266,7 @@ func (repo *Repo) SyncDownload(context map[string]interface{}) (mergeResult *Mer
 	}
 
 	// 处理合并
-	applied := repo.widgetDownloadIndex(widgetPaths, latestFiles, mergeResult)
+	applied := repo.downloadPathIndex(downloadPaths, latestFiles, mergeResult)
 	err = repo.mergeSync(mergeResult, localChanged, false, latest, cloudLatest, applied, cloudChunkIDs, trafficStat, context, links)
 	if nil != err {
 		logging.LogErrorf("merge sync failed: %s", err)

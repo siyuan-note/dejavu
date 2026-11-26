@@ -65,7 +65,8 @@ type Repo struct {
 	fileStateMu      sync.Mutex
 	fileState        *localFileState
 
-	repairWidgetPathsOnDownload bool
+	repairWidgetPathsOnDownload    bool
+	preferCanonicalPathsOnDownload bool
 
 	store    *Store      // 仓库的存储
 	chunkPol chunker.Pol // 文件分块多项式值

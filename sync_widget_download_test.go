@@ -316,7 +316,7 @@ func TestWidgetSyncDownloadRejectsAmbiguousPaths(t *testing.T) {
 func TestWidgetSyncDownloadRejectsEquivalentPathSpellings(t *testing.T) {
 	repaired := &entity.File{Path: "/widgets/example/icons/caf\u00e9.js"}
 	other := &entity.File{Path: "/widgets/example/icons/CAFE\u0301.js"}
-	plan := widgetDownloadPlan{
+	plan := downloadPathPlan{
 		files:   []*entity.File{repaired, other},
 		targets: map[string]*entity.File{repaired.Path: repaired},
 	}

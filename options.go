@@ -26,6 +26,8 @@ type Options struct {
 	OnCloudIndexList func(error)
 	// RepairWidgetPathsOnDownload 兼容双向同步和仅下载时云端快照中带反斜杠的挂件文件路径。
 	RepairWidgetPathsOnDownload bool
+	// PreferCanonicalPathsOnDownload 在同一云端快照的反斜杠别名对应已有正斜杠路径时保留正斜杠版本并备份别名。
+	PreferCanonicalPathsOnDownload bool
 }
 
 // NewRepoWithOptions 创建使用显式应用策略的仓库，NewRepo 保留旧调用方的忽略行为。
@@ -42,6 +44,7 @@ func NewRepoWithOptions(options Options) (*Repo, error) {
 	}
 	repo.onCloudIndexList = options.OnCloudIndexList
 	repo.repairWidgetPathsOnDownload = options.RepairWidgetPathsOnDownload
+	repo.preferCanonicalPathsOnDownload = options.PreferCanonicalPathsOnDownload
 	repo.ignoreRulePath = ""
 	if rulePath != "" {
 		repo.ignoreRulePath = "/" + rulePath
