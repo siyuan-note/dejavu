@@ -166,12 +166,9 @@ func (repo *Repo) getFullLatest(latest *entity.Index) (ret *FullIndex) {
 
 func (repo *Repo) GetTag(tag string) (id string, err error) {
 	if !gulu.File.IsValidFilename(tag) {
-		err = errors.New("invalid tag name")
+		return "", errors.New("invalid tag name")
 	}
 	tag = filepath.Join(repo.Path, "refs", "tags", tag)
-	if !filelock.IsExist(tag) {
-		err = errors.New("tag not found")
-	}
 	data, err := filelock.ReadFile(tag)
 	if nil != err {
 		return

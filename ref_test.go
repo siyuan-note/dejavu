@@ -110,3 +110,13 @@ func TestTag(t *testing.T) {
 		return
 	}
 }
+
+func TestGetTagValidation(t *testing.T) {
+	repo := &Repo{Path: t.TempDir()}
+	if id, err := repo.GetTag("invalid?"); id != "" || err == nil || err.Error() != "invalid tag name" {
+		t.Fatalf("invalid tag returned ID %q and error %v", id, err)
+	}
+	if id, err := repo.GetTag("missing"); id != "" || !os.IsNotExist(err) {
+		t.Fatalf("missing tag returned ID %q and error %v", id, err)
+	}
+}
