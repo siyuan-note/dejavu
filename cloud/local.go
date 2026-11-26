@@ -17,6 +17,9 @@
 package cloud
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -67,79 +70,65 @@ func (local *Local) GetRepos() (repos []*Repo, size int64, err error) {
 
 func (local *Local) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	absFilePath := filepath.Join(local.Conf.RepoPath, filePath)
-	info, err := os.Stat(absFilePath)
+	file, err := os.Open(absFilePath)
 	if err != nil {
-		return
-	}
-
-	if overwrite {
-		data, readErr := os.ReadFile(absFilePath)
-		if readErr != nil {
-			err = readErr
-			return
-		}
-		length, err = local.UploadBytes(filePath, data, true)
-		return
-	}
-
-	key := path.Join(local.getCurrentRepoDirPath(), filePath)
-	if _, statErr := os.Stat(key); statErr == nil {
-		length = 0
-		return
-	} else if !os.IsNotExist(statErr) {
-		err = statErr
-		return
-	}
-
-	if err = os.MkdirAll(path.Dir(key), 0755); err != nil {
-		return
-	}
-
-	file, openErr := os.Open(absFilePath)
-	if openErr != nil {
-		err = openErr
 		return
 	}
 	defer file.Close()
 
-	err = gulu.File.WriteFileSaferByReader(key, file, 0644)
-	if nil == err {
-		length = info.Size()
+	info, err := file.Stat()
+	if err != nil {
+		return
 	}
-	return
+	return local.upload(filePath, file, info.Size(), overwrite)
 }
 
 func (local *Local) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
-	key := path.Join(local.getCurrentRepoDirPath(), filePath)
-	folder := path.Dir(key)
-	err = os.MkdirAll(folder, 0755)
-	if err != nil {
-		return
-	}
+	return local.upload(filePath, bytes.NewReader(data), int64(len(data)), overwrite)
+}
 
-	if !overwrite { // not overwrite the file
-		_, err = os.Stat(key)
-		if err != nil {
-			if os.IsNotExist(err) { // file not exist
-				// do nothing and continue
-				err = nil
-			} else { // other error
-				logging.LogErrorf("upload object [%s] failed: %s", key, err)
-				return
-			}
+func (local *Local) upload(filePath string, body io.Reader, size int64, overwrite bool) (int64, error) {
+	key := filepath.Join(local.getCurrentRepoDirPath(), filePath)
+	if !overwrite {
+		if _, err := os.Lstat(key); err == nil {
+			return 0, nil
+		} else if !os.IsNotExist(err) {
+			return 0, err
 		}
 	}
 
-	err = os.WriteFile(key, data, 0644)
-	if err != nil {
-		logging.LogErrorf("upload object [%s] failed: %s", key, err)
-		return
+	folder := filepath.Dir(key)
+	if err := os.MkdirAll(folder, 0755); err != nil {
+		return 0, err
 	}
-
-	length = int64(len(data))
-
-	//logging.LogInfof("uploaded object [%s]", key)
-	return
+	if overwrite {
+		if err := gulu.File.WriteFileSaferByReader(key, body, 0644); err != nil {
+			return 0, err
+		}
+		return size, nil
+	}
+	// 完整写入临时文件后发布，目标路径上的并发创建由文件系统裁决。
+	temp := filepath.Join(folder, ".upload-"+util.RandHash())
+	file, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return 0, err
+	}
+	defer os.Remove(temp)
+	length, err := io.Copy(file, body)
+	closeErr := file.Close()
+	if err != nil {
+		return 0, err
+	}
+	if closeErr != nil {
+		return 0, closeErr
+	}
+	if err = publishLocalUpload(temp, key); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return length, nil
 }
 
 func (local *Local) DownloadObject(filePath string) (data []byte, err error) {

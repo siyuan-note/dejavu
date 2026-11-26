@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,58 @@ type webDAVFixture struct {
 	getData   map[string][]byte
 	reads     map[string]int
 	writes    int
+}
+
+func TestWebDAVConditionalUpload(t *testing.T) {
+	var rejectMove atomic.Bool
+	backend := &dav.Handler{FileSystem: dav.NewMemFS(), LockSystem: dav.NewMemLS()}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "MOVE" {
+			if r.Header.Get("Overwrite") != "F" {
+				t.Error("MOVE must forbid overwrite")
+			}
+			if rejectMove.Load() {
+				w.WriteHeader(http.StatusNotImplemented)
+				return
+			}
+		}
+		backend.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	webdav := NewWebDAV(&BaseCloud{Conf: &Conf{Dir: "main", RepoPath: t.TempDir()}}, gowebdav.NewClient(server.URL, "", ""))
+	const key = "objects/test"
+	if err := os.MkdirAll(filepath.Join(webdav.RepoPath, "objects"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webdav.RepoPath, key), []byte("second"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if size, err := webdav.UploadBytes(key, []byte("first"), false); size != 5 || err != nil {
+		t.Fatalf("create returned %d bytes and error %v", size, err)
+	}
+	if size, err := webdav.UploadObject(key, false); size != 0 || err != nil {
+		t.Fatalf("skip returned %d bytes and error %v", size, err)
+	}
+	if data, err := webdav.DownloadObject(key); string(data) != "first" || err != nil {
+		t.Fatalf("got %q after skipped upload: %v", data, err)
+	}
+	rejectMove.Store(true)
+	var status gowebdav.StatusError
+	if size, err := webdav.UploadBytes(key, []byte("third"), false); size != 0 || !errors.As(err, &status) || status.Status != http.StatusNotImplemented {
+		t.Fatalf("unsupported MOVE returned %d bytes and error %v", size, err)
+	}
+	if data, err := webdav.DownloadObject(key); string(data) != "first" || err != nil {
+		t.Fatalf("got %q after failed upload: %v", data, err)
+	}
+	if size, err := webdav.UploadObject(key, true); size != 6 || err != nil {
+		t.Fatalf("replace returned %d bytes and error %v", size, err)
+	}
+	if data, err := webdav.DownloadObject(key); string(data) != "second" || err != nil {
+		t.Fatalf("got %q after replacement: %v", data, err)
+	}
+	if entries, err := webdav.Client.ReadDir("main/siyuan/repo/uploads"); len(entries) != 0 || err != nil {
+		t.Fatalf("temporary uploads remain: %v, %v", entries, err)
+	}
 }
 
 func TestWebDAVDirectoryCanonicalSlash(t *testing.T) {

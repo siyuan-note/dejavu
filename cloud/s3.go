@@ -72,57 +72,48 @@ func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
 }
 
 func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err error) {
-	svc := s3.getService()
-	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
-	defer cancelFn()
-
 	absFilePath := filepath.Join(s3.Conf.RepoPath, filePath)
-	info, err := os.Stat(absFilePath)
-	if nil != err {
-		logging.LogErrorf("stat failed: %s", err)
-		return
-	}
-	length = info.Size()
-
 	file, err := os.Open(absFilePath)
 	if nil != err {
 		return
 	}
 	defer file.Close()
-	key := path.Join("repo", filePath)
-	_, err = svc.PutObject(ctx, &as3.PutObjectInput{
-		Bucket:       aws.String(s3.Conf.S3.Bucket),
-		Key:          aws.String(key),
-		CacheControl: aws.String("no-cache"),
-		Body:         file,
-	})
+
+	info, err := file.Stat()
 	if nil != err {
 		return
 	}
-
-	//logging.LogInfof("uploaded object [%s]", key)
-	return
+	return s3.upload(filePath, file, info.Size(), overwrite)
 }
 
 func (s3 *S3) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
-	length = int64(len(data))
-	svc := s3.getService()
+	return s3.upload(filePath, bytes.NewReader(data), int64(len(data)), overwrite)
+}
+
+func (s3 *S3) upload(filePath string, body io.Reader, size int64, overwrite bool) (int64, error) {
 	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
 	defer cancelFn()
 
-	key := path.Join("repo", filePath)
-	_, err = svc.PutObject(ctx, &as3.PutObjectInput{
+	input := &as3.PutObjectInput{
 		Bucket:       aws.String(s3.Conf.S3.Bucket),
-		Key:          aws.String(key),
+		Key:          aws.String(path.Join("repo", filePath)),
 		CacheControl: aws.String("no-cache"),
-		Body:         bytes.NewReader(data),
-	})
-	if nil != err {
-		return
+		Body:         body,
 	}
-
-	//logging.LogInfof("uploaded object [%s]", key)
-	return
+	if !overwrite {
+		input.IfNoneMatch = aws.String("*")
+	}
+	_, err := s3.getService().PutObject(ctx, input)
+	if err == nil {
+		return size, nil
+	}
+	if !overwrite {
+		var responseErr *smithyhttp.ResponseError
+		if errors.As(err, &responseErr) && responseErr.HTTPStatusCode() == http.StatusPreconditionFailed {
+			return 0, nil
+		}
+	}
+	return 0, err
 }
 
 func (s3 *S3) DownloadObject(filePath string) (data []byte, err error) {

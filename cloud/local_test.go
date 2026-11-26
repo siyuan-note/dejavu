@@ -19,8 +19,36 @@ package cloud
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
+
+func TestLocalUploadBytesDoesNotReplaceConcurrentUpload(t *testing.T) {
+	local := NewLocal(&BaseCloud{Conf: &Conf{Dir: "main", Local: &ConfLocal{Endpoint: t.TempDir()}}})
+	const key = "objects/test"
+	var started sync.WaitGroup
+	start := make(chan struct{})
+	written := make(chan int64, 2)
+	for _, data := range []string{"first", "second"} {
+		started.Add(1)
+		go func() {
+			started.Done()
+			<-start
+			length, err := local.UploadBytes(key, []byte(data), false)
+			if err != nil {
+				t.Error(err)
+			}
+			written <- length
+		}()
+	}
+	started.Wait()
+	close(start)
+	first, second := <-written, <-written
+	data, err := local.DownloadObject(key)
+	if err != nil || (string(data) != "first" && string(data) != "second") || first+second != int64(len(data)) || (first != 0 && second != 0) {
+		t.Fatalf("upload lengths %d, %d and stored object %q, error %v", first, second, data, err)
+	}
+}
 
 func TestLocalUploadObject(t *testing.T) {
 	tempDir := t.TempDir()
