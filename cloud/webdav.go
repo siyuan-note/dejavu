@@ -74,7 +74,7 @@ func (webdav *WebDAV) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
-// UploadObject 和 UploadBytes 直接向目标路径 PUT，与 S3 的上传策略一致。
+// UploadObject 和 UploadBytes 直接向目标路径 PUT。
 // overwrite 由 Cloud 接口定义，即使传入 false，同名对象也可能被覆盖。
 func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	absFilePath := filepath.Join(webdav.Conf.RepoPath, filePath)
