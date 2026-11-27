@@ -71,6 +71,8 @@ func (s3 *S3) GetRepos() (repos []*Repo, size int64, err error) {
 	return
 }
 
+// UploadObject 和 UploadBytes 为兼容拒绝条件写入的 S3 服务，均直接使用 PUT。
+// overwrite 由 Cloud 接口定义，即使传入 false，同名对象也可能被覆盖。
 func (s3 *S3) UploadObject(filePath string, overwrite bool) (length int64, err error) {
 	svc := s3.getService()
 	ctx, cancelFn := context.WithTimeout(s3.Context(), time.Duration(s3.S3.Timeout)*time.Second)
