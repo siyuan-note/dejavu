@@ -18,7 +18,6 @@ package cloud
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -87,17 +86,28 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 	if nil != err {
 		return
 	}
-	length, err = webdav.upload(filePath, info.Size(), overwrite, func(key string) error {
-		return webdav.Client.WriteStreamWithLength(key, file, info.Size(), 0644)
-	})
-	if err != nil {
+	length = info.Size()
+
+	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
+	defer func() {
+		if nil != err {
+			webdav.clearDirs()
+		}
+	}()
+	folder := path.Dir(key)
+	if err = webdav.mkdirAll(folder); nil != err {
+		return
+	}
+
+	err = webdav.Client.WriteStreamWithLength(key, file, length, 0644)
+	err = webdav.parseErr(err)
+	if nil != err {
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
 		return
 	}
 	if "refs/latest" == filePath {
 		// WebDAV 可能允许写入无扩展名文件，但拒绝随后读取，不能将这种上传报告为成功。
-		key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
 		if _, err = webdav.readMetadata(key); nil != err {
-			webdav.clearDirs()
 			err = webdav.parseErr(err)
 			if errors.Is(err, ErrCloudObjectNotFound) {
 				err = fmt.Errorf("read uploaded WebDAV refs/latest: %w", ErrCloudCheckFailed)
@@ -108,71 +118,27 @@ func (webdav *WebDAV) UploadObject(filePath string, overwrite bool) (length int6
 }
 
 func (webdav *WebDAV) UploadBytes(filePath string, data []byte, overwrite bool) (length int64, err error) {
-	return webdav.upload(filePath, int64(len(data)), overwrite, func(key string) error {
-		return webdav.Client.Write(key, data, 0644)
-	})
-}
-
-func (webdav *WebDAV) upload(filePath string, size int64, overwrite bool, write func(string) error) (length int64, err error) {
-	root := path.Join(webdav.Dir, "siyuan", "repo")
-	key := path.Join(root, filePath)
 	defer func() {
-		if err != nil {
+		if nil != err {
 			webdav.clearDirs()
-			logging.LogErrorf("upload object [%s] failed: %s", key, err)
 		}
 	}()
-	if err = webdav.mkdirAll(path.Dir(key)); err != nil {
-		return 0, err
-	}
-	if overwrite {
-		if err = webdav.parseErr(write(key)); err != nil {
-			return 0, err
-		}
-		return size, nil
+	length = int64(len(data))
+	key := path.Join(webdav.Dir, "siyuan", "repo", filePath)
+	folder := path.Dir(key)
+	err = webdav.mkdirAll(folder)
+	if nil != err {
+		return
 	}
 
-	// WebDAV 服务器可能忽略 PUT 的 If-None-Match，使用 MOVE 的 Overwrite: F 发布已写完的对象。
-	staging := path.Join(root, "uploads", util.RandHash()+".tmp")
-	if err = webdav.mkdirAll(path.Dir(staging)); err != nil {
-		return 0, err
+	err = webdav.Client.Write(key, data, 0644)
+	err = webdav.parseErr(err)
+	if nil != err {
+		logging.LogErrorf("upload object [%s] failed: %s", key, err)
+		return
 	}
-	committed := false
-	defer func() {
-		if committed {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(webdav.Context()), 5*time.Second)
-		defer cancel()
-		client := webdav.uploadClient(ctx)
-		if cleanupErr := webdav.parseErr(client.Remove(staging)); cleanupErr != nil && !errors.Is(cleanupErr, ErrCloudObjectNotFound) {
-			logging.LogWarnf("remove temporary WebDAV upload failed: %s", cleanupErr)
-		}
-	}()
-	if err = webdav.parseErr(write(staging)); err != nil {
-		return 0, err
-	}
-	ctx, cancel := context.WithTimeout(webdav.Context(), 30*time.Second)
-	defer cancel()
-	client := webdav.uploadClient(ctx)
-	if err = client.Rename(staging, key, false); err != nil {
-		var status gowebdav.StatusError
-		if errors.As(err, &status) && status.Status == http.StatusPreconditionFailed {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("publish WebDAV upload without overwrite: %w", err)
-	}
-	committed = true
-	return size, nil
-}
-
-func (webdav *WebDAV) uploadClient(ctx context.Context) *gowebdav.Client {
-	client := *webdav.Client
-	client.SetInterceptor(func(_ string, request *http.Request) {
-		*request = *request.WithContext(ctx)
-		request.Header.Set(gowebdav.XInhibitRedirect, "1")
-	})
-	return &client
+	//logging.LogInfof("uploaded object [%s]", key)
+	return
 }
 
 func (webdav *WebDAV) DownloadObject(filePath string) (data []byte, err error) {

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,24 +28,22 @@ type webDAVFixture struct {
 	writes    int
 }
 
-func TestWebDAVConditionalUpload(t *testing.T) {
-	var rejectMove atomic.Bool
+func TestWebDAVUploadUsesDirectPut(t *testing.T) {
+	const key = "objects/test"
 	backend := &dav.Handler{FileSystem: dav.NewMemFS(), LockSystem: dav.NewMemLS()}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "MOVE" {
-			if r.Header.Get("Overwrite") != "F" {
-				t.Error("MOVE must forbid overwrite")
-			}
-			if rejectMove.Load() {
-				w.WriteHeader(http.StatusNotImplemented)
-				return
-			}
+			t.Error("upload issued a MOVE")
+			w.WriteHeader(http.StatusNotImplemented)
+			return
+		}
+		if r.Method == http.MethodPut && (r.URL.Path != "/main/siyuan/repo/"+key || r.Header.Get("If-None-Match") != "") {
+			t.Errorf("unexpected PUT destination or condition: %s %q", r.URL.Path, r.Header.Get("If-None-Match"))
 		}
 		backend.ServeHTTP(w, r)
 	}))
 	defer server.Close()
 	webdav := NewWebDAV(&BaseCloud{Conf: &Conf{Dir: "main", RepoPath: t.TempDir()}}, gowebdav.NewClient(server.URL, "", ""))
-	const key = "objects/test"
 	if err := os.MkdirAll(filepath.Join(webdav.RepoPath, "objects"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -56,28 +53,11 @@ func TestWebDAVConditionalUpload(t *testing.T) {
 	if size, err := webdav.UploadBytes(key, []byte("first"), false); size != 5 || err != nil {
 		t.Fatalf("create returned %d bytes and error %v", size, err)
 	}
-	if size, err := webdav.UploadObject(key, false); size != 0 || err != nil {
-		t.Fatalf("skip returned %d bytes and error %v", size, err)
-	}
-	if data, err := webdav.DownloadObject(key); string(data) != "first" || err != nil {
-		t.Fatalf("got %q after skipped upload: %v", data, err)
-	}
-	rejectMove.Store(true)
-	var status gowebdav.StatusError
-	if size, err := webdav.UploadBytes(key, []byte("third"), false); size != 0 || !errors.As(err, &status) || status.Status != http.StatusNotImplemented {
-		t.Fatalf("unsupported MOVE returned %d bytes and error %v", size, err)
-	}
-	if data, err := webdav.DownloadObject(key); string(data) != "first" || err != nil {
-		t.Fatalf("got %q after failed upload: %v", data, err)
-	}
-	if size, err := webdav.UploadObject(key, true); size != 6 || err != nil {
+	if size, err := webdav.UploadObject(key, false); size != 6 || err != nil {
 		t.Fatalf("replace returned %d bytes and error %v", size, err)
 	}
 	if data, err := webdav.DownloadObject(key); string(data) != "second" || err != nil {
 		t.Fatalf("got %q after replacement: %v", data, err)
-	}
-	if entries, err := webdav.Client.ReadDir("main/siyuan/repo/uploads"); len(entries) != 0 || err != nil {
-		t.Fatalf("temporary uploads remain: %v, %v", entries, err)
 	}
 }
 

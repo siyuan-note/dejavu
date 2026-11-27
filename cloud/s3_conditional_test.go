@@ -19,7 +19,7 @@ func (transport conditionalTransport) RoundTrip(request *http.Request) (*http.Re
 	return transport(request)
 }
 
-func TestS3ConditionalUpload(t *testing.T) {
+func TestS3UploadUsesUnconditionalPut(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		status    int
@@ -28,21 +28,15 @@ func TestS3ConditionalUpload(t *testing.T) {
 		wantError bool
 	}{
 		{"create", http.StatusOK, false, 3, false},
-		{"exists", http.StatusPreconditionFailed, false, 0, false},
-		{"unsupported", http.StatusNotImplemented, false, 0, true},
-		{"conflict", http.StatusConflict, false, 0, true},
+		{"precondition error", http.StatusPreconditionFailed, false, 3, true},
 		{"replace", http.StatusOK, true, 3, false},
-		{"replace failed", http.StatusPreconditionFailed, true, 0, true},
+		{"replace failed", http.StatusForbidden, true, 3, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
 			client := &http.Client{Transport: conditionalTransport(func(r *http.Request) (*http.Response, error) {
 				calls++
-				want := "*"
-				if tc.overwrite {
-					want = ""
-				}
-				if r.Method != http.MethodPut || r.Header.Get("If-None-Match") != want {
+				if r.Method != http.MethodPut || r.Header.Get("If-None-Match") != "" {
 					t.Fatalf("unexpected method or precondition: %s %q", r.Method, r.Header.Get("If-None-Match"))
 				}
 				return &http.Response{StatusCode: tc.status, Header: http.Header{},
